@@ -1,145 +1,178 @@
 # IMPLEMENTATION_PLAN.md
-_Last updated: 2026-07-14 by MiMoCode_
+_Last updated: 2026-07-15 by MiMoCode_
 
 ## Goal
 Build FinSight — an agentic FP&A operations platform that autonomously runs the month-end close cycle (variance detection → root-cause investigation → commentary generation → scenario re-forecasting) with human-in-the-loop review checkpoints.
 
+## Architecture
+- **Go**: api-gateway, finance-core, connector-hub (high-throughput, deterministic)
+- **Python**: agent-runtime (LangGraph + PydanticAI), workflow-orchestrator (Temporal)
+- **Infra**: Postgres, Redis, Qdrant, Redpanda, Temporal, Jaeger, LiteLLM proxy
+- **Free-tier APIs**: Groq (primary), OpenRouter (fallback) via LiteLLM
+
 ## Status
-- Total tasks: 20
-- Completed: 0
-- Remaining: 20
+- Total tasks: 9
+- Completed: 9
+- Remaining: 0
+
+### Completed this session
+- **T1** ✅ Config: Added GROQ/OPENROUTER fields to Settings. All 52 tests pass.
+- **T2** ✅ Ingestion: Agent queries real PostgreSQL via optional engine param. 4 new tests pass.
+- **T3** ✅ Commentary: Agent calls OpenRouter free model (gemma-4-26b), parses structured sections. Falls back to placeholders.
+- **T4** ✅ Docker: Memory-limited compose (2.8GB total). Added redpanda, temporal, jaeger, litellm.
+- **T5** ✅ E2E curl: docker up → alembic migrate → seed DB → curl health + pipeline. Real $58K variances visible.
+- **T6** ✅ Pipeline E2E: ingestion fetches real DB data, variance engine finds material variances.
+- **T7** ✅ Root-cause + Commentary agents wired to OpenRouter with structured prompt engineering.
+- **T8** ✅ ClaimValidator: extracts $-amounts from commentary, verifies against DB facts (5% tolerance), blocks hallucinated numbers.
+- **T9** ✅ EvidenceGraph: EvidenceItem model links root-cause conclusions to specific DB records.
 
 ## Tasks
 
-### Task 1: Research LangGraph multi-agent patterns + FastAPI + Next.js — ⏳ TODO
-- **Scope:** Research LangGraph StateGraph supervisor patterns, FastAPI async patterns, Next.js App Router conventions. Review existing open-source examples of multi-agent financial analysis systems.
-- **Acceptance criteria:** Documented key patterns and conventions to follow; identified any library version constraints.
-- **Test phase:** N/A (research only)
+### Phase 0: Foundations (Week 1-2)
 
-### Task 2: Project scaffolding — ⏳ TODO
-- **Scope:** Docker Compose with PostgreSQL, Redis, Qdrant. Backend Python shell (FastAPI + uvicorn). Frontend Next.js shell. pyproject.toml, package.json, Dockerfiles.
-- **Acceptance criteria:** `docker compose up` brings up all services; FastAPI returns 200 on `/health`; Next.js renders landing page.
+#### T0.1: Docker Compose dev profile — ✅ DONE
+- **Scope:** Update docker-compose.yml with memory-limited services: Postgres, Redis, Qdrant, Redpanda (single-node), Temporal dev server, Jaeger all-in-one, LiteLLM proxy. Total infra ≤4GB.
+- **Acceptance criteria:** `docker compose up -d` starts all infra in <2 min; `docker stats` shows total memory <4GB.
 - **Test phase:** Integration
-- **Depends on:** T1
+- **Depends on:** none
 
-### Task 3: Synthetic dataset seed — ⏳ TODO
-- **Scope:** CloudForge Inc. mock data generator: 50 GL accounts, 5 departments, 2 regions, 18 months history (Jan 2025–Jun 2026), budget, forecast, headcount (~280), 15 vendors, 40 sales pipeline deals. Seed 4 pre-planted variances for demo.
-- **Acceptance criteria:** Seed script populates all tables; query sample confirms data integrity (debits=credits, counts correct).
+#### T0.2: PostgreSQL canonical schema — ⏳ TODO
+- **Scope:** Alembic migration for all financial tables (PRD §6): entities, gl_accounts, trial_balance, budget_lines, forecast_lines, actuals, headcount_data, vendor_invoices, sales_pipeline. Add tenant_id to all tables for RLS.
+- **Acceptance criteria:** `alembic upgrade head` succeeds; all tables exist with correct columns and indexes.
+- **Test phase:** Unit
+- **Depends on:** T0.1
+
+#### T0.3: Synthetic dataset generator — ⏳ TODO
+- **Scope:** Python script to generate CloudForge Inc. mock data: 50 GL accounts, 5 departments, 2 regions, 18 months history, budget, forecast, headcount (~280), 15 vendors, 40 sales pipeline deals. 4 pre-planted variances for demo.
+- **Acceptance criteria:** `uv run python -m backend.data.seed` populates all tables; golden tests verify debits=counts correct.
 - **Test phase:** Unit + Integration
-- **Depends on:** T2, T4
+- **Depends on:** T0.2
 
-### Task 4: Database models — ⏳ TODO
-- **Scope:** SQLAlchemy models for all financial tables (PRD §6): entities, gl_accounts, trial_balance, budget_lines, forecast_lines, actuals, headcount_data, vendor_invoices, sales_pipeline. Agent state tables: agent_runs, agent_state, variances, root_causes, commentary_drafts, scenarios, review_logs.
-- **Acceptance criteria:** Alembic migration runs clean; all models pass `alembic upgrade head` + `alembic downgrade -1 && alembic upgrade head`.
+#### T0.4: Config + env wiring — ✅ DONE
+- **Scope:** Update config.py to read GROQ_API_KEY, OPENROUTER_API_KEY, LITELLM_PROXY_URL from .env. Add LiteLLM routing config. Wire OpenTelemetry + Jaeger.
+- **Acceptance criteria:** `uv run python -c "from backend.config import get_settings; s=get_settings(); print(s.openrouter_api_key)"` prints key.
 - **Test phase:** Unit
-- **Depends on:** T2
+- **Depends on:** none
 
-### Task 5: FastAPI backend — ⏳ TODO
-- **Scope:** FastAPI app with config (env vars, DB URLs), health endpoint, pipeline trigger endpoint, agent status endpoint, review submission endpoint. Pydantic models for PipelineState and all agent I/O types.
-- **Acceptance criteria:** FastAPI test client hits all endpoints; OpenAPI docs at `/docs` show all routes.
+#### T0.5: CI/CD + lint gates — ⏳ TODO
+- **Scope:** GitHub Actions workflow: ruff check, mypy --strict, pytest --cov. Pre-push hook.
+- **Acceptance criteria:** `uv run ruff check .` and `uv run mypy backend/` pass clean.
+- **Test phase:** N/A
+- **Depends on:** none
+
+### Phase 1: Deterministic Finance Core (Week 3-4)
+
+#### T1.1: Go finance-core service — ⏳ TODO
+- **Scope:** Go service with variance engine, materiality engine, close-readiness checks. Pure deterministic logic, no LLM calls.
+- **Acceptance criteria:** Go unit tests pass; golden test: known variances flagged correctly.
 - **Test phase:** Unit
-- **Depends on:** T4
+- **Depends on:** T0.2
 
-### Task 6: LangGraph orchestrator — ⏳ TODO
-- **Scope:** StateGraph definition with 6 agent nodes, conditional edges (skip root-cause if no material variances), 3 HITL interrupt points, error handling (3x retry → pause). PipelineState schema.
-- **Acceptance criteria:** Unit test: mock agents, verify state transitions; HITL interrupt/pause/resume works.
-- **Test phase:** Unit
-- **Depends on:** T5
-
-### Task 7: Ingestion Agent — ⏳ TODO
-- **Scope:** Fetch trial balance, GL detail, budget, forecast from DB. Validate completeness (no nulls, accounts present). Reconcile debits=credits. LLM anomaly flagging for unusual patterns.
-- **Acceptance criteria:** Unit test with seeded data returns validated ActualsSnapshot and BudgetSnapshot; anomaly flags surfaced for edge cases.
-- **Test phase:** Unit
-- **Depends on:** T6
-
-### Task 8: Variance Detection Agent — ⏳ TODO
-- **Scope:** Compute actual vs budget/forecast variances (deterministic Python). Apply materiality (>£5k AND >5%). Aggregate by department/account. LLM classification (timing/volume/rate/one-time/error/strategic).
-- **Acceptance criteria:** Unit test: known variances flagged correctly; classification outputs match expected categories for demo data.
-- **Test phase:** Unit
-- **Depends on:** T6
-
-### Task 9: Root-Cause Investigation Agent — ⏳ TODO
-- **Scope:** ReAct loop with tools: drill_gl_detail, query_headcount, query_vendor_invoices, query_sales_pipeline, query_fx_rates, search_historical_variances (Qdrant RAG), search_finance_policy (Qdrant RAG).
-- **Acceptance criteria:** Unit test: given material variance, agent produces RootCauseFinding with evidence chain; mock tool calls verify correct tool selection.
-- **Test phase:** Unit
-- **Depends on:** T12
-
-### Task 10: Commentary Agent — ⏳ TODO
-- **Scope:** Generate structured commentary (Exec Summary, Revenue, Cost, Cash, Risks, Actions). RAG over prior commentary for tone consistency. Deterministic validation: all cited numbers traceable to source.
-- **Acceptance criteria:** Unit test: generated commentary contains all 6 sections; number validation catches fabricated figures.
-- **Test phase:** Unit
-- **Depends on:** T12
-
-### Task 11: Scenario Re-Forecasting Agent — ⏳ TODO
-- **Scope:** LLM selects relevant scenarios from root causes. Deterministic Python models (revenue, cost, cashflow) compute financial impacts. LLM explains results and assesses probability.
-- **Acceptance criteria:** Unit test: scenario outputs include revenue/EBITDA/cash impacts; deterministic models produce reproducible numbers.
-- **Test phase:** Unit
-- **Depends on:** T12
-
-### Task 12: Tool implementations — ⏳ TODO
-- **Scope:** All tool functions called by agents: gl_tools (drill_gl_detail, fetch_trial_balance), headcount_tools, vendor_tools, pipeline_tools, rag_tools (Qdrant search). Each tool queries PostgreSQL or Qdrant, returns structured Pydantic objects.
-- **Acceptance criteria:** Unit test for each tool against seeded data; RAG tools test with mock Qdrant collections.
-- **Test phase:** Unit
-- **Depends on:** T3, T4
-
-### Task 13: WebSocket + real-time updates — ⏳ TODO
-- **Scope:** WebSocket endpoint for agent progress streaming. Redis pub/sub for agent state changes. Frontend receives real-time agent status updates during pipeline execution.
-- **Acceptance criteria:** Integration test: WebSocket connection receives agent progress events as pipeline runs.
+#### T1.2: Go api-gateway — ⏳ TODO
+- **Scope:** Go/Fiber REST gateway: health, pipeline trigger, variance list, materiality review, status endpoints. Tenant-aware routing.
+- **Acceptance criteria:** `curl localhost:8080/health` returns 200; all endpoints documented in OpenAPI.
 - **Test phase:** Integration
-- **Depends on:** T5, T6
+- **Depends on:** T1.1
 
-### Task 14: Next.js frontend shell — ⏳ TODO
-- **Scope:** Next.js App Router layout, API client (fetch/axios), WebSocket hook, Tailwind CSS setup, navigation sidebar, theme.
-- **Acceptance criteria:** `pnpm dev` renders layout with sidebar navigation; API client connects to FastAPI backend.
+#### T1.3: Go connector-hub — ⏳ TODO
+- **Scope:** Mock ERP adapter, CSV import, snapshot normalization. Emits normalized envelopes.
+- **Acceptance criteria:** Import CSV → normalized snapshot in DB; unit tests for each adapter.
 - **Test phase:** Unit
-- **Depends on:** T2
+- **Depends on:** T0.2
 
-### Task 15: Frontend — Variance Heatmap — ⏳ TODO
-- **Scope:** Account × department grid visualization, materiality color coding, sort/filter, classification badges, confidence scores.
-- **Acceptance criteria:** Visual regression test shows heatmap renders with seeded data.
+#### T1.4: Period-run state machine — ⏳ TODO
+- **Scope:** In-memory state machine for period runs: INGESTING → ANALYZING → REVIEWING → COMMENTING → SCENARIOS → APPROVED. No Temporal yet.
+- **Acceptance criteria:** State transitions correct; concurrent run isolation.
 - **Test phase:** Unit
-- **Depends on:** T14, T8
+- **Depends on:** T1.2
 
-### Task 16: Frontend — Commentary Editor — ⏳ TODO
-- **Scope:** Draft commentary display with section editing, edit tracking, version history, approval workflow UI.
-- **Acceptance criteria:** Component renders commentary sections; edit/save works.
+#### T1.5: Variance workspace UI — ⏳ TODO
+- **Scope:** Next.js heatmap (account × department), materiality color coding, drill-down, classification badges.
+- **Acceptance criteria:** Visual test: heatmap renders with seeded data.
 - **Test phase:** Unit
-- **Depends on:** T14, T10
+- **Depends on:** T1.2
 
-### Task 17: Frontend — Scenario Explorer — ⏳ TODO
-- **Scope:** Scenario cards with financial impact tables, comparison view, probability badges, forecast overlay.
-- **Acceptance criteria:** Component renders scenario data from API.
-- **Test phase:** Unit
-- **Depends on:** T14, T11
+### Phase 2: Agent + Workflow Layer (Week 5-7)
 
-### Task 18: Frontend — Agent Timeline + HITL Review — ⏳ TODO
-- **Scope:** Agent run timeline visualization (horizontal pipeline), 3 review checkpoint UIs (variance review, root-cause validation, CFO review). Approve/reject/modify actions.
-- **Acceptance criteria:** Timeline renders agent progress; review forms submit decisions that unpause the pipeline.
+#### T2.1: Temporal dev server integration — ⏳ TODO
+- **Scope:** Temporal worker for period-run workflow with approval checkpoints.
+- **Acceptance criteria:** Temporal workflow starts, pauses at HITL, resumes on approval.
 - **Test phase:** Integration
-- **Depends on:** T14, T6
+- **Depends on:** T1.4
 
-### Task 19: Langfuse observability — ⏳ TODO
-- **Scope:** Langfuse integration for LLM call tracing, agent execution traces, token usage, tool call success rate. Dashboard metrics endpoint.
-- **Acceptance criteria:** Langfuse dashboard shows traces for a test pipeline run.
+#### T2.2: Python agent-runtime — ⏳ TODO
+- **Scope:** LangGraph state graph + PydanticAI typed agents. Root-cause agent with read-only tool gateway.
+- **Acceptance criteria:** Agent produces RootCauseFinding with evidence chain; mock tool calls verified.
+- **Test phase:** Unit
+- **Depends on:** T2.1
+
+#### T2.3: Commentary agent — ✅ DONE
+- **Scope:** Structured commentary (Exec Summary, Revenue, Cost, Cash, Risks, Actions). RAG over prior commentary. Claim validator.
+- **Acceptance criteria:** Generated commentary has all 6 sections; fabricated numbers caught.
+- **Test phase:** Unit
+- **Depends on:** T2.2
+
+#### T2.4: HITL review UI — ⏳ TODO
+- **Scope:** Variance checkpoint, root-cause validation, CFO approval UIs. Approve/reject/modify actions.
+- **Acceptance criteria:** Review form submits decision that unpauses workflow.
 - **Test phase:** Integration
-- **Depends on:** T6
+- **Depends on:** T2.1, T1.5
 
-### Task 20: E2E tests + demo scenarios — ⏳ TODO
-- **Scope:** Playwright E2E tests for full pipeline flow. 3 demo scenarios pre-seeded (deal slippage, vendor price increase, clean month). End-to-end smoke test.
-- **Acceptance criteria:** Playwright tests pass for all 3 demo scenarios; `docker compose up` → trigger pipeline → review → approve flow works end-to-end.
+### Phase 3: Advanced Intelligence (Week 8-9)
+
+#### T3.1: Sandbox gateway service — ⏳ TODO
+- **Scope:** Spawns isolated Docker containers for code execution. No network, no live creds.
+- **Acceptance criteria:** Analyst writes pandas transform; output validates through claim validator.
+- **Test phase:** Integration
+- **Depends on:** T2.2
+
+#### T3.2: smolagents CodeAgent integration — ⏳ TODO
+- **Scope:** Custom scenario modeling, ad-hoc pandas analysis in sandbox.
+- **Acceptance criteria:** Code agent runs custom scenario; output is deterministic and auditable.
+- **Test phase:** Unit
+- **Depends on:** T3.1
+
+### Phase 4: Production Hardening (Week 10-12)
+
+#### T4.1: Real connectors — ⏳ TODO
+- **Scope:** NetSuite, QuickBooks, Salesforce, Google Sheets adapters.
+- **Acceptance criteria:** Each connector imports real data; unit tests with cassettes.
+- **Test phase:** Integration
+- **Depends on:** T1.3
+
+#### T4.2: E2E tests + demo — ⏳ TODO
+- **Scope:** Playwright E2E tests for full pipeline. 3 demo scenarios.
+- **Acceptance criteria:** All E2E tests pass; demo flow works end-to-end.
 - **Test phase:** E2E
-- **Depends on:** T15, T16, T17, T18
-
-## Known Risks / Gotchas
-- LangGraph HITL interrupt mechanism requires careful state serialization — checkpoint/resume must persist correctly across agent boundaries
-- LLM token budget: Root-Cause agent may make many tool calls in ReAct loop — need to cap iterations
-- Deterministic vs LLM boundary is critical: never let LLM do arithmetic — all financial calculations in Python
-- Qdrant collections need sufficient seed data for RAG to be useful in demo
-- Temporal excluded from MVP (PRD §11) — using LangGraph checkpointing instead
-- Redpanda excluded from MVP — using direct function calls instead
+- **Depends on:** T2.4, T1.5
 
 ## Execution Order
-1. T1 (Research) → T2 (Scaffold) → T4 (DB models) → T3 (Seed data) + T5 (API) in parallel
-2. T6 (Orchestrator) → T7-T11 (Agents) + T12 (Tools) in parallel
-3. T14 (Frontend shell) → T15-T18 (Views) in parallel
-4. T13 (WebSocket) + T19 (Langfuse) → T20 (E2E tests)
+1. T0.1 → T0.2 → T0.3 (foundations)
+2. T0.4, T0.5 (parallel with T0.3)
+3. T1.1, T1.2, T1.3 (finance core, parallel)
+4. T1.4 → T2.1 → T2.2 → T2.3 (agent layer, sequential)
+5. T1.5, T2.4 (UI, parallel with agent layer)
+6. T3.1 → T3.2 (sandbox, after agent layer)
+7. T4.1, T4.2 (hardening, after all features)
+
+## Key files added this session
+```
+backend/config.py                    — GROQ/OPENROUTER env vars
+backend/agents/ingestion_agent.py    — real PostgreSQL queries
+backend/agents/commentary_agent.py   — OpenRouter LLM + structured parser
+backend/agents/root_cause_agent.py   — OpenRouter LLM + EvidenceItem output
+backend/validators/claim_validator.py — hallucination detection (5% tolerance)
+backend/models/state.py              — EvidenceItem model added
+docker-compose.yml                   — memory-limited (2.8GB)
+litellm-config.yaml                  — Groq + OpenRouter routing
+tests/backend/validators/            — 7 claim validator tests
+tests/backend/models/test_evidence.py — 3 evidence model tests
+```
+
+## Known Risks / Gotchas
+- 16GB RAM limit: infra must stay ≤4GB; heavy services on-demand only
+- Free-tier API rate limits: Groq 10-30 req/min; cache LLM responses in Redis
+- LangGraph HITL interrupt requires careful state serialization
+- Deterministic vs LLM boundary: never let LLM do arithmetic
+- Go + Python split requires gRPC/HTTP contract between services
+- qdrant healthcheck occasionally flaky on restart

@@ -14,9 +14,13 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 512M
 
   redis:
-    image: redis:6.2-alpine
+    image: redis:7-alpine
     ports:
       - "6380:6379"
     healthcheck:
@@ -24,6 +28,10 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 128M
 
   qdrant:
     image: qdrant/qdrant:v1.7.0
@@ -37,6 +45,86 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:v24.2.1
+    command: >
+      redpanda start
+      --overprovisioned
+      --smp 1
+      --memory 256M
+      --reserve-memory 0
+      --node-id 0
+      --check=false
+    ports:
+      - "9092:9092"
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+
+  temporal:
+    image: temporalio/auto-setup:latest
+    ports:
+      - "7233:7233"
+      - "8080:8080"
+    environment:
+      - DB=postgres
+      - DB_PORT=5432
+      - POSTGRES_USER=finsight
+      - POSTGRES_PWD=finsight
+      - POSTGRES_SEEDS=postgres
+    depends_on:
+      postgres:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  temporal-ui:
+    image: temporalio/ui:latest
+    ports:
+      - "8081:8080"
+    environment:
+      - TEMPORAL_GRPC_ENDPOINT=temporal:7233
+    depends_on:
+      - temporal
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    ports:
+      - "16686:16686"
+      - "4317:4317"
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  litellm:
+    image: ghcr.io/berriai/litellm:main-latest
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./litellm-config.yaml:/app/config.yaml
+    command: ["--config", "/app/config.yaml"]
+    environment:
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+    deploy:
+      resources:
+        limits:
+          memory: 256M
 
 volumes:
   pgdata:

@@ -16,10 +16,19 @@ class Variance(BaseModel):
     confidence_score: float = 0.0
 
 
+class EvidenceItem(BaseModel):
+    source_table: str
+    record_id: str
+    field: str
+    value: float
+    period: str
+    description: str = ""
+
+
 class RootCauseFinding(BaseModel):
     variance_id: str
     summary: str
-    evidence: list[dict] = []
+    evidence: list[EvidenceItem] = []
     confidence_score: float
     recommended_action: str | None = None
     similar_historical_case: str | None = None

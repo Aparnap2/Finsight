@@ -24,6 +24,7 @@ def seed_database(session: Session) -> None:
     gl_accounts = _create_gl_accounts(entity.id, departments, regions, products)
     for acc in gl_accounts:
         session.add(acc)
+    session.flush()
 
     periods = [f"2025-{m:02d}" for m in range(1, 13)] + [f"2026-{m:02d}" for m in range(1, 7)]
 
@@ -126,16 +127,20 @@ def _seed_headcount(session: Session, entity_id: str, periods: list, departments
 
 
 def _seed_vendors(session: Session, entity_id: str, periods: list, accounts: list):
+    acct_lookup = {acc.account_number: acc.id for acc in accounts}
     vendors = [
         ("AWS", "7000", 80000), ("Stripe", "7001", 15000), ("Slack", "7001", 8000),
         ("Datadog", "7001", 12000), ("Google Cloud", "7000", 25000),
     ]
-    for vendor_name, acct, base in vendors:
+    for vendor_name, acct_num, base in vendors:
+        acct_id = acct_lookup.get(acct_num)
+        if not acct_id:
+            continue
         for period in periods:
             amt = base * 1.35 if (period == "2026-06" and vendor_name == "AWS") else base * random.uniform(0.9, 1.1)
             session.add(VendorInvoice(
                 id=_id(), entity_id=entity_id, period=period,
-                vendor_name=vendor_name, account_id=acct,
+                vendor_name=vendor_name, account_id=acct_id,
                 amount=Decimal(str(round(amt, 2))), category="SaaS",
                 invoice_date=date(2026, 6, 15),
             ))

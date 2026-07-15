@@ -10,6 +10,12 @@ class Settings(BaseSettings):
     openai_api_key: str = "sk-placeholder"
     litellm_proxy_url: str | None = None
     default_llm_model: str = "gpt-4o"
+    groq_api_key: str = ""
+    groq_base_url: str = "https://api.groq.com/openai/v1"
+    groq_chat_model: str = "llama-3.3-70b-versatile"
+    openrouter_api_key: str = ""
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    openrouter_chat_model: str = "meta-llama/llama-3.1-8b-instruct:free"
     langfuse_public_key: str | None = None
     langfuse_secret_key: str | None = None
     langfuse_host: str = "https://cloud.langfuse.com"
