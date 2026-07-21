@@ -1,3 +1,4 @@
+from decimal import Decimal
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
@@ -35,7 +36,7 @@ def test_api_docs():
 def test_trigger_pipeline():
     response = client.post(
         "/api/v1/pipeline/run",
-        json={"period": "2026-06", "entity_id": "CF001"},
+        json={"period": "2026-06", "tenant_id": "CF001"},
     )
     assert response.status_code == 200
     data = response.json()
@@ -71,7 +72,7 @@ def test_get_pipeline_status_not_found():
 def test_pipeline_e2e_with_real_db(seeded_db):
     state: PipelineState = {
         "period": "2026-06",
-        "entity_id": "CF001",
+        "tenant_id": "CF001",
         "actuals": {},
         "budget": {},
         "forecast": {},
@@ -96,15 +97,16 @@ def test_pipeline_e2e_with_real_db(seeded_db):
 
     material = [v for v in state["variances"] if v.is_material]
     assert len(material) > 0, "Seeded data should produce material variances"
+    from decimal import Decimal
     assert any(
-        abs(v.variance_amount) > 10000 for v in material
+        abs(v.variance_amount) > Decimal("10000") for v in material
     ), "At least one material variance should exceed $10K"
 
 
 def test_api_trigger_returns_run_id():
     response = client.post(
         "/api/v1/pipeline/run",
-        json={"period": "2026-06", "entity_id": "CF001"},
+        json={"period": "2026-06", "tenant_id": "CF001"},
     )
     assert response.status_code == 200
     data = response.json()
@@ -115,7 +117,7 @@ def test_api_trigger_returns_run_id():
 def test_api_pipeline_result_has_variances():
     response = client.post(
         "/api/v1/pipeline/run",
-        json={"period": "2026-06", "entity_id": "CF001", "run_sync": True},
+        json={"period": "2026-06", "tenant_id": "CF001", "run_sync": True},
     )
     assert response.status_code == 200
     data = response.json()

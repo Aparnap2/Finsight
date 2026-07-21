@@ -1,3 +1,4 @@
+from decimal import Decimal
 from unittest.mock import MagicMock
 from backend.agents.root_cause_agent import investigate_root_causes, root_cause_node
 from backend.models.state import Variance, RootCauseFinding, PipelineState
@@ -26,8 +27,8 @@ def test_investigate_returns_findings():
     variances = [
         Variance(
             account_id="4001", account_name="Revenue - Product Y", department="Sales",
-            actual_amount=100000, budget_amount=120000,
-            variance_amount=-20000, variance_pct=-16.67, is_material=True,
+            actual_amount=Decimal("100000"), budget_amount=Decimal("120000"),
+            variance_amount=Decimal("-20000"), variance_pct=Decimal("-16.67"), is_material=True,
         )
     ]
     findings = investigate_root_causes(variances)
@@ -45,13 +46,13 @@ def test_root_cause_node_only_material():
     variances = [
         Variance(
             account_id="4000", account_name="Test", department="Sales",
-            actual_amount=100000, budget_amount=103000,
-            variance_amount=-3000, variance_pct=-2.91, is_material=False,
+            actual_amount=Decimal("100000"), budget_amount=Decimal("103000"),
+            variance_amount=Decimal("-3000"), variance_pct=Decimal("-2.91"), is_material=False,
         ),
         Variance(
             account_id="4001", account_name="Test2", department="Sales",
-            actual_amount=100000, budget_amount=200000,
-            variance_amount=-100000, variance_pct=-50.0, is_material=True,
+            actual_amount=Decimal("100000"), budget_amount=Decimal("200000"),
+            variance_amount=Decimal("-100000"), variance_pct=Decimal("-50.0"), is_material=True,
         ),
     ]
     state = _make_state(variances=variances)
@@ -65,8 +66,8 @@ def test_root_cause_node_no_material():
     state = _make_state(variances=[
         Variance(
             account_id="4000", account_name="Test", department="Sales",
-            actual_amount=100000, budget_amount=103000,
-            variance_amount=-3000, variance_pct=-2.91, is_material=False,
+            actual_amount=Decimal("100000"), budget_amount=Decimal("103000"),
+            variance_amount=Decimal("-3000"), variance_pct=Decimal("-2.91"), is_material=False,
         )
     ])
     result = root_cause_node(state)
@@ -87,8 +88,8 @@ def test_investigate_uses_llm_when_provided():
     variances = [
         Variance(
             account_id="4001", account_name="Revenue - Product Y", department="Sales",
-            actual_amount=100000, budget_amount=120000,
-            variance_amount=-20000, variance_pct=-16.67, is_material=True,
+            actual_amount=Decimal("100000"), budget_amount=Decimal("120000"),
+            variance_amount=Decimal("-20000"), variance_pct=Decimal("-16.67"), is_material=True,
         )
     ]
     findings = investigate_root_causes(variances, llm_client=mock_llm)
@@ -102,8 +103,8 @@ def test_investigate_falls_back_without_llm():
     variances = [
         Variance(
             account_id="4001", account_name="Revenue - Product Y", department="Sales",
-            actual_amount=100000, budget_amount=120000,
-            variance_amount=-20000, variance_pct=-16.67, is_material=True,
+            actual_amount=Decimal("100000"), budget_amount=Decimal("120000"),
+            variance_amount=Decimal("-20000"), variance_pct=Decimal("-16.67"), is_material=True,
         )
     ]
     findings = investigate_root_causes(variances)
@@ -131,8 +132,8 @@ def test_investigate_real_llm_call():
     variances = [
         Variance(
             account_id="7000", account_name="Cloud Infrastructure", department="Engineering",
-            actual_amount=225528.89, budget_amount=167058.44,
-            variance_amount=58470.45, variance_pct=35.0, is_material=True,
+            actual_amount=Decimal("225528.89"), budget_amount=Decimal("167058.44"),
+            variance_amount=Decimal("58470.45"), variance_pct=Decimal("35.0"), is_material=True,
         )
     ]
     findings = investigate_root_causes(variances, llm_client=client)

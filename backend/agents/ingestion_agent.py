@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from sqlalchemy import Engine, select
 from sqlalchemy.orm import Session
 from backend.models.database import Actual, BudgetLine, GLAccount, TrialBalance
@@ -6,7 +8,7 @@ from backend.models.state import PipelineState
 
 def ingestion_node(state: PipelineState, engine: Engine | None = None) -> dict:
     period = state["period"]
-    entity_id = state["entity_id"]
+    entity_id = state["tenant_id"]
 
     if engine:
         actuals = _fetch_actuals_from_db(period, entity_id, engine)
@@ -48,7 +50,7 @@ def _fetch_actuals_from_db(period: str, entity_id: str, engine: Engine) -> list[
                 "account_id": str(actual.account_id),
                 "account_name": str(account_name),
                 "department": str(department),
-                "amount": float(actual.amount),
+                "amount": Decimal(actual.amount),
             }
             for actual, account_name, department in rows
         ]
@@ -67,7 +69,7 @@ def _fetch_budget_from_db(period: str, entity_id: str, engine: Engine) -> list[d
                 "account_id": str(budget.account_id),
                 "account_name": str(account_name),
                 "department": str(department),
-                "amount": float(budget.amount),
+                "amount": Decimal(budget.amount),
             }
             for budget, account_name, department in rows
         ]

@@ -1,3 +1,4 @@
+from decimal import Decimal
 from backend.agents.variance_agent import compute_variances, apply_materiality, variance_node
 from backend.models.state import Variance, PipelineState
 
@@ -26,21 +27,21 @@ def test_compute_variances():
     budget = [{"account_id": "4000", "amount": 120000}]
     variances = compute_variances(actuals, budget)
     assert len(variances) == 1
-    assert variances[0].variance_amount == -20000
+    assert variances[0].variance_amount == Decimal("-20000")
 
 
 def test_compute_variances_missing_budget():
     actuals = [{"account_id": "4000", "amount": 100000}]
     budget = []
     variances = compute_variances(actuals, budget)
-    assert variances[0].variance_amount == 100000
+    assert variances[0].variance_amount == Decimal("100000")
 
 
 def test_materiality_flag():
     v = Variance(
         account_id="4000", account_name="Test", department="Sales",
-        actual_amount=100000, budget_amount=120000,
-        variance_amount=-20000, variance_pct=-16.67,
+        actual_amount=Decimal("100000"), budget_amount=Decimal("120000"),
+        variance_amount=Decimal("-20000"), variance_pct=Decimal("-16.67"),
     )
     result = apply_materiality([v], threshold_amount=5000, threshold_pct=5.0)
     assert result[0].is_material is True
@@ -49,8 +50,8 @@ def test_materiality_flag():
 def test_non_material_variance():
     v = Variance(
         account_id="4000", account_name="Test", department="Sales",
-        actual_amount=100000, budget_amount=103000,
-        variance_amount=-3000, variance_pct=-2.91,
+        actual_amount=Decimal("100000"), budget_amount=Decimal("103000"),
+        variance_amount=Decimal("-3000"), variance_pct=Decimal("-2.91"),
     )
     result = apply_materiality([v], threshold_amount=5000, threshold_pct=5.0)
     assert result[0].is_material is False

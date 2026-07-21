@@ -24,6 +24,7 @@ dependencies = [
     "psycopg[binary]>=3.1.0,<4.0",
     "psycopg-pool>=3.2.0,<4.0",
     "openai>=2.45.0",
+    "litellm>=1.60.0,<2.0",
     "python-multipart>=0.0.32",
 ]
 

@@ -69,6 +69,12 @@ def _create_gl_accounts(entity_id: str, departments: list, regions: list, produc
 
 
 def _seed_period(session: Session, entity_id: str, accounts: list, departments: list, regions: list, period: str):
+    # First pass: compute amounts, create Actual and BudgetLine records,
+    # and collect trial-balance rows so we can balance them.
+    tb_rows = []          # (account, debit, credit)
+    total_debits = Decimal("0")
+    total_credits = Decimal("0")
+
     for acc in accounts:
         if acc.account_type == "revenue":
             base = random.uniform(200000, 500000)
@@ -98,10 +104,30 @@ def _seed_period(session: Session, entity_id: str, accounts: list, departments: 
         if acc.account_type == "revenue":
             debit = Decimal("0")
             credit = Decimal(str(round(actual, 2)))
+            total_credits += credit
         else:
             debit = Decimal(str(round(actual, 2)))
             credit = Decimal("0")
+            total_debits += debit
 
+        tb_rows.append((acc, debit, credit))
+
+    # Balance the trial balance so total debits == total credits.
+    imbalance = total_debits - total_credits
+    if imbalance > 0:
+        # Excess debits — add the difference as a credit to a revenue account.
+        for i, (acc, debit, credit) in enumerate(tb_rows):
+            if acc.account_type == "revenue":
+                tb_rows[i] = (acc, debit, credit + imbalance)
+                break
+    elif imbalance < 0:
+        # Excess credits — add the difference as a debit to an expense account.
+        for i, (acc, debit, credit) in enumerate(tb_rows):
+            if acc.account_type != "revenue":
+                tb_rows[i] = (acc, debit - imbalance, credit)  # -negative = add
+                break
+
+    for acc, debit, credit in tb_rows:
         session.add(TrialBalance(
             id=_id(), entity_id=entity_id, period=period,
             account_id=acc.id, debit=debit, credit=credit,

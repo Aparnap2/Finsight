@@ -1,3 +1,4 @@
+from decimal import Decimal
 from backend.models.state import EvidenceItem, RootCauseFinding, Variance
 
 
@@ -6,12 +7,12 @@ def test_evidence_item_creation():
         source_table="actuals",
         record_id="abc123",
         field="amount",
-        value=225528.89,
+        value=Decimal("225528.89"),
         period="2026-06",
         description="Cloud infrastructure actual spend",
     )
     assert e.source_table == "actuals"
-    assert e.value == 225528.89
+    assert e.value == Decimal("225528.89")
     assert e.period == "2026-06"
 
 
@@ -22,11 +23,11 @@ def test_evidence_item_in_root_cause():
         evidence=[
             EvidenceItem(
                 source_table="actuals", record_id="a1", field="amount",
-                value=225528.89, period="2026-06",
+                value=Decimal("225528.89"), period="2026-06",
             ),
             EvidenceItem(
                 source_table="budget_lines", record_id="b1", field="amount",
-                value=167058.44, period="2026-06",
+                value=Decimal("167058.44"), period="2026-06",
             ),
         ],
         confidence_score=0.85,
@@ -39,7 +40,7 @@ def test_evidence_item_in_root_cause():
 def test_evidence_item_json_roundtrip():
     e = EvidenceItem(
         source_table="vendor_invoices", record_id="v1", field="amount",
-        value=80000.0, period="2026-06", description="AWS invoice",
+        value=Decimal("80000.0"), period="2026-06", description="AWS invoice",
     )
     data = e.model_dump()
     restored = EvidenceItem(**data)
