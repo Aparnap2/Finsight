@@ -1,3 +1,4 @@
+from decimal import Decimal
 from backend.models.state import PipelineState, Variance, RootCauseFinding, CommentaryDraft, Scenario
 
 
@@ -6,16 +7,16 @@ def test_variance_creation():
         account_id="4000",
         account_name="Revenue - Product X",
         department="Sales",
-        actual_amount=100000,
-        budget_amount=120000,
-        variance_amount=-20000,
-        variance_pct=-16.67,
+        actual_amount=Decimal("100000"),
+        budget_amount=Decimal("120000"),
+        variance_amount=Decimal("-20000"),
+        variance_pct=Decimal("-16.67"),
         is_material=True,
         classification="timing",
         confidence_score=0.85,
     )
     assert v.is_material is True
-    assert v.variance_pct == -16.67
+    assert v.variance_pct == Decimal("-16.67")
 
 
 def test_pipeline_state_creation():
