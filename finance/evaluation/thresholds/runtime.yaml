@@ -1,0 +1,23 @@
+planning_accuracy:
+  warn: 0.95
+  break: 0.85
+
+action_success_rate:
+  warn: 0.90
+  break: 0.80
+
+replanning_frequency:
+  warn: 0.10
+  break: 0.20
+
+retry_rate:
+  warn: 0.10
+  break: 0.20
+
+average_latency:
+  warn: 0.80
+  break: 0.60
+
+tool_failure_rate:
+  warn: 0.05
+  break: 0.10

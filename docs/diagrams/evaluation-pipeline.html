@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FinSight — Evaluation Pipeline</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #020617; color: #e2e8f0; font-family: 'JetBrains Mono', monospace; padding: 40px; display: flex; flex-direction: column; align-items: center; }
+.container { max-width: 1100px; width: 100%; }
+.header { text-align: center; margin-bottom: 40px; }
+.header h1 { font-size: 28px; font-weight: 700; color: #f1f5f9; letter-spacing: 1px; }
+.header .subtitle { font-size: 12px; color: #64748b; margin-top: 8px; letter-spacing: 2px; text-transform: uppercase; }
+.header .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #fbbf24; margin-right: 12px; animation: pulse 2s ease-in-out infinite; vertical-align: middle; }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+.diagram-card { background: #0f172a; border: 1px solid #1e293b; border-radius: 12px; padding: 32px; margin-bottom: 24px; }
+.diagram-card h2 { font-size: 14px; color: #94a3b8; margin-bottom: 20px; font-weight: 500; letter-spacing: 1px; text-transform: uppercase; }
+svg { width: 100%; height: auto; }
+.metric-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 24px; }
+.metric-card { background: #0f172a; border: 1px solid #1e293b; border-radius: 8px; padding: 16px; text-align: center; }
+.metric-value { font-size: 28px; font-weight: 700; color: #f1f5f9; }
+.metric-label { font-size: 9px; color: #64748b; margin-top: 4px; letter-spacing: 1px; text-transform: uppercase; }
+.metric-sub { font-size: 8px; color: #475569; margin-top: 2px; }
+.card-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-top: 24px; }
+.card { background: #0f172a; border: 1px solid #1e293b; border-radius: 8px; padding: 20px; }
+.card-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.card-dot { width: 8px; height: 8px; border-radius: 50%; }
+.card-dot.cyan { background: #22d3ee; }
+.card-dot.emerald { background: #34d399; }
+.card-dot.violet { background: #a78bfa; }
+.card-dot.amber { background: #fbbf24; }
+.card h3 { font-size: 11px; color: #e2e8f0; font-weight: 500; letter-spacing: 0.5px; text-transform: uppercase; }
+.card ul { list-style: none; }
+.card li { font-size: 10px; color: #64748b; padding: 3px 0; line-height: 1.6; }
+.card li strong { color: #94a3b8; }
+table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+th { font-size: 9px; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; text-align: left; padding: 8px 12px; border-bottom: 1px solid #1e293b; }
+td { font-size: 9px; color: #64748b; padding: 8px 12px; border-bottom: 1px solid #1e293b; }
+.pass { color: #34d399; }
+.warn { color: #fbbf24; }
+.fail { color: #fb7185; }
+.footer { text-align: center; padding: 20px 0; font-size: 9px; color: #475569; letter-spacing: 1px; text-transform: uppercase; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1><span class="dot"></span>FinSight — Evaluation Pipeline</h1>
+    <div class="subtitle">22 Golden Datasets · 12 Metrics · Regression Harness</div>
+  </div>
+
+  <!-- KPI Bar -->
+  <div class="metric-grid">
+    <div class="metric-card">
+      <div class="metric-value" style="color:#34d399">22</div>
+      <div class="metric-label">Golden Datasets</div>
+      <div class="metric-sub">4 categories</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-value" style="color:#22d3ee">12</div>
+      <div class="metric-label">Evaluation Metrics</div>
+      <div class="metric-sub">6 business · 6 runtime</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-value" style="color:#a78bfa">264</div>
+      <div class="metric-label">Data Points per Regression</div>
+      <div class="metric-sub">22 × 12</div>
+    </div>
+  </div>
+
+  <div class="diagram-card">
+    <h2>Evaluation Architecture</h2>
+    <svg viewBox="0 0 1040 520" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+          <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+        </pattern>
+        <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+          <path d="M 0 0 L 10 5 L 0 10 Z" fill="#475569"/>
+        </marker>
+        <marker id="arrow-em" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+          <path d="M 0 0 L 10 5 L 0 10 Z" fill="#34d399"/>
+        </marker>
+        <marker id="arrow-amber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+          <path d="M 0 0 L 10 5 L 0 10 Z" fill="#fbbf24"/>
+        </marker>
+      </defs>
+
+      <rect width="1040" height="520" fill="url(#grid)"/>
+
+      <!-- === Golden Datasets === -->
+      <rect x="40" y="20" width="960" height="110" rx="8" fill="#0f172a" stroke="#1e293b" stroke-width="1"/>
+      <rect x="40" y="20" width="960" height="24" rx="8" fill="rgba(120, 53, 15, 0.3)"/>
+      <rect x="40" y="36" width="960" height="8" fill="rgba(120, 53, 15, 0.3)"/>
+      <text x="60" y="36" font-size="9" fill="#fbbf24" font-weight="600" letter-spacing="1">GOLDEN DATASETS</text>
+
+      <rect x="60" y="55" width="120" height="60" rx="4" fill="rgba(76, 29, 149, 0.2)" stroke="#a78bfa" stroke-width="0.5"/>
+      <text x="120" y="75" font-size="8" fill="#a78bfa" text-anchor="middle" font-weight="500">Financial Logic</text>
+      <text x="120" y="88" font-size="8" fill="#64748b" text-anchor="middle">7 scenarios</text>
+      <text x="120" y="100" font-size="6" fill="#475569" text-anchor="middle">revenue · margin · FX</text>
+
+      <rect x="200" y="55" width="120" height="60" rx="4" fill="rgba(136, 19, 55, 0.2)" stroke="#fb7185" stroke-width="0.5"/>
+      <text x="260" y="75" font-size="8" fill="#fb7185" text-anchor="middle" font-weight="500">Data Quality</text>
+      <text x="260" y="88" font-size="8" fill="#64748b" text-anchor="middle">5 scenarios</text>
+      <text x="260" y="100" font-size="6" fill="#475569" text-anchor="middle">missing · duplicates</text>
+
+      <rect x="340" y="55" width="120" height="60" rx="4" fill="rgba(6, 78, 59, 0.2)" stroke="#34d399" stroke-width="0.5"/>
+      <text x="400" y="75" font-size="8" fill="#34d399" text-anchor="middle" font-weight="500">Runtime Behaviour</text>
+      <text x="400" y="88" font-size="8" fill="#64748b" text-anchor="middle">4 scenarios</text>
+      <text x="400" y="100" font-size="6" fill="#475569" text-anchor="middle">retry · replanning</text>
+
+      <rect x="480" y="55" width="120" height="60" rx="4" fill="rgba(251, 146, 60, 0.2)" stroke="#fb923c" stroke-width="0.5"/>
+      <text x="540" y="75" font-size="8" fill="#fb923c" text-anchor="middle" font-weight="500">Governance</text>
+      <text x="540" y="88" font-size="8" fill="#64748b" text-anchor="middle">4 scenarios</text>
+      <text x="540" y="100" font-size="6" fill="#475569" text-anchor="middle">policy · contradictions</text>
+
+      <!-- Each dataset has 5 nested expectations -->
+      <text x="720" y="60" font-size="8" fill="#94a3b8">Each dataset specifies:</text>
+      <text x="720" y="75" font-size="7" fill="#64748b">PlanningExpectation</text>
+      <text x="720" y="87" font-size="7" fill="#64748b">ExecutionExpectation</text>
+      <text x="720" y="99" font-size="7" fill="#64748b">VerificationExpectation</text>
+      <text x="720" y="111" font-size="7" fill="#64748b">ReflectionExpectation</text>
+      <text x="720" y="123" font-size="7" fill="#64748b">OutputExpectation</text>
+
+      <!-- Arrow down -->
+      <path d="M 520 130 L 520 160" fill="none" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+      <!-- === Evaluation Runner === -->
+      <rect x="40" y="165" width="960" height="90" rx="8" fill="#0f172a" stroke="#1e293b" stroke-width="1"/>
+      <rect x="40" y="165" width="960" height="24" rx="8" fill="rgba(120, 53, 15, 0.3)"/>
+      <rect x="40" y="181" width="960" height="8" fill="rgba(120, 53, 15, 0.3)"/>
+      <text x="60" y="181" font-size="9" fill="#fbbf24" font-weight="600" letter-spacing="1">EVALUATION RUNNER</text>
+
+      <rect x="60" y="200" width="200" height="40" rx="4" fill="rgba(6, 78, 59, 0.2)" stroke="#34d399" stroke-width="0.5"/>
+      <text x="160" y="218" font-size="8" fill="#34d399" text-anchor="middle">HarnessResult → Metrics</text>
+      <text x="160" y="232" font-size="7" fill="#64748b" text-anchor="middle">compares vs expected</text>
+
+      <rect x="290" y="200" width="200" height="40" rx="4" fill="rgba(6, 78, 59, 0.2)" stroke="#34d399" stroke-width="0.5"/>
+      <text x="390" y="218" font-size="8" fill="#34d399" text-anchor="middle">EvaluationReport</text>
+      <text x="390" y="232" font-size="7" fill="#64748b" text-anchor="middle">dataset_id · scores · passed</text>
+
+      <rect x="520" y="200" width="200" height="40" rx="4" fill="rgba(8, 51, 68, 0.2)" stroke="#22d3ee" stroke-width="0.5"/>
+      <text x="620" y="218" font-size="8" fill="#22d3ee" text-anchor="middle">run_all() / run_all_dict()</text>
+      <text x="620" y="232" font-size="7" fill="#64748b" text-anchor="middle">batch evaluation</text>
+
+      <!-- Arrow down -->
+      <path d="M 520 255 L 520 285" fill="none" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+      <!-- === Metrics === -->
+      <rect x="40" y="290" width="960" height="105" rx="8" fill="#0f172a" stroke="#1e293b" stroke-width="1"/>
+      <rect x="40" y="290" width="960" height="24" rx="8" fill="rgba(120, 53, 15, 0.3)"/>
+      <rect x="40" y="306" width="960" height="8" fill="rgba(120, 53, 15, 0.3)"/>
+      <text x="60" y="306" font-size="9" fill="#fbbf24" font-weight="600" letter-spacing="1">METRICS (12)</text>
+
+      <rect x="60" y="325" width="440" height="55" rx="4" fill="rgba(76, 29, 149, 0.15)" stroke="#a78bfa" stroke-width="0.5"/>
+      <text x="80" y="340" font-size="8" fill="#a78bfa" font-weight="500">Business Metrics (6)</text>
+      <text x="80" y="355" font-size="7" fill="#64748b">VarianceAccuracy · KPIAccuracy · ReportCoverage</text>
+      <text x="80" y="368" font-size="7" fill="#64748b">UnsupportedClaimRate · EvidenceCoverage · PolicyCompliance</text>
+
+      <rect x="530" y="325" width="440" height="55" rx="4" fill="rgba(6, 78, 59, 0.15)" stroke="#34d399" stroke-width="0.5"/>
+      <text x="550" y="340" font-size="8" fill="#34d399" font-weight="500">Runtime Metrics (6)</text>
+      <text x="550" y="355" font-size="7" fill="#64748b">PlanningAccuracy · ReplanningFrequency · ActionSuccessRate</text>
+      <text x="550" y="368" font-size="7" fill="#64748b">RetryRate · AverageLatency · ToolFailureRate</text>
+
+      <!-- Arrow down -->
+      <path d="M 520 395 L 520 425" fill="none" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+      <!-- === Regression === -->
+      <rect x="40" y="430" width="960" height="85" rx="8" fill="#0f172a" stroke="#1e293b" stroke-width="1"/>
+      <rect x="40" y="430" width="960" height="24" rx="8" fill="rgba(120, 53, 15, 0.3)"/>
+      <rect x="40" y="446" width="960" height="8" fill="rgba(120, 53, 15, 0.3)"/>
+      <text x="60" y="446" font-size="9" fill="#fbbf24" font-weight="600" letter-spacing="1">REGRESSION HARNESS</text>
+
+      <rect x="60" y="465" width="200" height="35" rx="4" fill="rgba(6, 78, 59, 0.2)" stroke="#34d399" stroke-width="0.5"/>
+      <text x="160" y="483" font-size="8" fill="#34d399" text-anchor="middle">Comparator</text>
+      <text x="160" y="495" font-size="7" fill="#64748b" text-anchor="middle">baseline vs current</text>
+
+      <rect x="290" y="465" width="200" height="35" rx="4" fill="rgba(6, 78, 59, 0.2)" stroke="#34d399" stroke-width="0.5"/>
+      <text x="390" y="483" font-size="8" fill="#34d399" text-anchor="middle">YAML Thresholds</text>
+      <text x="390" y="495" font-size="7" fill="#64748b" text-anchor="middle">warn / break per metric</text>
+
+      <rect x="520" y="465" width="200" height="35" rx="4" fill="rgba(6, 78, 59, 0.2)" stroke="#34d399" stroke-width="0.5"/>
+      <text x="620" y="483" font-size="8" fill="#34d399" text-anchor="middle">RegressionReport</text>
+      <text x="620" y="495" font-size="7" fill="#64748b" text-anchor="middle">deltas · breaking changes</text>
+    </svg>
+  </div>
+
+  <!-- Scenario detail table -->
+  <div class="diagram-card">
+    <h2>Scenario Catalogue</h2>
+    <table>
+      <tr><th>Category</th><th>Scenario</th><th>What It Tests</th></tr>
+      <tr><td rowspan="7" style="color:#a78bfa; font-weight:500">Financial Logic</td><td>revenue_growth</td><td>Standard positive variance with clear drivers</td></tr>
+      <tr><td>margin_decline</td><td>Revenue grows but costs outpace, compressing margins</td></tr>
+      <tr><td>budget_variance</td><td>Multi-account budget vs actual comparison</td></tr>
+      <tr><td>negative_revenue</td><td>Revenue reversal from returns and credits</td></tr>
+      <tr><td>zero_budget</td><td>Accounts with zero budget but actual spend</td></tr>
+      <tr><td>seasonality</td><td>Strong seasonal patterns across Q1</td></tr>
+      <tr><td>fx_impact</td><td>International revenue affected by FX movements</td></tr>
+      <tr><td rowspan="5" style="color:#fb7185; font-weight:500">Data Quality</td><td>missing_values</td><td>Null or missing actual/budget fields</td></tr>
+      <tr><td>duplicate_rows</td><td>Duplicate account entries requiring dedup</td></tr>
+      <tr><td>malformed_spreadsheet</td><td>Invalid rows and malformed values</td></tr>
+      <tr><td>currency_mismatch</td><td>Multi-currency accounts needing conversion</td></tr>
+      <tr><td>invalid_periods</td><td>Non-existent fiscal period references</td></tr>
+      <tr><td rowspan="4" style="color:#34d399; font-weight:500">Runtime Behaviour</td><td>retry_scenario</td><td>Transient data-source failures</td></tr>
+      <tr><td>replanning_scenario</td><td>Initial plan fails, dynamic replanning required</td></tr>
+      <tr><td>missing_evidence</td><td>Claims without sufficient supporting evidence</td></tr>
+      <tr><td>unsupported_assertions</td><td>Assertions without full data backing</td></tr>
+      <tr><td rowspan="4" style="color:#fb923c; font-weight:500">Governance</td><td>policy_violation</td><td>Exceeded policy-restricted spending limits</td></tr>
+      <tr><td>contradictory_evidence</td><td>Conflicting values from different sources</td></tr>
+      <tr><td>forbidden_claim</td><td>Causal claim avoidance when insufficient evidence</td></tr>
+      <tr><td>low_confidence</td><td>Multiple issues resulting in low confidence</td></tr>
+    </table>
+  </div>
+
+  <div class="card-grid">
+    <div class="card">
+      <div class="card-header">
+        <div class="card-dot cyan"></div>
+        <h3>Business Metrics</h3>
+      </div>
+      <ul>
+        <li><strong>VarianceAccuracy</strong> — Variance records match expected by account_id and amount</li>
+        <li><strong>KPIAccuracy</strong> — KPI values match expected within configurable tolerance</li>
+        <li><strong>ReportCoverage</strong> — Expected substrings appear in report sections</li>
+        <li><strong>UnsupportedClaimRate</strong> — Proportion of assertions with adequate evidence</li>
+        <li><strong>EvidenceCoverage</strong> — Average evidence items per assertion vs target</li>
+        <li><strong>PolicyCompliance</strong> — Assertions respecting max_allowed_action boundaries</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card-header">
+        <div class="card-dot emerald"></div>
+        <h3>Runtime Metrics</h3>
+      </div>
+      <ul>
+        <li><strong>PlanningAccuracy</strong> — Required/forbidden intent coverage in ActionPlan</li>
+        <li><strong>ReplanningFrequency</strong> — Iteration count vs max budget</li>
+        <li><strong>ActionSuccessRate</strong> — Fraction of actions completing with SUCCESS status</li>
+        <li><strong>RetryRate</strong> — Total retries normalised by action count</li>
+        <li><strong>AverageLatency</strong> — Mean action latency vs configured budget</li>
+        <li><strong>ToolFailureRate</strong> — Fraction of tool calls resulting in FAILED status</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="footer">FinSight — Finance Operations OS · Evaluation Pipeline</div>
+</div>
+</body>
+</html>

@@ -1,0 +1,66 @@
+{
+  "metadata": {
+    "id": "replanning_scenario",
+    "name": "Dynamic Replanning Required",
+    "category": "runtime_behaviour",
+    "subcategory": "replanning_scenario",
+    "description": "Initial plan fails due to unexpected data shape. The system must detect the failure and replan with a different strategy.",
+    "tags": ["replanning", "dynamic", "adaptive"],
+    "difficulty": "advanced"
+  },
+  "input": {
+    "query": "Analyse Q1 2026 financial results with complex account structure",
+    "context": {
+      "accounts": [
+        {"id": "4010", "name": "Revenue", "actual": 2000000, "budget": 1800000},
+        {"id": "5010", "name": "COGS", "actual": 1200000, "budget": 1080000},
+        {"id": "5020", "name": "SG&A", "actual": 400000, "budget": 450000},
+        {"id": "6010", "name": "Interest Income", "actual": 50000, "budget": 0}
+      ]
+    },
+    "spreadsheet_data": {},
+    "variances": []
+  },
+  "expected": {
+    "planning": {
+      "required_intents": ["compute_variance", "analyse_kpi"],
+      "forbidden_intents": ["skip_analysis"],
+      "min_actions": 3,
+      "max_actions": 10,
+      "max_replans": 2
+    },
+    "execution": {
+      "min_success_rate": 0.85,
+      "max_retries_total": 2,
+      "max_failed_actions": 1
+    },
+    "verification": {
+      "max_unsupported": 0,
+      "max_contradictions": 0,
+      "min_evidence": 1,
+      "min_confidence": 0.6
+    },
+    "reflection": {
+      "expected_decision": "finalize",
+      "max_gaps": 1
+    },
+    "output": {
+      "variances": [
+        {"account_id": "4010", "variance_amount": 200000, "variance_pct": 11.11},
+        {"account_id": "5010", "variance_amount": 120000, "variance_pct": 11.11},
+        {"account_id": "5020", "variance_amount": -50000, "variance_pct": -11.11},
+        {"account_id": "6010", "variance_amount": 50000, "variance_pct": null}
+      ],
+      "kpis": [
+        {"name": "Revenue Growth", "value": 11.11},
+        {"name": "Gross Margin", "value": 40.0},
+        {"name": "SG&A Efficiency", "value": -11.11}
+      ],
+      "report_sections": {
+        "executive_summary": "revenue grew 11% with replanned analysis adapting to account structure"
+      },
+      "required_claims": ["Plan was revised", "Replanning executed"],
+      "forbidden_claims": ["Single plan executed without changes"]
+    }
+  }
+}

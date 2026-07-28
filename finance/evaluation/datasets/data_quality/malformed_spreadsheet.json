@@ -1,0 +1,69 @@
+{
+  "metadata": {
+    "id": "malformed_spreadsheet",
+    "name": "Malformed Spreadsheet Data",
+    "category": "data_quality",
+    "subcategory": "malformed_spreadsheet",
+    "description": "Spreadsheet data contains malformed rows with inconsistent column counts and non-numeric values in numeric fields.",
+    "tags": ["spreadsheet", "malformed", "edge_case"],
+    "difficulty": "advanced"
+  },
+  "input": {
+    "query": "Analyse the spreadsheet data for Q1 2026 variances",
+    "context": {
+      "accounts": [
+        {"id": "4010", "name": "Revenue", "actual": 1000000, "budget": 950000}
+      ]
+    },
+    "spreadsheet_data": {
+      "Sheet1": [
+        ["Account", "Name", "Actual", "Budget"],
+        ["4010", "Revenue", "1000000", "950000"],
+        ["5010", "Payroll", "500000", "N/A"],
+        ["5020", "Marketing", "150000", "180000"],
+        ["6010", "Rent"],
+        ["6020", "Utilities", "invalid", "30000"]
+      ]
+    },
+    "variances": []
+  },
+  "expected": {
+    "planning": {
+      "required_intents": ["parse_spreadsheet", "handle_malformed_data"],
+      "forbidden_intents": [],
+      "min_actions": 3,
+      "max_actions": 7,
+      "max_replans": 1
+    },
+    "execution": {
+      "min_success_rate": 0.7,
+      "max_retries_total": 2,
+      "max_failed_actions": 1
+    },
+    "verification": {
+      "max_unsupported": 1,
+      "max_contradictions": 0,
+      "min_evidence": 1,
+      "min_confidence": 0.5
+    },
+    "reflection": {
+      "expected_decision": "finalize",
+      "max_gaps": 1
+    },
+    "output": {
+      "variances": [
+        {"account_id": "4010", "variance_amount": 50000, "variance_pct": 5.26},
+        {"account_id": "5020", "variance_amount": -30000, "variance_pct": -16.67}
+      ],
+      "kpis": [
+        {"name": "Revenue Growth", "value": 5.26},
+        {"name": "Marketing Under-run", "value": -16.67}
+      ],
+      "report_sections": {
+        "executive_summary": "parsed 3 valid rows from spreadsheet; 2 rows skipped due to malformation"
+      },
+      "required_claims": ["Malformed rows detected", "Partial spreadsheet parsed"],
+      "forbidden_claims": ["All spreadsheet data processed successfully", "No errors in data"]
+    }
+  }
+}

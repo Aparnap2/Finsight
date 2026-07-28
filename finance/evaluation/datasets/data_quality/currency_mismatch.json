@@ -1,0 +1,64 @@
+{
+  "metadata": {
+    "id": "currency_mismatch",
+    "name": "Currency Mismatch Across Accounts",
+    "category": "data_quality",
+    "subcategory": "currency_mismatch",
+    "description": "Accounts are denominated in different currencies (USD, EUR, GBP) requiring FX conversion for accurate comparison.",
+    "tags": ["currency", "fx", "multi-currency", "conversion"],
+    "difficulty": "advanced"
+  },
+  "input": {
+    "query": "Analyse budget variances across all accounts handling currency differences",
+    "context": {
+      "accounts": [
+        {"id": "4010", "name": "US Revenue", "actual": 500000, "budget": 480000, "currency": "USD"},
+        {"id": "4110", "name": "EUR Revenue", "actual": 400000, "budget": 380000, "currency": "EUR"},
+        {"id": "4120", "name": "GBP Revenue", "actual": 200000, "budget": 220000, "currency": "GBP"}
+      ]
+    },
+    "spreadsheet_data": {},
+    "variances": []
+  },
+  "expected": {
+    "planning": {
+      "required_intents": ["compute_variance", "normalise_currency"],
+      "forbidden_intents": [],
+      "min_actions": 3,
+      "max_actions": 7,
+      "max_replans": 0
+    },
+    "execution": {
+      "min_success_rate": 0.9,
+      "max_retries_total": 1,
+      "max_failed_actions": 0
+    },
+    "verification": {
+      "max_unsupported": 1,
+      "max_contradictions": 0,
+      "min_evidence": 1,
+      "min_confidence": 0.6
+    },
+    "reflection": {
+      "expected_decision": "finalize",
+      "max_gaps": 1
+    },
+    "output": {
+      "variances": [
+        {"account_id": "4010", "variance_amount": 20000, "variance_pct": 4.17, "currency": "USD"},
+        {"account_id": "4110", "variance_amount": 20000, "variance_pct": 5.26, "currency": "EUR"},
+        {"account_id": "4120", "variance_amount": -20000, "variance_pct": -9.09, "currency": "GBP"}
+      ],
+      "kpis": [
+        {"name": "US Revenue Growth", "value": 4.17},
+        {"name": "EUR Revenue Growth", "value": 5.26},
+        {"name": "GBP Revenue Decline", "value": -9.09}
+      ],
+      "report_sections": {
+        "executive_summary": "mixed performance across currencies: USD +4%, EUR +5%, GBP -9%"
+      },
+      "required_claims": ["Multi-currency accounts detected", "Currency normalisation applied"],
+      "forbidden_claims": ["All accounts in same currency"]
+    }
+  }
+}

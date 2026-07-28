@@ -1,0 +1,65 @@
+{
+  "metadata": {
+    "id": "margin_decline",
+    "name": "Margin Decline",
+    "category": "financial_logic",
+    "subcategory": "margin_analysis",
+    "description": "Revenue grew but costs grew faster, compressing margins",
+    "tags": ["margin", "cost", "profitability"],
+    "difficulty": "intermediate"
+  },
+  "input": {
+    "query": "Analyse the margin decline for Q1 2026",
+    "context": {
+      "accounts": [
+        {"id": "4010", "name": "Revenue", "actual": 2000000, "budget": 1800000},
+        {"id": "5010", "name": "COGS", "actual": 1400000, "budget": 1080000},
+        {"id": "6010", "name": "Operating Expenses", "actual": 400000, "budget": 360000}
+      ]
+    },
+    "spreadsheet_data": {},
+    "variances": []
+  },
+  "expected": {
+    "planning": {
+      "required_intents": ["compute_variance", "analyse_kpi", "calculate_margin"],
+      "forbidden_intents": [],
+      "min_actions": 3,
+      "max_actions": 7,
+      "max_replans": 0
+    },
+    "execution": {
+      "min_success_rate": 1.0,
+      "max_retries_total": 0,
+      "max_failed_actions": 0
+    },
+    "verification": {
+      "max_unsupported": 0,
+      "max_contradictions": 0,
+      "min_evidence": 1,
+      "min_confidence": 0.7
+    },
+    "reflection": {
+      "expected_decision": "finalize",
+      "max_gaps": 0
+    },
+    "output": {
+      "variances": [
+        {"account_id": "4010", "variance_amount": 200000, "variance_pct": 11.11},
+        {"account_id": "5010", "variance_amount": 320000, "variance_pct": 29.63},
+        {"account_id": "6010", "variance_amount": 40000, "variance_pct": 11.11}
+      ],
+      "kpis": [
+        {"name": "Revenue Growth", "value": 11.11},
+        {"name": "Gross Margin", "value": 30.0},
+        {"name": "Expense Ratio", "value": 20.0}
+      ],
+      "report_sections": {
+        "executive_summary": "revenue grew 11% but gross margin declined to 30%",
+        "details": "COGS grew 29.63% outpacing revenue growth"
+      },
+      "required_claims": ["COGS outpaced revenue", "margin compressed"],
+      "forbidden_claims": ["Revenue declined", "Margin improved"]
+    }
+  }
+}

@@ -1,0 +1,62 @@
+{
+  "metadata": {
+    "id": "invalid_periods",
+    "name": "Invalid Fiscal Period References",
+    "category": "data_quality",
+    "subcategory": "invalid_periods",
+    "description": "Some accounts reference invalid or non-existent fiscal periods that the system must detect and flag.",
+    "tags": ["periods", "fiscal", "edge_case", "validation"],
+    "difficulty": "intermediate"
+  },
+  "input": {
+    "query": "Analyse budget variances for Q1 2026 checking all period references",
+    "context": {
+      "accounts": [
+        {"id": "4010", "name": "Revenue", "actual": 500000, "budget": 480000, "period": "2026-Q1"},
+        {"id": "4020", "name": "Deferred Revenue", "actual": 100000, "budget": 90000, "period": "2026-Q1"},
+        {"id": "5010", "name": "Legacy Account", "actual": 50000, "budget": 60000, "period": "2025-Q4"},
+        {"id": "5990", "name": "Future Fund", "actual": 0, "budget": 100000, "period": "INVALID-PERIOD"}
+      ]
+    },
+    "spreadsheet_data": {},
+    "variances": []
+  },
+  "expected": {
+    "planning": {
+      "required_intents": ["compute_variance", "validate_periods"],
+      "forbidden_intents": [],
+      "min_actions": 2,
+      "max_actions": 6,
+      "max_replans": 1
+    },
+    "execution": {
+      "min_success_rate": 0.8,
+      "max_retries_total": 1,
+      "max_failed_actions": 1
+    },
+    "verification": {
+      "max_unsupported": 1,
+      "max_contradictions": 0,
+      "min_evidence": 1,
+      "min_confidence": 0.6
+    },
+    "reflection": {
+      "expected_decision": "finalize",
+      "max_gaps": 1
+    },
+    "output": {
+      "variances": [
+        {"account_id": "4010", "variance_amount": 20000, "variance_pct": 4.17},
+        {"account_id": "4020", "variance_amount": 10000, "variance_pct": 11.11}
+      ],
+      "kpis": [
+        {"name": "Revenue Growth", "value": 4.17}
+      ],
+      "report_sections": {
+        "executive_summary": "analysed 2 current-period accounts; 1 out-of-period and 1 invalid period flagged"
+      },
+      "required_claims": ["Invalid period detected", "Period validation performed"],
+      "forbidden_claims": ["All periods are valid"]
+    }
+  }
+}

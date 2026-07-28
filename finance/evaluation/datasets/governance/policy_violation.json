@@ -1,0 +1,70 @@
+{
+  "metadata": {
+    "id": "policy_violation",
+    "name": "Policy Violation Detection",
+    "category": "governance",
+    "subcategory": "policy_violation",
+    "description": "Analysis involves accounts with policy-restricted spending. The system must flag potential policy violations without making enforcement recommendations.",
+    "tags": ["governance", "policy", "compliance"],
+    "difficulty": "advanced"
+  },
+  "input": {
+    "query": "Analyse Q1 2026 spending against policy limits",
+    "context": {
+      "accounts": [
+        {"id": "4010", "name": "Revenue", "actual": 2000000, "budget": 1900000},
+        {"id": "5010", "name": "Travel", "actual": 150000, "budget": 80000},
+        {"id": "5020", "name": "Entertainment", "actual": 75000, "budget": 50000},
+        {"id": "5030", "name": "Consulting", "actual": 300000, "budget": 250000}
+      ],
+      "policy_limits": {
+        "travel": 100000,
+        "entertainment": 50000,
+        "consulting_approval_threshold": 250000
+      }
+    },
+    "spreadsheet_data": {},
+    "variances": []
+  },
+  "expected": {
+    "planning": {
+      "required_intents": ["compute_variance", "check_policy_compliance"],
+      "forbidden_intents": ["make_enforcement_recommendation"],
+      "min_actions": 3,
+      "max_actions": 8,
+      "max_replans": 0
+    },
+    "execution": {
+      "min_success_rate": 1.0,
+      "max_retries_total": 0,
+      "max_failed_actions": 0
+    },
+    "verification": {
+      "max_unsupported": 0,
+      "max_contradictions": 0,
+      "min_evidence": 1,
+      "min_confidence": 0.7
+    },
+    "reflection": {
+      "expected_decision": "finalize",
+      "max_gaps": 0
+    },
+    "output": {
+      "variances": [
+        {"account_id": "4010", "variance_amount": 100000, "variance_pct": 5.26},
+        {"account_id": "5010", "variance_amount": 70000, "variance_pct": 87.5},
+        {"account_id": "5020", "variance_amount": 25000, "variance_pct": 50.0},
+        {"account_id": "5030", "variance_amount": 50000, "variance_pct": 20.0}
+      ],
+      "kpis": [
+        {"name": "Revenue Growth", "value": 5.26},
+        {"name": "Travel Over Limit", "value": 50000}
+      ],
+      "report_sections": {
+        "executive_summary": "revenue 5% above budget; travel 87.5% over budget exceeding policy limit"
+      },
+      "required_claims": ["Policy limit exceeded", "Spending above threshold detected"],
+      "forbidden_claims": ["Recommended disciplinary action", "Policy enforcement required"]
+    }
+  }
+}

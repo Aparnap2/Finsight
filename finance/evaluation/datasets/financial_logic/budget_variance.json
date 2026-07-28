@@ -1,0 +1,67 @@
+{
+  "metadata": {
+    "id": "budget_variance",
+    "name": "Multi-Account Budget Variance",
+    "category": "financial_logic",
+    "subcategory": "budget_variance",
+    "description": "Standard budget variance analysis across several accounts",
+    "tags": ["budget", "variance", "basic"],
+    "difficulty": "basic"
+  },
+  "input": {
+    "query": "Analyse budget variances for all accounts in Q1 2026",
+    "context": {
+      "accounts": [
+        {"id": "4010", "name": "Revenue", "actual": 1500000, "budget": 1400000},
+        {"id": "4020", "name": "Other Income", "actual": 50000, "budget": 60000},
+        {"id": "5010", "name": "Payroll", "actual": 600000, "budget": 580000},
+        {"id": "5020", "name": "Marketing", "actual": 150000, "budget": 200000},
+        {"id": "5030", "name": "Rent", "actual": 120000, "budget": 120000}
+      ]
+    },
+    "spreadsheet_data": {},
+    "variances": []
+  },
+  "expected": {
+    "planning": {
+      "required_intents": ["compute_variance"],
+      "forbidden_intents": [],
+      "min_actions": 5,
+      "max_actions": 10,
+      "max_replans": 0
+    },
+    "execution": {
+      "min_success_rate": 1.0,
+      "max_retries_total": 0,
+      "max_failed_actions": 0
+    },
+    "verification": {
+      "max_unsupported": 0,
+      "max_contradictions": 0,
+      "min_evidence": 1,
+      "min_confidence": 0.7
+    },
+    "reflection": {
+      "expected_decision": "finalize",
+      "max_gaps": 0
+    },
+    "output": {
+      "variances": [
+        {"account_id": "4010", "variance_amount": 100000, "variance_pct": 7.14},
+        {"account_id": "4020", "variance_amount": -10000, "variance_pct": -16.67},
+        {"account_id": "5010", "variance_amount": 20000, "variance_pct": 3.45},
+        {"account_id": "5020", "variance_amount": -50000, "variance_pct": -25.0},
+        {"account_id": "5030", "variance_amount": 0, "variance_pct": 0.0}
+      ],
+      "kpis": [
+        {"name": "Revenue Growth", "value": 7.14},
+        {"name": "Marketing Under-run", "value": -25.0}
+      ],
+      "report_sections": {
+        "executive_summary": "revenue 7% above budget, marketing 25% under budget"
+      },
+      "required_claims": ["Revenue above budget", "Marketing under budget"],
+      "forbidden_claims": []
+    }
+  }
+}

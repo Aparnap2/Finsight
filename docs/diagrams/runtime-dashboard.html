@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FinSight — Runtime Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #020617; color: #e2e8f0; font-family: 'JetBrains Mono', monospace; padding: 32px; display: flex; flex-direction: column; align-items: center; }
+.container { max-width: 1200px; width: 100%; }
+.header { text-align: center; margin-bottom: 32px; }
+.header h1 { font-size: 24px; font-weight: 700; color: #f1f5f9; }
+.header .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #34d399; margin-right: 10px; animation: pulse 2s ease-in-out infinite; vertical-align: middle; }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+.row { display: flex; gap: 12px; margin-bottom: 12px; }
+.col { flex: 1; }
+.panel { background: #0f172a; border: 1px solid #1e293b; border-radius: 8px; padding: 16px; margin-bottom: 12px; }
+.panel-title { font-size: 10px; color: #64748b; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 12px; }
+table { width: 100%; border-collapse: collapse; }
+th { font-size: 8px; color: #64748b; text-transform: uppercase; letter-spacing: 1px; text-align: left; padding: 6px 8px; border-bottom: 1px solid #1e293b; }
+td { font-size: 9px; padding: 6px 8px; border-bottom: 1px solid #1e293b; }
+.metric-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #1e293b; }
+.metric-name { font-size: 9px; color: #94a3b8; }
+.metric-value { font-size: 9px; font-weight: 600; }
+.bar-container { height: 4px; background: #1e293b; border-radius: 2px; margin-top: 4px; overflow: hidden; }
+.bar-fill { height: 100%; border-radius: 2px; }
+.cyan { color: #22d3ee; }
+.emerald { color: #34d399; }
+.amber { color: #fbbf24; }
+.rose { color: #fb7185; }
+.violet { color: #a78bfa; }
+.bg-cyan { background: #22d3ee; }
+.bg-emerald { background: #34d399; }
+.bg-amber { background: #fbbf24; }
+.bg-rose { background: #fb7185; }
+.bg-violet { background: #a78bfa; }
+.badge { display: inline-block; padding: 2px 6px; border-radius: 3px; font-size: 7px; letter-spacing: 1px; }
+.badge-pass { background: rgba(52, 211, 153, 0.2); color: #34d399; }
+.badge-warn { background: rgba(251, 191, 36, 0.2); color: #fbbf24; }
+.tag { display: inline-block; padding: 1px 4px; border-radius: 2px; font-size: 7px; margin-right: 3px; }
+.tag-verified { background: rgba(52, 211, 153, 0.2); color: #34d399; }
+.tag-probable { background: rgba(52, 211, 153, 0.1); color: #22d3ee; }
+.tag-weak { background: rgba(251, 191, 36, 0.2); color: #fbbf24; }
+.tag-insufficient { background: rgba(251, 114, 133, 0.2); color: #fb7185; }
+.tag-numeric { background: rgba(167, 139, 250, 0.2); color: #a78bfa; }
+.tag-causal { background: rgba(251, 146, 60, 0.2); color: #fb923c; }
+.footer { text-align: center; padding: 20px; font-size: 8px; color: #475569; letter-spacing: 1px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1><span class="dot"></span>FinSight — Runtime Dashboard</h1>
+    <div style="font-size: 10px; color: #64748b; margin-top: 6px;">Query: "Analyse revenue variance for Q1 2026" · Run ID: run_20260728_001</div>
+  </div>
+
+  <!-- Top row: Pipeline Status + KPI cards -->
+  <div class="row">
+    <div class="col">
+      <div class="panel">
+        <div class="panel-title">Pipeline Status</div>
+        <div style="display: flex; gap: 16px; align-items: center;">
+          <div style="width: 100px; height: 100px; border-radius: 50%; border: 3px solid #34d399; display: flex; align-items: center; justify-content: center; flex-direction: column;">
+            <div style="font-size: 28px; font-weight: 700; color: #34d399;">0.89</div>
+            <div style="font-size: 7px; color: #64748b;">overall</div>
+          </div>
+          <div style="flex:1">
+            <div class="metric-row"><span class="metric-name">Overall Score</span><span class="metric-value emerald">0.89</span></div>
+            <div class="metric-row"><span class="metric-name">Status</span><span class="metric-value emerald">PASS</span></div>
+            <div class="metric-row"><span class="metric-name">Iterations</span><span class="metric-value">2 / 5</span></div>
+            <div class="metric-row"><span class="metric-name">Total Latency</span><span class="metric-value">1,847 ms</span></div>
+            <div class="metric-row"><span class="metric-name">LLM Calls</span><span class="metric-value">2</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="row" style="margin-bottom:0">
+        <div class="col">
+          <div class="panel" style="text-align:center;padding:12px">
+            <div style="font-size: 22px; font-weight:700; color:#22d3ee">6</div>
+            <div style="font-size:7px; color:#64748b; letter-spacing:1px;text-transform:uppercase">Actions</div>
+            <div style="font-size:7px; color:#475569">100% success</div>
+          </div>
+        </div>
+        <div class="col">
+          <div class="panel" style="text-align:center;padding:12px">
+            <div style="font-size: 22px; font-weight:700; color:#a78bfa">12</div>
+            <div style="font-size:7px; color:#64748b; letter-spacing:1px;text-transform:uppercase">Assertions</div>
+            <div style="font-size:7px; color:#475569">0 unsupported</div>
+          </div>
+        </div>
+        <div class="col">
+          <div class="panel" style="text-align:center;padding:12px">
+            <div style="font-size: 22px; font-weight:700; color:#fbbf24">0</div>
+            <div style="font-size:7px; color:#64748b; letter-spacing:1px;text-transform:uppercase">Retries</div>
+            <div style="font-size:7px; color:#475569">0 tool failures</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Middle row: Action Timeline -->
+  <div class="panel">
+    <div class="panel-title">Action Timeline</div>
+    <table>
+      <tr><th>#</th><th>Action</th><th>Tool</th><th>Status</th><th>Latency</th><th>Retries</th></tr>
+      <tr>
+        <td style="color:#64748b">1</td>
+        <td style="color:#e2e8f0">determine_revenue_variance</td>
+        <td style="color:#94a3b8">VarianceEngine</td>
+        <td><span class="badge badge-pass">SUCCESS</span></td>
+        <td style="color:#e2e8f0">320 ms</td>
+        <td style="color:#64748b">0</td>
+      </tr>
+      <tr>
+        <td style="color:#64748b">2</td>
+        <td style="color:#e2e8f0">compute_key_performance_indicators</td>
+        <td style="color:#94a3b8">KPIEngine</td>
+        <td><span class="badge badge-pass">SUCCESS</span></td>
+        <td style="color:#e2e8f0">245 ms</td>
+        <td style="color:#64748b">0</td>
+      </tr>
+      <tr>
+        <td style="color:#64748b">3</td>
+        <td style="color:#e2e8f0">assess_materiality</td>
+        <td style="color:#94a3b8">MaterialityEngine</td>
+        <td><span class="badge badge-pass">SUCCESS</span></td>
+        <td style="color:#e2e8f0">180 ms</td>
+        <td style="color:#64748b">0</td>
+      </tr>
+      <tr>
+        <td style="color:#64748b">4</td>
+        <td style="color:#e2e8f0">collect_supporting_evidence</td>
+        <td style="color:#94a3b8">EvidenceEngine</td>
+        <td><span class="badge badge-pass">SUCCESS</span></td>
+        <td style="color:#e2e8f0">410 ms</td>
+        <td style="color:#64748b">0</td>
+      </tr>
+      <tr>
+        <td style="color:#64748b">5</td>
+        <td style="color:#e2e8f0">validate_assertions</td>
+        <td style="color:#94a3b8">ValidationSuite</td>
+        <td><span class="badge badge-pass">SUCCESS</span></td>
+        <td style="color:#e2e8f0">295 ms</td>
+        <td style="color:#64748b">0</td>
+      </tr>
+      <tr>
+        <td style="color:#64748b">6</td>
+        <td style="color:#e2e8f0">generate_report</td>
+        <td style="color:#94a3b8">LLM (Commentary)</td>
+        <td><span class="badge badge-pass">SUCCESS</span></td>
+        <td style="color:#e2e8f0">397 ms</td>
+        <td style="color:#64748b">0</td>
+      </tr>
+    </table>
+  </div>
+
+  <!-- Bottom row: Assertions + Metrics side by side -->
+  <div class="row">
+    <div class="col">
+      <div class="panel">
+        <div class="panel-title">Assertions (12)</div>
+        <table>
+          <tr><th>Type</th><th>Claim</th><th>Support</th><th>Confidence</th></tr>
+          <tr>
+            <td><span class="tag tag-numeric">NUMERIC</span></td>
+            <td style="font-size:8px; color:#e2e8f0">Revenue variance is $120,000 (8.2%) favourable</td>
+            <td><span class="tag tag-verified">VERIFIED</span></td>
+            <td style="color:#34d399">0.95</td>
+          </tr>
+          <tr>
+            <td><span class="tag tag-numeric">NUMERIC</span></td>
+            <td style="font-size:8px; color:#e2e8f0">COGS variance is $45,000 (3.1%) unfavourable</td>
+            <td><span class="tag tag-verified">VERIFIED</span></td>
+            <td style="color:#34d399">0.92</td>
+          </tr>
+          <tr>
+            <td><span class="tag tag-numeric">NUMERIC</span></td>
+            <td style="font-size:8px; color:#e2e8f0">Gross margin decreased 210 bps YoY</td>
+            <td><span class="tag tag-probable">PROBABLE</span></td>
+            <td style="color:#22d3ee">0.80</td>
+          </tr>
+          <tr>
+            <td><span class="tag tag-causal">CAUSAL</span></td>
+            <td style="font-size:8px; color:#e2e8f0">Decline driven by volume loss in Product A</td>
+            <td><span class="tag tag-probable">PROBABLE</span></td>
+            <td style="color:#22d3ee">0.72</td>
+          </tr>
+          <tr>
+            <td><span class="tag tag-causal">CAUSAL</span></td>
+            <td style="font-size:8px; color:#e2e8f0">Price increase offset 40% of volume decline</td>
+            <td><span class="tag tag-weak">WEAK</span></td>
+            <td style="color:#fbbf24">0.58</td>
+          </tr>
+          <tr>
+            <td><span class="tag" style="background:rgba(251,146,60,0.15);color:#fb923c">HYPOTHESIS</span></td>
+            <td style="font-size:8px; color:#e2e8f0">FX impact may account for ~$15k variance</td>
+            <td><span class="tag tag-weak">WEAK</span></td>
+            <td style="color:#fbbf24">0.45</td>
+          </tr>
+        </table>
+        <div style="margin-top:8px; font-size:7px; color:#475569">Showing 6 of 12 assertions · All carry evidence_ids traceable to source</div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Evidence Graph</div>
+        <div style="display:flex; flex-wrap:wrap; gap:6px;">
+          <div style="background:#1e293b; border-radius:4px; padding:6px 10px; font-size:8px; color:#94a3b8">
+            <span style="color:#e2e8f0">GL_Q1</span> — GL Account 4010
+          </div>
+          <div style="background:#1e293b; border-radius:4px; padding:6px 10px; font-size:8px; color:#94a3b8">
+            <span style="color:#e2e8f0">BUD_01</span> — Q1 Budget File
+          </div>
+          <div style="background:#1e293b; border-radius:4px; padding:6px 10px; font-size:8px; color:#94a3b8">
+            <span style="color:#e2e8f0">VOL_RPT</span> — Volume Report
+          </div>
+          <div style="background:#1e293b; border-radius:4px; padding:6px 10px; font-size:8px; color:#94a3b8">
+            <span style="color:#e2e8f0">POL_03</span> — Pricing Policy
+          </div>
+          <div style="background:#1e293b; border-radius:4px; padding:6px 10px; font-size:8px; color:#94a3b8">
+            <span style="color:#e2e8f0">FX_RATE</span> — FX Rates Table
+          </div>
+        </div>
+        <div style="margin-top:8px; font-size:7px; color:#475569">5 evidence sources · 12 assertions linked · average 1.8 evidence items per assertion</div>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="panel">
+        <div class="panel-title">Runtime Metrics</div>
+        <div class="metric-row">
+          <span class="metric-name">PlanningAccuracy</span>
+          <span class="metric-value emerald">1.00</span>
+        </div>
+        <div class="bar-container"><div class="bar-fill bg-emerald" style="width:100%"></div></div>
+        <div class="metric-row">
+          <span class="metric-name">ReplanningFrequency</span>
+          <span class="metric-value emerald">1.00</span>
+        </div>
+        <div class="bar-container"><div class="bar-fill bg-emerald" style="width:100%"></div></div>
+        <div class="metric-row">
+          <span class="metric-name">ActionSuccessRate</span>
+          <span class="metric-value emerald">1.00</span>
+        </div>
+        <div class="bar-container"><div class="bar-fill bg-emerald" style="width:100%"></div></div>
+        <div class="metric-row">
+          <span class="metric-name">RetryRate</span>
+          <span class="metric-value emerald">1.00</span>
+        </div>
+        <div class="bar-container"><div class="bar-fill bg-emerald" style="width:100%"></div></div>
+        <div class="metric-row">
+          <span class="metric-name">AverageLatency</span>
+          <span class="metric-value emerald">0.85</span>
+        </div>
+        <div class="bar-container"><div class="bar-fill bg-emerald" style="width:85%"></div></div>
+        <div class="metric-row">
+          <span class="metric-name">ToolFailureRate</span>
+          <span class="metric-value emerald">1.00</span>
+        </div>
+        <div class="bar-container"><div class="bar-fill bg-emerald" style="width:100%"></div></div>
+        <div class="metric-row" style="border-bottom:none; padding-top:8px">
+          <span class="metric-name" style="font-weight:600">Runtime Average</span>
+          <span class="metric-value emerald" style="font-weight:700">0.97</span>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Business Metrics</div>
+        <div class="metric-row">
+          <span class="metric-name">VarianceAccuracy</span>
+          <span class="metric-value emerald">1.00</span>
+        </div>
+        <div class="bar-container"><div class="bar-fill bg-emerald" style="width:100%"></div></div>
+        <div class="metric-row">
+          <span class="metric-name">KPIAccuracy</span>
+          <span class="metric-value emerald">0.92</span>
+        </div>
+        <div class="bar-container"><div class="bar-fill bg-emerald" style="width:92%"></div></div>
+        <div class="metric-row">
+          <span class="metric-name">ReportCoverage</span>
+          <span class="metric-value emerald">0.85</span>
+        </div>
+        <div class="bar-container"><div class="bar-fill bg-emerald" style="width:85%"></div></div>
+        <div class="metric-row">
+          <span class="metric-name">UnsupportedClaimRate</span>
+          <span class="metric-value emerald">0.95</span>
+        </div>
+        <div class="bar-container"><div class="bar-fill bg-emerald" style="width:95%"></div></div>
+        <div class="metric-row">
+          <span class="metric-name">EvidenceCoverage</span>
+          <span class="metric-value amber">0.78</span>
+        </div>
+        <div class="bar-container"><div class="bar-fill bg-amber" style="width:78%"></div></div>
+        <div class="metric-row">
+          <span class="metric-name">PolicyCompliance</span>
+          <span class="metric-value emerald">1.00</span>
+        </div>
+        <div class="bar-container"><div class="bar-fill bg-emerald" style="width:100%"></div></div>
+        <div class="metric-row" style="border-bottom:none; padding-top:8px">
+          <span class="metric-name" style="font-weight:600">Business Average</span>
+          <span class="metric-value emerald" style="font-weight:700">0.92</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">FinSight — Finance Operations OS · Runtime Dashboard · simulated data for illustration</div>
+</div>
+</body>
+</html>

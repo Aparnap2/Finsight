@@ -53,3 +53,9 @@ plugins = ["pydantic.mypy"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = ["llm: tests that call real LLM providers (requires API keys)"]
+
+[dependency-groups]
+dev = [
+    "pytest-httpx>=0.35.0",
+]

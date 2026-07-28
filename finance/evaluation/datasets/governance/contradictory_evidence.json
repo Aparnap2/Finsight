@@ -1,0 +1,63 @@
+{
+  "metadata": {
+    "id": "contradictory_evidence",
+    "name": "Contradictory Evidence Handling",
+    "category": "governance",
+    "subcategory": "contradictory_evidence",
+    "description": "Two data sources provide conflicting values for the same account. The system must detect the contradiction and determine the most reliable source.",
+    "tags": ["contradiction", "evidence", "reconciliation"],
+    "difficulty": "advanced"
+  },
+  "input": {
+    "query": "Analyse Q1 2026 revenue with data from both ERP and CRM systems",
+    "context": {
+      "accounts": [
+        {"id": "4010", "name": "Revenue - ERP", "actual": 1200000, "budget": 1150000},
+        {"id": "4010", "name": "Revenue - CRM", "actual": 1150000, "budget": 1150000}
+      ],
+      "data_sources": {
+        "ERP": {"reliability": 0.95, "freshness": "2026-04-01"},
+        "CRM": {"reliability": 0.85, "freshness": "2026-03-28"}
+      }
+    },
+    "spreadsheet_data": {},
+    "variances": []
+  },
+  "expected": {
+    "planning": {
+      "required_intents": ["compute_variance", "reconcile_contradictions"],
+      "forbidden_intents": [],
+      "min_actions": 3,
+      "max_actions": 7,
+      "max_replans": 1
+    },
+    "execution": {
+      "min_success_rate": 0.9,
+      "max_retries_total": 1,
+      "max_failed_actions": 0
+    },
+    "verification": {
+      "max_unsupported": 0,
+      "max_contradictions": 1,
+      "min_evidence": 1,
+      "min_confidence": 0.6
+    },
+    "reflection": {
+      "expected_decision": "finalize",
+      "max_gaps": 1
+    },
+    "output": {
+      "variances": [
+        {"account_id": "4010", "variance_amount": 50000, "variance_pct": 4.35, "data_source": "ERP"}
+      ],
+      "kpis": [
+        {"name": "Revenue Growth", "value": 4.35}
+      ],
+      "report_sections": {
+        "executive_summary": "revenue 4.35% above budget per ERP; CRM showed 0% variance — ERP used as primary source"
+      },
+      "required_claims": ["Contradictory data detected", "Source reconciliation performed"],
+      "forbidden_claims": ["All data sources agree", "No contradictions found"]
+    }
+  }
+}

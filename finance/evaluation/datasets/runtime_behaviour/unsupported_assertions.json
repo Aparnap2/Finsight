@@ -1,0 +1,63 @@
+{
+  "metadata": {
+    "id": "unsupported_assertions",
+    "name": "Unsupported Assertions in Output",
+    "category": "runtime_behaviour",
+    "subcategory": "unsupported_assertions",
+    "description": "The system may produce some assertions without full data backing. Some unsupported assertions are expected and acceptable within limits.",
+    "tags": ["assertions", "data_quality", "limitations"],
+    "difficulty": "intermediate"
+  },
+  "input": {
+    "query": "Analyse Q1 2026 budget variances with incomplete data for some accounts",
+    "context": {
+      "accounts": [
+        {"id": "4010", "name": "Product Revenue", "actual": 800000, "budget": 750000},
+        {"id": "4020", "name": "Service Revenue", "actual": 400000, "budget": 350000},
+        {"id": "5010", "name": "R&D Spend", "actual": 200000, "budget": null},
+        {"id": "5020", "name": "Consulting", "actual": null, "budget": 100000}
+      ]
+    },
+    "spreadsheet_data": {},
+    "variances": []
+  },
+  "expected": {
+    "planning": {
+      "required_intents": ["compute_variance", "identify_data_limitations"],
+      "forbidden_intents": [],
+      "min_actions": 2,
+      "max_actions": 6,
+      "max_replans": 1
+    },
+    "execution": {
+      "min_success_rate": 0.85,
+      "max_retries_total": 1,
+      "max_failed_actions": 1
+    },
+    "verification": {
+      "max_unsupported": 2,
+      "max_contradictions": 0,
+      "min_evidence": 1,
+      "min_confidence": 0.5
+    },
+    "reflection": {
+      "expected_decision": "finalize",
+      "max_gaps": 1
+    },
+    "output": {
+      "variances": [
+        {"account_id": "4010", "variance_amount": 50000, "variance_pct": 6.67},
+        {"account_id": "4020", "variance_amount": 50000, "variance_pct": 14.29}
+      ],
+      "kpis": [
+        {"name": "Product Revenue Growth", "value": 6.67},
+        {"name": "Service Revenue Growth", "value": 14.29}
+      ],
+      "report_sections": {
+        "executive_summary": "revenue accounts analysed; 2 accounts skipped due to missing data"
+      },
+      "required_claims": ["Data limitations noted", "Partial analysis completed"],
+      "forbidden_claims": ["Complete and fully supported analysis"]
+    }
+  }
+}

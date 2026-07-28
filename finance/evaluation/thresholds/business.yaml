@@ -1,0 +1,23 @@
+variance_accuracy:
+  warn: 0.95
+  break: 0.85
+
+kpi_accuracy:
+  warn: 0.95
+  break: 0.85
+
+report_coverage:
+  warn: 0.90
+  break: 0.80
+
+unsupported_claim_rate:
+  warn: 0.90
+  break: 0.80
+
+evidence_coverage:
+  warn: 0.80
+  break: 0.60
+
+policy_compliance:
+  warn: 0.95
+  break: 0.90

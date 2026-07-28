@@ -1,0 +1,63 @@
+{
+  "metadata": {
+    "id": "revenue_growth",
+    "name": "Revenue Growth",
+    "category": "financial_logic",
+    "subcategory": "revenue_growth",
+    "description": "Standard revenue growth scenario with a clear positive variance",
+    "tags": ["revenue", "growth", "basic"],
+    "difficulty": "basic"
+  },
+  "input": {
+    "query": "Analyse the revenue variance for Q1 2026",
+    "context": {
+      "accounts": [
+        {"id": "4010", "name": "Product Revenue", "actual": 1250000, "budget": 1000000},
+        {"id": "4020", "name": "Service Revenue", "actual": 750000, "budget": 700000}
+      ]
+    },
+    "spreadsheet_data": {},
+    "variances": []
+  },
+  "expected": {
+    "planning": {
+      "required_intents": ["compute_variance", "analyse_kpi"],
+      "forbidden_intents": [],
+      "min_actions": 2,
+      "max_actions": 6,
+      "max_replans": 0
+    },
+    "execution": {
+      "min_success_rate": 1.0,
+      "max_retries_total": 0,
+      "max_failed_actions": 0,
+      "max_latency_ms": null
+    },
+    "verification": {
+      "max_unsupported": 0,
+      "max_contradictions": 0,
+      "max_low_confidence": 0,
+      "min_evidence": 1,
+      "min_confidence": 0.7
+    },
+    "reflection": {
+      "expected_decision": "finalize",
+      "max_gaps": 0
+    },
+    "output": {
+      "variances": [
+        {"account_id": "4010", "variance_amount": 250000, "variance_pct": 25.0},
+        {"account_id": "4020", "variance_amount": 50000, "variance_pct": 7.14}
+      ],
+      "kpis": [
+        {"name": "Revenue Growth", "value": 25.0},
+        {"name": "Service Revenue Growth", "value": 7.14}
+      ],
+      "report_sections": {
+        "executive_summary": "revenue grew 25% driven by product revenue"
+      },
+      "required_claims": ["Product revenue increased"],
+      "forbidden_claims": ["Revenue decreased"]
+    }
+  }
+}

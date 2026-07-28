@@ -1,0 +1,63 @@
+{
+  "metadata": {
+    "id": "fx_impact",
+    "name": "FX Rate Impact on International Revenue",
+    "category": "financial_logic",
+    "subcategory": "fx_impact",
+    "description": "International revenue affected by unfavourable FX rate movements",
+    "tags": ["fx", "currency", "international"],
+    "difficulty": "advanced"
+  },
+  "input": {
+    "query": "Analyse the FX impact on international revenue for Q1 2026",
+    "context": {
+      "accounts": [
+        {"id": "4010", "name": "Domestic Revenue", "actual": 800000, "budget": 780000},
+        {"id": "4110", "name": "EUR Revenue", "actual_eur": 600000, "budget_eur": 500000, "fx_rate_actual": 1.10, "fx_rate_budget": 1.05},
+        {"id": "4120", "name": "GBP Revenue", "actual_gbp": 300000, "budget_gbp": 350000, "fx_rate_actual": 1.25, "fx_rate_budget": 1.30}
+      ]
+    },
+    "spreadsheet_data": {},
+    "variances": []
+  },
+  "expected": {
+    "planning": {
+      "required_intents": ["compute_variance", "calculate_fx_impact"],
+      "forbidden_intents": [],
+      "min_actions": 4,
+      "max_actions": 8,
+      "max_replans": 0
+    },
+    "execution": {
+      "min_success_rate": 1.0,
+      "max_retries_total": 0,
+      "max_failed_actions": 0
+    },
+    "verification": {
+      "max_unsupported": 0,
+      "max_contradictions": 0,
+      "min_evidence": 1,
+      "min_confidence": 0.7
+    },
+    "reflection": {
+      "expected_decision": "finalize",
+      "max_gaps": 0
+    },
+    "output": {
+      "variances": [
+        {"account_id": "4010", "variance_amount": 20000, "variance_pct": 2.56}
+      ],
+      "kpis": [
+        {"name": "Revenue Growth", "value": 2.56},
+        {"name": "EUR Revenue Growth (Local)", "value": 20.0},
+        {"name": "GBP Revenue Decline (Local)", "value": -14.29}
+      ],
+      "report_sections": {
+        "executive_summary": "domestic revenue stable, EUR revenue grew 20% in local currency partially offset by FX",
+        "details": "GBP revenue declined 14.29% with additional FX headwind"
+      },
+      "required_claims": ["FX impact detected", "EUR revenue grew in local currency"],
+      "forbidden_claims": ["FX had no material impact"]
+    }
+  }
+}

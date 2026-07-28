@@ -1,0 +1,62 @@
+{
+  "metadata": {
+    "id": "zero_budget",
+    "name": "Zero Budget Allocation",
+    "category": "financial_logic",
+    "subcategory": "zero_budget",
+    "description": "Accounts with zero budget allocation showing actual spend",
+    "tags": ["budget", "zero", "edge_case"],
+    "difficulty": "intermediate"
+  },
+  "input": {
+    "query": "Analyse Q1 2026 variances including accounts with zero budget",
+    "context": {
+      "accounts": [
+        {"id": "4010", "name": "Revenue", "actual": 500000, "budget": 500000},
+        {"id": "5990", "name": "New Initiative Fund", "actual": 75000, "budget": 0},
+        {"id": "5991", "name": "Emergency Reserve", "actual": 25000, "budget": 0}
+      ]
+    },
+    "spreadsheet_data": {},
+    "variances": []
+  },
+  "expected": {
+    "planning": {
+      "required_intents": ["compute_variance"],
+      "forbidden_intents": [],
+      "min_actions": 3,
+      "max_actions": 6,
+      "max_replans": 0
+    },
+    "execution": {
+      "min_success_rate": 1.0,
+      "max_retries_total": 1,
+      "max_failed_actions": 0
+    },
+    "verification": {
+      "max_unsupported": 0,
+      "max_contradictions": 0,
+      "min_evidence": 1,
+      "min_confidence": 0.6
+    },
+    "reflection": {
+      "expected_decision": "finalize",
+      "max_gaps": 1
+    },
+    "output": {
+      "variances": [
+        {"account_id": "4010", "variance_amount": 0, "variance_pct": 0.0},
+        {"account_id": "5990", "variance_amount": 75000, "variance_pct": null},
+        {"account_id": "5991", "variance_amount": 25000, "variance_pct": null}
+      ],
+      "kpis": [
+        {"name": "Revenue Growth", "value": 0.0}
+      ],
+      "report_sections": {
+        "executive_summary": "revenue on budget, unbudgeted spend of 100k on new initiatives"
+      },
+      "required_claims": ["Unbudgeted spend detected"],
+      "forbidden_claims": ["All accounts are on budget"]
+    }
+  }
+}
