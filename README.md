@@ -1,28 +1,204 @@
-# FinSight — Agentic FP&A Operations Platform
+# FinSight — Evidence-backed FP&A Intelligence System
 
-> The AI FP&A analyst that runs your month-end close — detects what changed, figures out why, writes the board commentary, and re-forecasts — all before your morning standup.
+> A deterministic-by-construction financial intelligence platform that ingests source data, validates it, computes KPIs and variances, generates evidence-grounded assertions, renders AI commentary under strict guardrails, and routes findings through governed approval workflows — all without floating-point money or hallucinated numbers.
 
-## What's Built
+---
 
-| Layer | Status | Details |
-|-------|--------|---------|
-| **DB** | ✅ | 15 tables, seeded CloudForge Inc. dataset (18 GL accounts, 18 months) |
-| **Backend Agents** | ✅ | Ingestion, Variance, Root-Cause, Commentary — real DB + real LLM |
-| **Claim Validator** | ✅ | Extracts $-claims from commentary, verifies against DB facts (5% tolerance) |
-| **Evidence Graph** | ✅ | Root-cause findings linked to source DB records via EvidenceItem |
-| **API** | ✅ | 6 endpoints: health, run, status, results, review, import/csv |
-| **Frontend** | ✅ | 5 pages wired to real API: dashboard, variance, commentary, scenario, runs |
-| **Mock ERP** | ✅ | CSV import endpoint for actuals + budget data |
-| **LLM Integration** | ✅ | OpenRouter (google/gemma-4-26b-a4b-it:free) with structured prompts |
+## Problem
+
+FP&A teams spend 60–70% of each close cycle on mechanical work: importing actuals, reconciling sources, scanning spreadsheets for variances, chasing owners for explanations, writing repetitive commentary, and formatting board packs. This manual churn leaves minimal time for strategic analysis, scenario modelling, and decision support.
+
+Existing AI tools in this space are copilots — they generate text when prompted but do not own the workflow, enforce data quality, validate claims against evidence, or guard against hallucinated financial figures. They produce drafts, not auditable outcomes.
+
+## Solution
+
+FinSight is an **evidence-backed FP&A intelligence system** that owns the variance-to-action loop within explicit boundaries:
+
+1. **Ingest** source data from databases, CSVs, and ERP snapshots
+2. **Validate** data quality with deterministic checks (coverage, freshness, diversity, schema)
+3. **Compute** KPIs and variances using a declarative formula engine — no float, no LLM
+4. **Assess** materiality with tiered sensitivity thresholds (CRITICAL / HIGH / MEDIUM / LOW)
+5. **Generate assertions** — typed, evidence-linked, confidence-scored claims
+6. **Render commentary** — the LLM receives only validated assertions and may not invent numbers
+7. **Enforce policy** — autonomy decisions based on confidence, degraded modes, and assertion types
+8. **Propose actions** — taxonomy-backed, gate-enforced action items with impact quantification
+
+Every monetary value is `decimal.Decimal`. Every claim is evidence-backed. Every autonomy decision is policy-bound.
+
+## Core Principles
+
+| Principle | Meaning |
+|-----------|---------|
+| **Deterministic > LLM** | All financial calculations — variances, materiality, bridge decomposition, KPIs — are pure deterministic Python. LLMs never compute numbers. |
+| **Evidence > Opinions** | Every assertion must cite specific evidence records. Unsupported claims are rejected by the claim validator before they reach commentary. |
+| **Typed > Untyped** | All monetary values use `decimal.Decimal` (never `float`). API schemas reject floats with clear error messages. Assertions are typed (numeric, comparative, causal, hypothesis, action). |
+| **Validation > Blind Trust** | LLM output is always validated: claim validator cross-checks every `$` figure against evidence; data quality checks run before any analysis; policy engine gates every action. |
+
+## Architecture
+
+```
+                          ┌────────────────────┐
+                          │   FastAPI Backend    │
+                          │  (Python 3.12)       │
+                          └──────────┬─────────┘
+                                     │
+              ┌──────────────────────┼──────────────────────┐
+              │                      │                      │
+              ▼                      ▼                      ▼
+   ┌──────────────────┐   ┌──────────────────┐   ┌──────────────────┐
+   │   Finance Core    │   │   Agents         │   │   Shared Core    │
+   │  (Deterministic)  │   │  (LLM-guided)    │   │  (Models+Utils)  │
+   │                   │   │                  │   │                  │
+   │ • Formula Engine  │   │ • Orchestrator   │   │ • Pydantic       │
+   │ • Materiality     │   │ • Commentary     │   │   Assertions     │
+   │ • Calendar        │   │ • Root Cause     │   │ • Policy Engine  │
+   │ • Bridge Analysis │   │ • Scenario       │   │ • Claim Valid.   │
+   │ • Data Quality    │   │ • Variance       │   │ • Evidence Model │
+   └──────────────────┘   └──────────────────┘   └──────────────────┘
+                                     │
+                                     ▼
+                          ┌────────────────────┐
+                          │   PostgreSQL DB     │
+                          │   (15 tables)       │
+                          └────────────────────┘
+```
+
+### Dependency Rules
+
+```
+apps/ → agents/ → shared/
+apps/ → finance/ → shared/
+agents/ → finance/  (read-only, via tool results)
+shared/ has no dependents on apps/, agents/, or finance/
+```
+
+## Features
+
+| Feature | Status | Description |
+|---------|--------|-------------|
+| **Formula Engine** | ✅ | Declarative Formula + FormulaRegistry with topological dependency resolution |
+| **Materiality Engine** | ✅ | Tiered sensitivity model (CRITICAL / HIGH / MEDIUM / LOW) with configurable thresholds |
+| **Fiscal Calendar** | ✅ | Period generation, lookup, navigation (monthly / quarterly / yearly) |
+| **Decimal Money Layer** | ✅ | `MoneyDecimal` type rejects floats at API boundary; all engine values are `Decimal` |
+| **Bridge Analysis** | ✅ | Deterministic variance decomposition into price/volume/mix/one-time/timing/scope |
+| **Data Quality Engine** | ✅ | 6 deterministic checks: coverage, freshness, row count, source diversity, filters, quality score |
+| **Assertion Pipeline** | ✅ | Transforms tool results into typed, validated, confidence-scored assertions |
+| **Policy Engine** | ✅ | Autonomy-level matrix: FULLY_AUTONOMOUS → ANALYST → MANAGER → CFO approval |
+| **Action Framework** | ✅ | Taxonomy-backed action creation with gate enforcement (5 gates) |
+| **Claim Validator** | ✅ | Extracts and cross-verifies all monetary claims against evidence |
+| **LangGraph Orchestrator** | ✅ | StateGraph with conditional routing, degraded-mode handling, HITL checkpoints |
+| **Commentary Agent** | ✅ | Truth/render separation: LLM receives only validated assertions |
+| **Root-Cause Agent** | ✅ | LLM investigation with read-only tool access, evidence graph |
+| **API** | ✅ | 12 endpoints covering pipeline, commentary, variances, bridge, data quality, policy, actions |
+| **LLM Integration** | ✅ | LiteLLM proxy with multi-provider routing and fallbacks |
+| **Seeded Dataset** | ✅ | CloudForge Inc. — 18 GL accounts, 18 months, 2 material variances |
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Backend Framework | FastAPI (Python 3.12) |
+| Agent Orchestration | LangGraph (StateGraph + AsyncPostgresSaver) |
+| LLM Proxy | LiteLLM (multi-provider routing) |
+| LLM Providers | OpenRouter / OpenAI / Anthropic via LiteLLM |
+| Database | PostgreSQL 16 (asyncpg + psycopg) |
+| ORM | SQLAlchemy 2.0 (async) |
+| Migrations | Alembic |
+| Vector Store | Qdrant + LangChain integration |
+| Cache | Redis |
+| Workflow Engine | Temporal (Phase 2) |
+| Event Streaming | Redpanda (Phase 2) |
+| Observability | Langfuse, Jaeger |
+| Validation | Pydantic v2, mypy strict, ruff |
+| Containerization | Docker Compose |
+| Testing | pytest, pytest-asyncio, pytest-cov |
+
+## Project Structure
+
+```
+finsight/
+├── apps/
+│   └── api/                    # FastAPI application layer
+│       ├── main.py             # App entrypoint, lifespan, checkpointer setup
+│       ├── routes.py           # 12 REST endpoints
+│       ├── schemas.py          # Pydantic models with MoneyDecimal
+│       ├── serializers.py      # Amount serialization helpers
+│       └── websocket.py        # WebSocket hub for real-time agent status
+├── finance/                    # Deterministic financial core (no LLM)
+│   ├── formula_engine/         # Formula definitions, registry, dependency resolution
+│   │   ├── formula_registry.py # Formula + FormulaRegistry classes
+│   │   ├── dependency_resolver.py
+│   │   └── evaluator.py
+│   ├── variance_engine/        # Variance computation and materiality assessment
+│   │   └── materiality.py      # MaterialityEngine with tiered sensitivity
+│   ├── validation/             # Data quality, calendar, period models
+│   │   ├── models.py           # FiscalPeriod, PeriodStatus, PeriodType
+│   │   ├── calendar.py         # FiscalCalendar — period generation & navigation
+│   │   ├── validator.py        # PeriodValidator
+│   │   ├── progression.py      # PeriodProgression lifecycle
+│   │   └── data_quality.py     # 6 deterministic data quality checks
+│   ├── driver_engine/          # Bridge analysis (variance decomposition)
+│   │   └── bridge_analysis.py  # Deterministic price/volume/mix decomposition
+│   ├── ingestion/              # Data ingestion from database sources
+│   ├── assertion_pipeline.py   # Transforms tool results → assertions
+│   ├── kpi_engine/
+│   ├── scenario_engine/
+│   ├── forecast_engine/
+│   └── reporting/
+├── agents/                     # LangGraph agent nodes (LLM-guided)
+│   ├── orchestrator.py         # StateGraph with conditional routing
+│   ├── variance/               # Variance detection node (deterministic)
+│   ├── commentary/             # Commentary renderer (truth/render separation)
+│   ├── driver/                 # Root-cause investigation node
+│   ├── scenario.py
+│   ├── forecast/
+│   └── recommendation/
+├── shared/                     # Shared core — no dependents on apps/ or finance/
+│   ├── models/                 # Pydantic domain models
+│   │   ├── state.py            # PipelineState, Variance, EvidenceItem, etc.
+│   │   ├── assertions.py       # Assertion, AssertionType, SupportLevel
+│   │   ├── action.py           # ActionItem, ActionDomain, ActionStatus
+│   │   ├── database.py         # SQLAlchemy ORM models
+│   │   └── degraded_mode.py    # 7 degraded mode enum values
+│   ├── config/                 # Pydantic Settings
+│   ├── utils/                  # Policy engine, confidence, encoders, seed
+│   │   ├── policy.py           # Autonomy policy matrix
+│   │   ├── confidence.py       # Deterministic confidence computation
+│   │   ├── llm_client.py       # LLM client abstraction
+│   │   ├── encoders.py         # DecimalEncoder for JSON serialization
+│   │   ├── tools/              # Tool contracts (ToolResult, GL, headcount, RAG)
+│   │   └── validators/         # Claim validator (hallucination detection)
+│   ├── schemas/
+│   └── prompts/
+├── tests/
+│   ├── unit/                   # Unit tests (formula engine, calendar, materiality, decimal layer)
+│   │   ├── api/
+│   │   └── test_finance/
+│   ├── backend/                # Integration tests
+│   │   ├── api/
+│   │   ├── agents/
+│   │   ├── engine/
+│   │   ├── models/
+│   │   ├── validators/
+│   │   ├── tools/
+│   │   └── data/
+│   ├── e2e/
+│   └── integration/
+├── docs/                       # Documentation
+├── alembic/                    # Database migrations
+├── docker-compose.yml
+├── Dockerfile.backend
+├── pyproject.toml
+└── litellm-config.yaml
+```
 
 ## Quick Start
 
 ### Prerequisites
 
 - Python 3.12+
-- Node.js 22+
 - Docker & Docker Compose
-- uv (Python package manager)
+- `uv` (Python package manager)
 
 ### 1. Start Infrastructure
 
@@ -30,175 +206,113 @@
 docker compose up -d
 ```
 
-Services (2.8GB total):
-- PostgreSQL: `localhost:5432`
-- Redis: `localhost:6380`
-- Qdrant: `localhost:6333`
-- Temporal: `localhost:7233`
-- Jaeger: `localhost:16686`
+Services: PostgreSQL (`:5432`), Redis (`:6380`), Qdrant (`:6333`), Temporal (`:7233`), Jaeger (`:16686`).
 
 ### 2. Setup Backend
 
 ```bash
 uv sync
+cp .env.example .env    # Edit with your LLM API keys
 alembic upgrade head
-uv run python -c "from backend.data.seed import seed_database; from sqlalchemy import create_engine; from sqlalchemy.orm import Session; from backend.models.database import Base; e = create_engine('postgresql://finsight:finsight@localhost:5432/finsight'); Base.metadata.create_all(e); Session(e).execute('select 1')"
 ```
 
-### 3. Seed Database
+### 3. Run Tests
 
 ```bash
-uv run python -c "
-from sqlalchemy import create_engine
-from sqlalchemy.orm import Session
-from backend.models.database import Base
-from backend.data.seed import seed_database
-engine = create_engine('postgresql://finsight:finsight@localhost:5432/finsight')
-Base.metadata.drop_all(engine)
-Base.metadata.create_all(engine)
-with Session(engine) as session:
-    seed_database(session)
-print('Database seeded')
-"
+uv run pytest tests/ -v
 ```
 
-### 4. Run Full Pipeline
+### 4. Start API Server
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/pipeline/run \
+uv run uvicorn apps.api.main:app --reload
+```
+
+### 5. Run Pipeline
+
+```bash
+curl -X POST http://localhost:8000/api/v1/pipeline/execute \
   -H "Content-Type: application/json" \
-  -d '{"period": "2026-06", "entity_id": "CF001", "run_sync": true}'
+  -d '{"period": "2026-06", "tenant_id": "CF001"}'
 ```
 
-### 5. Setup Frontend
+## Examples
 
-```bash
-cd frontend && pnpm install && pnpm dev
+### Detect Material Variances
+
+```python
+from finance.variance_engine.materiality import MaterialityEngine, SensitivityTier
+
+engine = MaterialityEngine()
+assessment = engine.assess(
+    account_id="4010",     # Consulting Revenue (CRITICAL tier)
+    actual=Decimal("426328"),
+    budget=Decimal("484464"),
+)
+# assessment.is_material → True (12% variance on CRITICAL account)
 ```
 
-### 6. Run Tests
+### Evaluate a Financial Formula
 
-```bash
-uv run pytest tests/ -v
+```python
+from finance.formula_engine.formula_registry import FormulaRegistry
+from decimal import Decimal
+
+registry = FormulaRegistry()
+result = registry.evaluate("gross_margin", {
+    "revenue": Decimal("1000000"),
+    "cogs": Decimal("600000"),
+})
+# result → Decimal("0.40")
 ```
 
-## API Endpoints
+### Create an Action Item with Gate Enforcement
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/v1/health` | Health check |
-| POST | `/api/v1/pipeline/run` | Run pipeline (`run_sync: true` for sync) |
-| GET | `/api/v1/pipeline/{run_id}/status` | Check run status |
-| GET | `/api/v1/pipeline/{run_id}/results` | Get completed run results |
-| POST | `/api/v1/pipeline/{run_id}/review` | Submit HITL review (approve/reject) |
-| POST | `/api/v1/import/csv` | Import CSV data (actuals + budget) |
+```python
+from shared.models.action import ActionDomain, create_action
 
-## Agent Pipeline
-
-```
-Phase 1: Data Ingestion (deterministic)
-  └── Fetch actuals + budget from PostgreSQL
-
-Phase 2: Variance Detection (deterministic)
-  ├── Compute actual vs budget
-  ├── Apply materiality (>5% AND >$5K)
-  └── Return 18 variances, 2 material
-
-Phase 3: Root-Cause Investigation (LLM)
-  ├── Analyze material variances
-  ├── Return structured findings + confidence
-  └── EvidenceItem links to DB records
-
-Phase 4: Commentary Generation (LLM)
-  ├── Generate 6 sections: exec summary, revenue, cost, cash, risks, actions
-  └── Claim Validator blocks hallucinated numbers
-
-Phase 5: HITL Review (deterministic)
-  └── Approve/reject at each checkpoint
+result = create_action(
+    action="reduce",
+    domain=ActionDomain.COST,
+    target="Cloud Infrastructure",
+    description="Reduce cloud spend by negotiating reserved instances",
+    cited_assertion_ids=["ast-001"],
+    owner="user@example.com",
+)
+# result.created → True (passes all 5 gates)
+# result.action_item.status → ActionStatus.PROPOSED
 ```
 
-## Project Structure
+## Evaluation
 
-```
-finsight/
-├── backend/
-│   ├── agents/              # LangGraph agent nodes
-│   │   ├── orchestrator.py  # StateGraph with conditional routing
-│   │   ├── ingestion_agent.py  # Real PostgreSQL queries
-│   │   ├── variance_agent.py   # Deterministic variance engine
-│   │   ├── root_cause_agent.py # LLM + EvidenceItem output
-│   │   ├── commentary_agent.py # LLM + structured sections
-│   │   └── scenario_agent.py
-│   ├── validators/
-│   │   └── claim_validator.py  # Hallucination detection
-│   ├── models/
-│   │   ├── state.py         # PipelineState, Variance, EvidenceItem
-│   │   └── database.py      # 15 SQLAlchemy tables
-│   ├── api/
-│   │   ├── routes.py        # 6 REST endpoints
-│   │   └── schemas.py       # Pydantic request/response models
-│   ├── tools/               # Agent tool functions
-│   ├── data/
-│   │   └── seed.py          # CloudForge Inc. synthetic dataset
-│   ├── config.py            # GROQ/OPENROUTER env vars
-│   └── main.py
-├── frontend/
-│   └── src/
-│       ├── app/             # Next.js App Router (5 pages)
-│       └── components/      # VarianceHeatmap, CommentaryEditor, etc.
-├── tests/                   # 78 tests (unit + integration + real LLM)
-├── docker-compose.yml       # Memory-limited (2.8GB)
-├── litellm-config.yaml      # Groq + OpenRouter routing
-├── IMPLEMENTATION_PLAN.md   # Phased task breakdown
-└── FinSight_PRD.md          # Product requirements
-```
+| Metric | Target |
+|--------|--------|
+| Unit test count (deterministic core) | 83+ tests across formula engine, materiality, calendar, decimal layer |
+| Float rejection | 100% — all monetary fields use `MoneyDecimal` |
+| Claim validation | Every monetary claim cross-checked against evidence |
+| Time to close | < 4 hours (variance to pack) |
+| Human override rate | < 15% |
+| System availability | > 99.5% during close windows |
 
-## Tech Stack
+## Limitations
 
-| Layer | Technology |
-|-------|-----------|
-| Agent Orchestration | LangGraph (StateGraph) |
-| LLM | OpenRouter (gemma-4-26b, free tier) |
-| Backend | FastAPI (Python 3.12) |
-| Frontend | Next.js 15 (App Router, TypeScript) |
-| Database | PostgreSQL 15 |
-| Vector Store | Qdrant |
-| Cache | Redis |
-| Workflow | Temporal (ready) |
-| Observability | Jaeger (ready) |
-| Containerization | Docker Compose (2.8GB) |
+- **LLM commentary is read-only rendering** — the LLM receives pre-validated assertions and may only arrange, paraphrase, and group them. It cannot invent figures.
+- **No autonomous system-of-record writes** — FinSight never posts to GL/ERP, changes budgets, or approves payments. All actions are proposed, not executed.
+- **Single-tenant today** — multi-tenant isolation (RLS) is designed but not production-deployed.
+- **Temporal workflow engine** is ready but not wired into the active pipeline.
+- **Real ERP connectors** (NetSuite, QuickBooks) are planned but not yet implemented.
 
-## Demo Data
+## Future Work
 
-Seeded CloudForge Inc. with 2 material variances for 2026-06:
-
-| Account | Actual | Budget | Variance | % |
-|---------|--------|--------|----------|---|
-| Revenue - Product Y | $426,328 | $484,464 | -$58,136 | -12.0% |
-| Cloud Infrastructure | $225,529 | $167,058 | +$58,470 | +35.0% |
-
-## Tests
-
-```bash
-# Run all tests
-uv run pytest tests/ -v
-
-# Run only real LLM tests
-uv run pytest tests/ -k "real_llm" -v
-
-# Run claim validator tests
-uv run pytest tests/backend/validators/ -v
-```
-
-78 tests covering:
-- Database models and seed data
-- Variance engine (deterministic)
-- Ingestion agent (real PostgreSQL)
-- Commentary agent (real LLM)
-- Root-cause agent (real LLM)
-- Claim validator (hallucination detection)
-- API endpoints (all 6)
-- Evidence model
+- Domain Models & Graph — full financial domain graph with account relationships
+- Sheets / CSV Adapter — spreadsheet ingestion with schema inference
+- Context Builder — structured context packaging for LLM queries
+- Evidence Engine — automated evidence gathering across tool surfaces
+- Prompt Harness — version-controlled prompt templates with eval
+- LLM Guardrails — output validation, prompt injection detection
+- Validation Harness — comprehensive eval suite for agent trajectories
+- Board Reporting — PDF/HTML management pack generation
+- Temporal Durable Workflows — crash-resilient period-run orchestration
 
 ## License
 
