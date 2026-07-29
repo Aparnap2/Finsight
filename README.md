@@ -25,7 +25,44 @@ FP&A teams spend 60–80% of each close cycle on mechanical work: importing actu
 
 ---
 
-## Architecture
+## Platform Architecture
+
+FinSight is organised as five orthogonal operational disciplines, each with distinct assets, failure modes, and governance. They are not successive generations — they are layers in a platform.
+
+```
+                    Finance Operations OS
+
+                 ┌────────────────────────┐
+                 │       AgentOps         │
+                 │   Orchestration Layer  │
+                 ├────────────────────────┤
+                 │        LLMOps          │
+                 │  Language Intelligence  │
+                 ├────────────────────────┤
+                 │        MLOps           │
+                 │  Predictive Modelling  │
+                 ├────────────────────────┤
+                 │       DataOps          │
+                 │    Data & Quality      │
+                 ├────────────────────────┤
+                 │      DevSecOps         │
+                 │  Foundation & Security  │
+                 └────────────────────────┘
+```
+
+Each layer depends on the capabilities below it. Each has its own objectives, tooling, and success metrics. Each is documented in `docs/09-platform/`.
+
+| Layer | Owns | doc |
+|-------|------|-----|
+| **AgentOps** | Workflow planning, coordination, scheduling, state, retries, HITL, escalation | `docs/09-platform/agentops.md` |
+| **LLMOps** | Prompt management, model routing, structured outputs, guardrails, cost, latency | `docs/09-platform/llmops.md` |
+| **MLOps** | Training, inference, monitoring, drift, retraining, offline evaluation | `docs/09-platform/mlops.md` |
+| **DataOps** | Data pipelines, quality, validation, catalog, lineage, transformations | `docs/09-platform/dataops.md` |
+| **DevSecOps** | CI/CD, IaC, observability, secrets, security, deployment, runtime | `docs/09-platform/devsecops.md` |
+
+### Cognitive Runtime Pipeline
+
+The AgentOps layer orchestrates this five-node loop:
 
 ```
   Query
@@ -38,10 +75,10 @@ FP&A teams spend 60–80% of each close cycle on mechanical work: importing actu
     │                │               │               │               │
     ▼                ▼               ▼               ▼               ▼
  ActionPlan     EvidenceData    EngineResults    Assertion        LoopDecision
-                                                                    │
-                                                         ┌──────────┴──────────┐
-                                                         ▼                    ▼
-                                                     "finalize"          "revise"
+                                                                     │
+                                                          ┌──────────┴──────────┐
+                                                          ▼                    ▼
+                                                      "finalize"          "revise"
 ```
 
 ### Key Architecture Decisions
@@ -63,6 +100,18 @@ apps/  →  agents/  →  finance/  →  shared/
 ```
 
 `shared/` imports from nothing within the project. `finance/` imports only from `shared/`. Agents orchestrate domain logic. The API layer depends on everything below it.
+
+### Decision Ownership
+
+The five Ops disciplines answer different questions:
+
+| Owner | Decision |
+|-------|----------|
+| **AgentOps** | What should happen because the score is 0.93? Retry? Escalate? Finalize? |
+| **LLMOps** | Extract fields. Summarise. Explain. Draft narrative. |
+| **MLOps** | Predict risk. Predict fraud. Forecast cash flow. |
+| **DataOps** | Is the data valid? Complete? Trustworthy? Has lineage been preserved? |
+| **DevSecOps** | Can this be deployed? Secure? Monitored? Rolled back? |
 
 ---
 
