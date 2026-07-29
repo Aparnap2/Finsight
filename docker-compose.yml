@@ -126,6 +126,27 @@ services:
         limits:
           memory: 256M
 
+  compute-runtime:
+    profiles:
+      - full
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./python_runtime:/app/python_runtime
+      - ./tests:/app/tests
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://finsight:finsight@postgres:5432/finsight
+      - REDIS_URL=redis://redis:6379/0
+      - PYTHONPATH=/app
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.5"
+
 volumes:
   pgdata:
   qdrant_data:

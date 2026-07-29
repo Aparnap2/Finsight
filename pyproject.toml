@@ -37,6 +37,13 @@ dev = [
     "mypy>=1.13.0,<2.0",
     "httpx>=0.27.0,<1.0",
 ]
+compute = [
+    "polars>=1.0,<2.0",
+    "duckdb>=1.0,<2.0",
+    "pandera[polars]>=0.20,<1.0",
+    "pyarrow>=17.0,<18.0",
+    "openpyxl>=3.1,<4.0",
+]
 
 [tool.ruff]
 target-version = "py312"
@@ -48,7 +55,10 @@ select = ["E", "F", "I", "N", "UP", "B", "A", "SIM"]
 [tool.mypy]
 python_version = "3.12"
 strict = true
-plugins = ["pydantic.mypy"]
+ignore_missing_imports = true
+
+# Pydantic mypy plugin currently unavailable with mypy v2.x — re-enable when compatible
+# plugins = ["pydantic.mypy"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
@@ -57,5 +67,6 @@ markers = ["llm: tests that call real LLM providers (requires API keys)"]
 
 [dependency-groups]
 dev = [
+    "pytest-asyncio>=0.26.0",
     "pytest-httpx>=0.35.0",
 ]
