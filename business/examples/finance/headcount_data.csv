@@ -1,0 +1,11 @@
+entity_id,period,department,headcount,total_compensation,new_hires,departures
+ent-001,2026-01,Engineering,45,5400000.00,2,1
+ent-001,2026-01,Sales,22,2640000.00,1,0
+ent-001,2026-01,Marketing,15,1800000.00,1,1
+ent-001,2026-01,Operations,30,3240000.00,0,2
+ent-001,2026-01,HR,8,960000.00,0,0
+ent-001,2026-02,Engineering,46,5520000.00,1,0
+ent-001,2026-02,Sales,23,2760000.00,1,0
+ent-001,2026-02,Marketing,15,1800000.00,0,0
+ent-001,2026-02,Operations,28,3024000.00,0,2
+ent-001,2026-02,HR,8,960000.00,0,0

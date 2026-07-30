@@ -1,10 +1,12 @@
-from datetime import datetime
-from sqlalchemy import (
-    Column, String, Float, Integer, Boolean, DateTime, ForeignKey, JSON, Text, Numeric
-)
+from datetime import UTC, datetime
+
+from sqlalchemy import JSON, Boolean, Column, DateTime, ForeignKey, Integer, Numeric, String, Text
 from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy.schema import FetchedValue
 
 
+def _utcnow() -> datetime:
+    return datetime.now(UTC).replace(tzinfo=None)
 class Base(DeclarativeBase):
     pass
 
@@ -13,8 +15,8 @@ class Entity(Base):
     __tablename__ = "entities"
     id = Column(String, primary_key=True)
     name = Column(String, nullable=False)
-    currency = Column(String(3), default="USD")
-    fiscal_year_start = Column(String(5), default="01")
+    currency = Column(String(3), nullable=False, default="USD")
+    fiscal_year_start = Column(String(5), nullable=False, default="01")
 
 
 class GLAccount(Base):
@@ -37,7 +39,7 @@ class TrialBalance(Base):
     account_id = Column(String, ForeignKey("gl_accounts.id"), nullable=False)
     debit = Column(Numeric(15, 2), default=0)
     credit = Column(Numeric(15, 2), default=0)
-    balance = Column(Numeric(15, 2), default=0)
+    balance = Column(Numeric(15, 2), server_default=FetchedValue())
 
 
 class BudgetLine(Base):
@@ -60,7 +62,7 @@ class ForecastLine(Base):
     department = Column(String)
     amount = Column(Numeric(15, 2), nullable=False)
     version = Column(Integer, default=1)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
 
 
 class Actual(Base):
@@ -94,7 +96,8 @@ class VendorInvoice(Base):
     account_id = Column(String, ForeignKey("gl_accounts.id"), nullable=False)
     amount = Column(Numeric(15, 2), nullable=False)
     category = Column(String)
-    invoice_date = Column(DateTime)
+    invoice_date = Column(DateTime, nullable=False)
+    status = Column(String(20), nullable=False, default="draft")
 
 
 class SalesPipeline(Base):
@@ -103,8 +106,8 @@ class SalesPipeline(Base):
     entity_id = Column(String, ForeignKey("entities.id"), nullable=False)
     period = Column(String(7), nullable=False)
     deal_name = Column(String, nullable=False)
-    stage = Column(String)
-    expected_close_date = Column(DateTime)
+    stage = Column(String, nullable=False)
+    expected_close_date = Column(DateTime, nullable=False)
     amount = Column(Numeric(15, 2), nullable=False)
     region = Column(String)
     product = Column(String)
@@ -114,33 +117,33 @@ class AgentRun(Base):
     __tablename__ = "agent_runs"
     id = Column(String, primary_key=True)
     pipeline_id = Column(String)
-    entity_id = Column(String, ForeignKey("entities.id"))
-    period = Column(String(7))
-    status = Column(String, default="pending")
-    started_at = Column(DateTime)
+    entity_id = Column(String, ForeignKey("entities.id"), nullable=False)
+    period = Column(String(7), nullable=False)
+    status = Column(String, nullable=False, default="pending")
+    started_at = Column(DateTime, nullable=False)
     completed_at = Column(DateTime)
 
 
 class Variance(Base):
     __tablename__ = "variances"
     id = Column(String, primary_key=True)
-    agent_run_id = Column(String, ForeignKey("agent_runs.id"))
-    account_id = Column(String, ForeignKey("gl_accounts.id"))
+    agent_run_id = Column(String, ForeignKey("agent_runs.id"), nullable=False)
+    account_id = Column(String, ForeignKey("gl_accounts.id"), nullable=False)
     department = Column(String)
-    actual_amount = Column(Numeric(15, 2))
-    budget_amount = Column(Numeric(15, 2))
-    variance_amount = Column(Numeric(15, 2))
-    variance_pct = Column(Numeric(8, 4))
-    is_material = Column(Boolean, default=False)
-    classification = Column(String)
+    actual_amount = Column(Numeric(15, 2), nullable=False)
+    budget_amount = Column(Numeric(15, 2), nullable=False)
+    variance_amount = Column(Numeric(15, 2), server_default=FetchedValue())
+    variance_pct = Column(Numeric(8, 4), server_default=FetchedValue())
+    is_material = Column(Boolean, nullable=False, default=False)
+    classification = Column(String, nullable=False)
     confidence_score = Column(Numeric(5, 4))
 
 
 class RootCause(Base):
     __tablename__ = "root_causes"
     id = Column(String, primary_key=True)
-    variance_id = Column(String, ForeignKey("variances.id"))
-    summary = Column(Text)
+    variance_id = Column(String, ForeignKey("variances.id"), nullable=False)
+    summary = Column(Text, nullable=False)
     evidence_json = Column(JSON)
     confidence_score = Column(Numeric(5, 4))
     recommended_action = Column(Text)
@@ -150,10 +153,10 @@ class RootCause(Base):
 class CommentaryDraft(Base):
     __tablename__ = "commentary_drafts"
     id = Column(String, primary_key=True)
-    agent_run_id = Column(String, ForeignKey("agent_runs.id"))
-    version = Column(Integer, default=1)
+    agent_run_id = Column(String, ForeignKey("agent_runs.id"), nullable=False)
+    version = Column(Integer, nullable=False, default=1)
     content_json = Column(JSON)
-    status = Column(String, default="draft")
+    status = Column(String, nullable=False, default="draft")
     reviewed_by = Column(String)
     reviewed_at = Column(DateTime)
 
@@ -161,8 +164,8 @@ class CommentaryDraft(Base):
 class Scenario(Base):
     __tablename__ = "scenarios"
     id = Column(String, primary_key=True)
-    agent_run_id = Column(String, ForeignKey("agent_runs.id"))
-    name = Column(String)
+    agent_run_id = Column(String, ForeignKey("agent_runs.id"), nullable=False)
+    name = Column(String, nullable=False)
     description = Column(Text)
     assumptions_json = Column(JSON)
     revenue_impact = Column(Numeric(15, 2))
@@ -179,7 +182,7 @@ class ReviewLog(Base):
     reviewer = Column(String)
     decision = Column(String)
     notes = Column(Text)
-    timestamp = Column(DateTime, default=datetime.utcnow)
+    timestamp = Column(DateTime, default=_utcnow)
 
 
 # ---------------------------------------------------------------------------
@@ -198,7 +201,7 @@ class ReviewDecision(Base):
     reviewer = Column(String, nullable=False)
     confidence = Column(Numeric(5, 4))
     notes = Column(Text)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
 
 
 class ActionItemDB(Base):
@@ -216,8 +219,8 @@ class ActionItemDB(Base):
     impact_json = Column(JSON)
     cited_assertion_ids = Column(JSON)               # list[str]
     blocked_reason = Column(Text)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
+    updated_at = Column(DateTime, default=_utcnow)
 
 
 class CommentaryVersion(Base):
@@ -230,7 +233,7 @@ class CommentaryVersion(Base):
     content = Column(Text)
     status = Column(String, default="draft")
     author = Column(String)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
 
 
 class AuditLog(Base):
@@ -242,7 +245,7 @@ class AuditLog(Base):
     event_type = Column(String, nullable=False)
     event_data = Column(JSON)
     user_id = Column(String)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
 
 
 class PipelineRun(Base):
@@ -272,7 +275,7 @@ class AssertionDB(Base):
     confidence = Column(Numeric(5, 4))
     evidence_ids_json = Column(JSON)                 # list[str]
     metadata_json = Column(JSON)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
 
 
 class ToolResultCache(Base):
@@ -284,7 +287,7 @@ class ToolResultCache(Base):
     tool_name = Column(String, nullable=False)
     query_fingerprint = Column(String, nullable=False)
     result_json = Column(JSON)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
     expires_at = Column(DateTime)
 
 
@@ -296,7 +299,7 @@ class DataQualitySnapshot(Base):
     period = Column(String(7), nullable=False)
     report_json = Column(JSON)
     overall_score = Column(Numeric(5, 4))
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
 
 
 class PolicyDecisionLog(Base):
@@ -309,7 +312,7 @@ class PolicyDecisionLog(Base):
     routing_target = Column(String)                  # auto_approve | human_review | …
     reasons_json = Column(JSON)                      # list[str]
     confidence = Column(Numeric(5, 4))
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
 
 
 class BridgeAnalysisResult(Base):
@@ -322,7 +325,7 @@ class BridgeAnalysisResult(Base):
     bridge_json = Column(JSON)
     reconciles = Column(Boolean, default=False)
     confidence = Column(Numeric(5, 4))
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
 
 
 class VarianceSnapshot(Base):
@@ -334,7 +337,7 @@ class VarianceSnapshot(Base):
     account_id = Column(String, nullable=False)
     variance_json = Column(JSON)
     is_material = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
 
 
 class RootCauseFindingDB(Base):
@@ -346,4 +349,4 @@ class RootCauseFindingDB(Base):
     account_id = Column(String, nullable=False)
     finding_json = Column(JSON)
     confidence = Column(Numeric(5, 4))
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)

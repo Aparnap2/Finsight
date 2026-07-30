@@ -1,0 +1,11 @@
+entity_id,vendor_name,account_id,amount,currency,invoice_date,category,department,status
+ent-001,Acme Supply Co.,acc-4010,15250.00,USD,2026-01-15,Office Supplies,Finance,approved
+ent-001,Globex Industries,acc-4020,87500.00,USD,2026-01-20,Software,Engineering,approved
+ent-001,Initech Corp.,acc-4030,4200.00,USD,2026-02-01,Travel,Sales,paid
+ent-001,Umbrella Corp.,acc-4040,120000.00,USD,2026-02-10,Consulting,Marketing,approved
+ent-001,Hooli Ventures,acc-4010,3150.75,USD,2026-02-15,Office Supplies,Engineering,paid
+ent-001,Sterling Cooper,acc-4050,25000.00,USD,2026-03-01,Advertising,Marketing,approved
+ent-001,Wonka Industries,acc-4060,9800.50,USD,2026-03-10,Utilities,Operations,paid
+ent-001,Stark Enterprises,acc-4070,45000.00,USD,2026-03-20,Equipment,Engineering,approved
+ent-001,Wayne Corp.,acc-4080,3200.00,USD,2026-04-01,Training,HR,paid
+ent-001,Oscorp Ltd.,acc-4090,67000.00,USD,2026-04-15,Professional Services,Finance,approved

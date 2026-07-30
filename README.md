@@ -20,8 +20,9 @@ FP&A teams spend 60–80% of each close cycle on mechanical work: importing actu
 |-------|-------|---------|
 | **Phase 1** | Deterministic financial engines | Formula engine, KPI engine, variance engine, scenario engine — all Decimal arithmetic, zero float |
 | **Phase 2** | Validation & data quality | Materiality assessment, evidence engine, data quality checks, assertion pipeline, policy enforcement |
-| **Phase 3** | Cognitive reasoning runtime | Planner → executor → verifier → reflection loop with ActionPlan decomposition, telemetry, and iteration control |
-| **Phase 4** | Evaluation & governance | 22 golden datasets, 12 evaluation metrics, regression harness with YAML thresholds, consulting documentation |
+| **Phase 3** | Enterprise Semantic Layer | Canonical value objects (Money, FiscalPeriod, etc.), 72-formula registry, 83-term business glossary, 27-table data dictionary, 38-capability map, knowledge graph, 13 domain events, 8 state machines, 20 business policies, 10 CSV example datasets |
+| **Phase 4** | Cognitive reasoning runtime | Planner → executor → verifier → reflection loop with ActionPlan decomposition, telemetry, and iteration control |
+| **Phase 5** | Evaluation & governance | 22 golden datasets, 12 evaluation metrics, regression harness with YAML thresholds, consulting documentation |
 
 ---
 
@@ -202,11 +203,29 @@ The architectural boundary is absolute: the LLM generates text from pre-validate
 
 ```
 finsight/
+├── business/                         # Enterprise Semantic Layer (Layer 0)
+│   ├── canonical_types/              #   Money, FiscalPeriod, Percentage, CurrencyCode, identifiers
+│   ├── ontology/                     #   Financial statements, ledger, budget, variance, KPI models
+│   ├── formula_registry/             #   72 KPI formulas with dependency DAG
+│   ├── capabilities/                 #   38 FP&A capabilities with maturity model
+│   ├── glossary/                     #   83 finance terms with classifications
+│   ├── data_dictionary/              #   27 tables, 216 columns of field-level metadata
+│   ├── events/                       #   13 domain events with typed payloads
+│   ├── state_machines/               #   8 state machines with guard conditions
+│   ├── policies/                     #   20 business policies (materiality, approval, compliance)
+│   ├── knowledge_graph/              #   26-node financial entity graph
+│   ├── examples/                     #   CSV example datasets (valid, edge case, error)
+│   └── tests/                        #   184 domain semantic tests
+│
 ├── docs/
 │   ├── 00-executive-summary/        # Business context, problem statement, success metrics
 │   ├── 03-system-design/ADR/        # 5 Architecture Decision Records
 │   ├── 07-ai-runtime/               # Planner, executor, verifier, reflection deep-dives
-│   └── 08-evaluation/               # Benchmarks, golden datasets, metrics, regression
+│   ├── 08-evaluation/               # Benchmarks, golden datasets, metrics, regression
+│   ├── 10-schema/                   # Database indexes, partitioning, query patterns
+│   ├── 11-data-contracts/           # Schema versioning, column mapping, state machines
+│   ├── 12-database/                 # Migration plans, RLS, audit, security
+│   └── 13-business-knowledge/       # ESL design docs, glossary, proposal, canonical objects
 │
 ├── finance/
 │   ├── cognition/                   # Cognitive runtime (harness, registry, state, action, telemetry)
@@ -230,9 +249,10 @@ finsight/
 ├── agents/                          # LangGraph orchestration
 ├── apps/api/                        # FastAPI REST layer
 ├── shared/                          # Models, config, validators, utilities
-├── tests/                           # 342 tests (unit, integration, agent, evaluation)
+├── tests/                           # 501+ tests (unit, integration, agent, evaluation)
 │
 ├── docs/adr/                        # Earlier ADRs (architecture, domain, guardrails)
+├── database/                        # SQL migration scripts (init, constraints, RLS, audit)
 ├── pyproject.toml
 └── docker-compose.yml
 ```
@@ -248,8 +268,9 @@ finsight/
 | Orchestration | LangGraph with custom ReasoningHarness |
 | LLM Boundary | LiteLLM — only planner and report generation |
 | Numeric | `decimal.Decimal` — zero float in monetary operations |
-| Database | PostgreSQL 16 (asyncpg) |
-| Testing | pytest (342 tests), ruff, mypy strict |
+| Database | PostgreSQL 16 (asyncpg) + SQL migration scripts |
+| Semantic Layer | Pydantic v2 canonical types, formula registry, knowledge graph |
+| Testing | pytest (685+ tests), ruff, mypy strict |
 | Containerization | Docker Compose |
 
 ---
@@ -260,7 +281,7 @@ finsight/
 # Install
 uv sync
 
-# Run tests (342)
+# Run tests (685+)
 uv run python -m pytest
 
 # Type-check
@@ -287,7 +308,7 @@ uv run uvicorn apps.api.main:app --reload
 
 - **Architecture**: 5 ADRs documenting every major design decision
 - **Evaluation**: 22 golden datasets × 12 metrics = 264 data points per regression run
-- **Quality**: 342 tests, mypy strict clean, ruff clean, zero float in monetary operations
+- **Quality**: 685+ tests, mypy strict clean, ruff clean, zero float in monetary operations
 - **Runtime**: LLM restricted to 2 calls per pipeline (planning + report generation); all math is deterministic
 - **Documentation**: Full consulting-style engagement artefacts (executive summary, ADRs, runtime deep-dives, evaluation docs, case study, architecture diagrams)
 - **Cycle time reduction**: Variance analysis from 3 days to ~4 minutes

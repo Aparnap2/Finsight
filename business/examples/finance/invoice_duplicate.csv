@@ -1,0 +1,6 @@
+entity_id,vendor_name,account_id,amount,currency,invoice_date,category,department,status
+ent-001,Acme Supply Co.,acc-4010,15250.00,USD,2026-01-15,Office Supplies,Finance,approved
+ent-001,Acme Supply Co.,acc-4010,15250.00,USD,2026-01-15,Office Supplies,Finance,approved
+ent-001,Globex Industries,acc-4020,87500.00,USD,2026-01-20,Software,Engineering,approved
+ent-001,Globex Industries,acc-4020,87500.00,USD,2026-01-20,Software,Engineering,approved
+ent-001,Initech Corp.,acc-4030,4200.00,USD,2026-02-01,Travel,Sales,paid

@@ -56,6 +56,9 @@ select = ["E", "F", "I", "N", "UP", "B", "A", "SIM"]
 python_version = "3.12"
 strict = true
 ignore_missing_imports = true
+exclude = [
+    "business/data-dictionary/",  # hyphenated dir not a valid package
+]
 
 # Pydantic mypy plugin currently unavailable with mypy v2.x — re-enable when compatible
 # plugins = ["pydantic.mypy"]
