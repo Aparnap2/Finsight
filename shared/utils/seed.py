@@ -1,12 +1,18 @@
+import hashlib
 import random
 import uuid
 from datetime import date
 from decimal import Decimal
+from typing import Any
+
+from sqlalchemy import text
 from sqlalchemy.orm import Session
+
 from shared.models.database import (
     Entity, GLAccount, TrialBalance, BudgetLine, Actual,
     HeadcountData, VendorInvoice, SalesPipeline
 )
+from shared.utils.encoders import dumps
 
 
 def _id() -> str:
@@ -186,3 +192,171 @@ def _seed_pipeline(session: Session, entity_id: str, periods: list, regions: lis
                 expected_close_date=date(2026, 7, 31),
                 amount=Decimal(str(amount)), region=region, product=product,
             ))
+
+
+# ---------------------------------------------------------------------------
+# Multi-tenant identity seeding (plan v3 Phase 1: Organization -> Tenant ->
+# User -> Role, reduced identity scope)
+# ---------------------------------------------------------------------------
+
+#: Fixed, deterministic demo-tenant UUIDs (v4-shaped, variant 8).
+ACME_TENANT_ID = "11111111-1111-4111-8111-111111111111"
+GLOBEX_TENANT_ID = "22222222-2222-4222-8222-222222222222"
+INITECH_TENANT_ID = "33333333-3333-4333-8333-333333333333"
+
+#: Deterministic org UUIDs for the three demo organizations.
+_ACME_ORG_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+_GLOBEX_ORG_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+_INITECH_ORG_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+
+DEMO_ROLES = ("analyst", "manager", "director", "cfo")
+
+
+def _tenant_uuid(tenant_code: str, kind: str, role: str) -> str:
+    """Build a deterministic v4/variant-8 UUID from a (tenant, kind, role) seed."""
+    digest = hashlib.sha256(f"{tenant_code}:{kind}:{role}".encode()).hexdigest()
+    return f"{digest[0:8]}-{digest[8:12]}-4{digest[12:15]}-8{digest[16:19]}-{digest[20:32]}"
+
+
+#: Demo tenant specs, keyed by tenant code. Monetary values are Decimal; the
+#: jsonb approval_limits are serialized with shared.utils.encoders.dumps.
+DEMO_TENANTS: dict[str, dict[str, Any]] = {
+    "acme-corp": {
+        "org": {"id": _ACME_ORG_ID, "code": "acme-corp", "name": "Acme Corp"},
+        "tenant": {
+            "id": ACME_TENANT_ID,
+            "organization_id": _ACME_ORG_ID,
+            "code": "acme-corp",
+            "name": "Acme Corp",
+            "currency_code": "USD",
+            "fiscal_year_start_month": 1,
+            "default_materiality_amount": Decimal("5000.00"),
+            "default_materiality_pct": Decimal("5.00"),
+            "approval_limits": {
+                "manager": Decimal("10000"),
+                "director": Decimal("50000"),
+                "cfo": Decimal("250000"),
+            },
+        },
+    },
+    "globex": {
+        "org": {"id": _GLOBEX_ORG_ID, "code": "globex", "name": "Globex Industries"},
+        "tenant": {
+            "id": GLOBEX_TENANT_ID,
+            "organization_id": _GLOBEX_ORG_ID,
+            "code": "globex",
+            "name": "Globex Industries",
+            "currency_code": "EUR",
+            "fiscal_year_start_month": 7,
+            "default_materiality_amount": Decimal("25000.00"),
+            "default_materiality_pct": Decimal("8.00"),
+            "approval_limits": {
+                "manager": Decimal("25000"),
+                "director": Decimal("100000"),
+                "cfo": Decimal("500000"),
+            },
+        },
+    },
+    "initech": {
+        "org": {"id": _INITECH_ORG_ID, "code": "initech", "name": "Initech"},
+        "tenant": {
+            "id": INITECH_TENANT_ID,
+            "organization_id": _INITECH_ORG_ID,
+            "code": "initech",
+            "name": "Initech",
+            "currency_code": "GBP",
+            "fiscal_year_start_month": 4,
+            "default_materiality_amount": Decimal("10000.00"),
+            "default_materiality_pct": Decimal("6.00"),
+            "approval_limits": {
+                "manager": Decimal("5000"),
+                "director": Decimal("25000"),
+                "cfo": Decimal("100000"),
+            },
+        },
+    },
+}
+
+
+def seed_all(session: Session) -> None:
+    """Seed every demo tenant (acme-corp, globex, initech) idempotently."""
+    for code in DEMO_TENANTS:
+        seed_tenant(session, code)
+
+
+def seed_tenant(session: Session, code: str) -> None:
+    """Idempotently upsert one demo tenant and its org/user/role/user_role rows.
+
+    Uses SQLAlchemy Core ``text()`` upserts (``ON CONFLICT ... DO NOTHING``) so
+    re-seeding never duplicates rows or raises.
+
+    Requires an ORM ``Session`` (not a ``Connection``): this function calls
+    ``session.commit()`` internally and is not safe inside a caller-managed
+    transaction context.
+    """
+    if code not in DEMO_TENANTS:
+        raise ValueError(f"unknown demo tenant code: {code!r}")
+    spec = DEMO_TENANTS[code]
+    org, tenant = spec["org"], spec["tenant"]
+
+    session.execute(
+        text(
+            "INSERT INTO organizations (id, name, code) "
+            "VALUES (:id, :name, :code) ON CONFLICT (id) DO NOTHING"
+        ),
+        org,
+    )
+    session.execute(
+        text(
+            "INSERT INTO tenants ("
+            "  id, organization_id, name, code, currency_code,"
+            "  fiscal_year_start_month, default_materiality_amount,"
+            "  default_materiality_pct, approval_limits"
+            ") VALUES ("
+            "  :id, :organization_id, :name, :code, :currency_code,"
+            "  :fiscal_year_start_month, :default_materiality_amount,"
+            "  :default_materiality_pct, CAST(:approval_limits AS jsonb)"
+            ") ON CONFLICT (id) DO NOTHING"
+        ),
+        {**tenant, "approval_limits": dumps(tenant["approval_limits"])},
+    )
+
+    for role in DEMO_ROLES:
+        session.execute(
+            text(
+                "INSERT INTO roles (id, tenant_id, name, description) "
+                "VALUES (:id, :tenant_id, :name, :description) "
+                "ON CONFLICT (id) DO NOTHING"
+            ),
+            {
+                "id": _tenant_uuid(code, "role", role),
+                "tenant_id": tenant["id"],
+                "name": role,
+                "description": f"{role.title()} role for {tenant['name']}",
+            },
+        )
+        session.execute(
+            text(
+                "INSERT INTO users (id, tenant_id, email, display_name, active) "
+                "VALUES (:id, :tenant_id, :email, :display_name, true) "
+                "ON CONFLICT (id) DO NOTHING"
+            ),
+            {
+                "id": _tenant_uuid(code, "user", role),
+                "tenant_id": tenant["id"],
+                "email": f"{role}@{code}.example.com",
+                "display_name": f"{tenant['name']} {role.title()}",
+            },
+        )
+        session.execute(
+            text(
+                "INSERT INTO user_roles (user_id, role_id) "
+                "VALUES (:user_id, :role_id) "
+                "ON CONFLICT (user_id, role_id) DO NOTHING"
+            ),
+            {
+                "user_id": _tenant_uuid(code, "user", role),
+                "role_id": _tenant_uuid(code, "role", role),
+            },
+        )
+    session.commit()

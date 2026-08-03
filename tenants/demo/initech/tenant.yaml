@@ -1,0 +1,16 @@
+company:
+  name: Initech
+  legal_name: Initech Limited
+currency: GBP
+fiscal_year_start_month: 4
+materiality:
+  amount: 10000
+  pct: 6
+approval_limits:
+  manager: 10000
+  director: 50000
+  cfo: 250000
+sox_enabled: false
+connectors:
+  - csv
+features: {}
