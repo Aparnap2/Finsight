@@ -13,10 +13,9 @@ but must NEVER upgrade a claim to VERIFIED. This is enforced at the
 ToolResult contract level via retrieval_scope and source_type.
 """
 
-import hashlib
 from datetime import datetime
 
-from sqlalchemy import Engine, create_engine, func, select
+from sqlalchemy import Engine, create_engine, select
 from sqlalchemy.orm import Session
 
 from shared.config import get_settings
@@ -25,8 +24,8 @@ from shared.models.degraded_mode import DegradedMode
 from shared.utils.tools.tool_result import (
     ToolResult,
     compute_degraded_mode,
-    compute_query_fingerprint,
     compute_quality_score,
+    compute_query_fingerprint,
 )
 
 

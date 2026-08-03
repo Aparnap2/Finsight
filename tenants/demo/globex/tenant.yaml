@@ -1,0 +1,17 @@
+company:
+  name: Globex Corporation
+  legal_name: Globex Corporation Ltd.
+currency: EUR
+fiscal_year_start_month: 7
+materiality:
+  amount: 25000
+  pct: 8
+approval_limits:
+  manager: 10000
+  director: 50000
+  cfo: 250000
+sox_enabled: false
+connectors:
+  - csv
+features:
+  forecasting: true

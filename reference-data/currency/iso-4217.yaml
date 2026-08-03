@@ -1,0 +1,67 @@
+# ISO 4217 currency reference data.
+# Curated to the currencies used by FinSight demo tenants and their
+# trading partners. Canonical codes/names follow ISO 4217.
+
+USD:
+  code: USD
+  numeric: 840
+  name: US Dollar
+  symbol: $
+  minor_units: 2
+  is_base: true
+
+EUR:
+  code: EUR
+  numeric: 978
+  name: Euro
+  symbol: €
+  minor_units: 2
+  is_base: false
+
+GBP:
+  code: GBP
+  numeric: 826
+  name: Pound Sterling
+  symbol: £
+  minor_units: 2
+  is_base: false
+
+JPY:
+  code: JPY
+  numeric: 392
+  name: Japanese Yen
+  symbol: ¥
+  minor_units: 0
+  is_base: false
+
+CAD:
+  code: CAD
+  numeric: 124
+  name: Canadian Dollar
+  symbol: CA$
+  minor_units: 2
+  is_base: false
+
+AUD:
+  code: AUD
+  numeric: 036
+  name: Australian Dollar
+  symbol: A$
+  minor_units: 2
+  is_base: false
+
+CHF:
+  code: CHF
+  numeric: 756
+  name: Swiss Franc
+  symbol: CHF
+  minor_units: 2
+  is_base: false
+
+INR:
+  code: INR
+  numeric: 356
+  name: Indian Rupee
+  symbol: ₹
+  minor_units: 2
+  is_base: false

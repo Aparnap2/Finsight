@@ -1,0 +1,32 @@
+{
+  "metadata": {
+    "id": "regression_duplicate_rows",
+    "name": "Duplicate Row Detection Regression",
+    "category": "regression",
+    "subcategory": "duplicate",
+    "description": "Golden regression dataset for the duplicate detector. Accounts with identical id/actual/budget that appear more than once must be flagged.",
+    "tags": ["regression", "duplicate", "deterministic"],
+    "difficulty": "basic"
+  },
+  "input": {
+    "query": "Detect duplicate rows in the account ledger",
+    "context": {
+      "accounts": [
+        {"id": "4010", "name": "Product Revenue", "actual": 1250000, "budget": 1000000},
+        {"id": "4010", "name": "Product Revenue", "actual": 1250000, "budget": 1000000},
+        {"id": "4020", "name": "Service Revenue", "actual": 750000, "budget": 700000}
+      ]
+    },
+    "spreadsheet_data": {},
+    "variances": []
+  },
+  "expected": {
+    "output": {
+      "duplicates": {
+        "expected_ids": ["4010"],
+        "forbidden_ids": ["4020"],
+        "k": 3
+      }
+    }
+  }
+}

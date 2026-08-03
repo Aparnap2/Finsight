@@ -1,13 +1,19 @@
 """Evaluation metrics for comparing pipeline output against golden data.
 
-Each metric class exposes a ``compute(...)`` method that returns a float
-score in the range ``[0.0, 1.0]``.
+Two families of metrics live here:
+
+1. **Score metrics** (``[0.0, 1.0]``) — the existing business/runtime metrics
+   plus :class:`PrecisionAtK` for anomaly and duplicate detection.
+2. **Error metrics** — :class:`MeanAbsoluteError`, :class:`RootMeanSquaredError`
+   and :class:`MeanAbsolutePercentageError` for forecast evaluation.  These
+   operate on ``Decimal`` money-safe values and return ``None`` for degenerate
+   (empty / all-zero denominator) input rather than inventing a score.
 """
 
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Any
+from typing import Any, Sequence
 
 from finance.cognition.state.action import Action, ActionPlan, ActionStatus
 
@@ -264,6 +270,125 @@ class ToolFailureRate:
             return 0.0
         failed = sum(1 for a in actions if a.status == ActionStatus.FAILED)
         return 1.0 - (failed / len(actions))
+
+
+# ── Forecast Error Metrics (money-safe, Decimal) ─────────────────────────────
+
+
+def _as_decimal(value: Decimal | int | str) -> Decimal:
+    """Normalise a money-safe value to Decimal.
+
+    Floats are intentionally rejected — monetary values must be Decimal
+    (or int/str which convert losslessly).  This mirrors the ``MoneyDecimal``
+    boundary used across the platform.
+    """
+    if isinstance(value, Decimal):
+        return value
+    if isinstance(value, float):
+        raise TypeError(
+            "Float values are not allowed for monetary metrics. "
+            "Use decimal.Decimal, int, or str instead."
+        )
+    return Decimal(str(value))
+
+
+class MeanAbsoluteError:
+    """Mean absolute error between a forecast and observed actuals.
+
+    Money-safe (Decimal).  Returns ``None`` when either series is empty
+    or the two series have different lengths (degenerate input).
+    """
+
+    @staticmethod
+    def compute(
+        actual: Sequence[Decimal | int | str],
+        predicted: Sequence[Decimal | int | str],
+    ) -> Decimal | None:
+        if not actual or not predicted or len(actual) != len(predicted):
+            return None
+        total = Decimal("0")
+        for a, p in zip(actual, predicted, strict=True):
+            total += abs(_as_decimal(a) - _as_decimal(p))
+        return total / Decimal(len(actual))
+
+
+class RootMeanSquaredError:
+    """Root mean squared error between a forecast and observed actuals.
+
+    Money-safe (Decimal).  Returns ``None`` for empty or length-mismatched
+    input.  Penalises large errors more heavily than :class:`MeanAbsoluteError`.
+    """
+
+    @staticmethod
+    def compute(
+        actual: Sequence[Decimal | int | str],
+        predicted: Sequence[Decimal | int | str],
+    ) -> Decimal | None:
+        if not actual or not predicted or len(actual) != len(predicted):
+            return None
+        total = Decimal("0")
+        for a, p in zip(actual, predicted, strict=True):
+            diff = _as_decimal(a) - _as_decimal(p)
+            total += diff * diff
+        mean_sq = total / Decimal(len(actual))
+        return mean_sq.sqrt()
+
+
+class MeanAbsolutePercentageError:
+    """Mean absolute percentage error, returned as a fraction (0.05 == 5%).
+
+    Points where the actual value is zero are excluded because the
+    percentage is undefined for a zero denominator.  Returns ``None`` when
+    there are no usable points (empty input or all actuals zero).
+    """
+
+    @staticmethod
+    def compute(
+        actual: Sequence[Decimal | int | str],
+        predicted: Sequence[Decimal | int | str],
+    ) -> Decimal | None:
+        if not actual or not predicted or len(actual) != len(predicted):
+            return None
+        total = Decimal("0")
+        count = 0
+        for a, p in zip(actual, predicted, strict=True):
+            a_dec = _as_decimal(a)
+            if a_dec == 0:
+                continue
+            total += abs(a_dec - _as_decimal(p)) / abs(a_dec)
+            count += 1
+        if count == 0:
+            return None
+        return total / Decimal(count)
+
+
+# ── Ranked Detection Metrics ─────────────────────────────────────────────────
+
+
+class PrecisionAtK:
+    """Precision@K for anomaly / duplicate detection ranking.
+
+    Measures how many of the top-``k`` retrieved records are actually
+    relevant (expected).  Returns a float in ``[0.0, 1.0]``.  Degenerate
+    inputs (empty detected set, ``k <= 0``) yield ``0.0``.
+    """
+
+    @staticmethod
+    def compute(
+        expected: Sequence[str],
+        detected: Sequence[str],
+        k: int | None = None,
+    ) -> float:
+        if k is None:
+            k = len(detected)
+        if k <= 0 or not detected:
+            return 0.0
+        expected_set = set(expected)
+        top_k = list(detected[:k])
+        if not top_k:
+            return 0.0
+        hits = sum(1 for item in top_k if item in expected_set)
+        return hits / len(top_k)
 
 
 # ── Aggregation ─────────────────────────────────────────────────────────────

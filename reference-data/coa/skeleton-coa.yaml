@@ -1,0 +1,88 @@
+# Chart of accounts reference template.
+# A minimal skeleton COA that tenants extend. Account codes follow the
+# common 1xxx-5xxx scheme; the *type* drives statement mapping.
+
+accounts:
+  - code: "1000"
+    name: Cash and Cash Equivalents
+    type: asset
+    subtype: current
+    statement: balance_sheet
+  - code: "1100"
+    name: Accounts Receivable
+    type: asset
+    subtype: current
+    statement: balance_sheet
+  - code: "1200"
+    name: Inventory
+    type: asset
+    subtype: current
+    statement: balance_sheet
+  - code: "1500"
+    name: Property, Plant and Equipment
+    type: asset
+    subtype: non-current
+    statement: balance_sheet
+  - code: "2000"
+    name: Accounts Payable
+    type: liability
+    subtype: current
+    statement: balance_sheet
+  - code: "2100"
+    name: Accrued Expenses
+    type: liability
+    subtype: current
+    statement: balance_sheet
+  - code: "2500"
+    name: Long-Term Debt
+    type: liability
+    subtype: non-current
+    statement: balance_sheet
+  - code: "3000"
+    name: Common Equity
+    type: equity
+    subtype: equity
+    statement: balance_sheet
+  - code: "4000"
+    name: Revenue
+    type: revenue
+    subtype: operating
+    statement: income_statement
+  - code: "4100"
+    name: Sales Discounts
+    type: contra_revenue
+    subtype: operating
+    statement: income_statement
+  - code: "5000"
+    name: Cost of Goods Sold
+    type: expense
+    subtype: operating
+    statement: income_statement
+  - code: "5100"
+    name: Operating Expenses
+    type: expense
+    subtype: operating
+    statement: income_statement
+  - code: "5200"
+    name: Depreciation and Amortization
+    type: expense
+    subtype: non-operating
+    statement: income_statement
+  - code: "5300"
+    name: Interest Expense
+    type: expense
+    subtype: non-operating
+    statement: income_statement
+  - code: "5400"
+    name: Income Tax
+    type: expense
+    subtype: non-operating
+    statement: income_statement
+
+account_types:
+  asset: Asset
+  contra_revenue: Contra-Revenue
+  equity: Equity
+  expense: Expense
+  liability: Liability
+  revenue: Revenue

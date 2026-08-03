@@ -3,7 +3,7 @@ RETURNS trigger
 LANGUAGE plpgsql AS $body$
 BEGIN
     IF TG_OP = 'UPDATE' AND OLD.status IS DISTINCT FROM NEW.status THEN
-        IF NOT CASE OLD.status
+        IF NOT (CASE OLD.status
             WHEN 'draft'     THEN NEW.status IN ('submitted', 'cancelled')
             WHEN 'submitted' THEN NEW.status IN ('approved', 'cancelled', 'disputed')
             WHEN 'approved'  THEN NEW.status IN ('paid', 'cancelled')
@@ -11,7 +11,7 @@ BEGIN
             WHEN 'paid'      THEN FALSE
             WHEN 'cancelled' THEN FALSE
             ELSE FALSE
-        END THEN
+        END) THEN
             RAISE EXCEPTION 'Invalid invoice status transition: % -> %', OLD.status, NEW.status;
         END IF;
     END IF;
@@ -24,14 +24,14 @@ RETURNS trigger
 LANGUAGE plpgsql AS $body$
 BEGIN
     IF TG_OP = 'UPDATE' AND OLD.status IS DISTINCT FROM NEW.status THEN
-        IF NOT CASE OLD.status
+        IF NOT (CASE OLD.status
             WHEN 'pending'  THEN NEW.status IN ('running', 'cancelled')
             WHEN 'running'  THEN NEW.status IN ('completed', 'failed')
             WHEN 'completed' THEN FALSE
             WHEN 'failed'    THEN FALSE
             WHEN 'cancelled' THEN FALSE
             ELSE FALSE
-        END THEN
+        END) THEN
             RAISE EXCEPTION 'Invalid agent_run status transition: % -> %', OLD.status, NEW.status;
         END IF;
     END IF;
@@ -44,13 +44,13 @@ RETURNS trigger
 LANGUAGE plpgsql AS $body$
 BEGIN
     IF TG_OP = 'UPDATE' AND OLD.status IS DISTINCT FROM NEW.status THEN
-        IF NOT CASE OLD.status
+        IF NOT (CASE OLD.status
             WHEN 'pending'  THEN NEW.status IN ('running', 'failed')
             WHEN 'running'  THEN NEW.status IN ('completed', 'failed')
             WHEN 'completed' THEN FALSE
             WHEN 'failed'    THEN FALSE
             ELSE FALSE
-        END THEN
+        END) THEN
             RAISE EXCEPTION 'Invalid pipeline status transition: % -> %', OLD.status, NEW.status;
         END IF;
     END IF;
@@ -63,7 +63,7 @@ RETURNS trigger
 LANGUAGE plpgsql AS $body$
 BEGIN
     IF TG_OP = 'UPDATE' AND OLD.status IS DISTINCT FROM NEW.status THEN
-        IF NOT CASE OLD.status
+        IF NOT (CASE OLD.status
             WHEN 'proposed'    THEN NEW.status IN ('approved', 'cancelled')
             WHEN 'approved'    THEN NEW.status IN ('in_progress', 'cancelled')
             WHEN 'in_progress' THEN NEW.status IN ('completed', 'cancelled', 'blocked')
@@ -71,7 +71,7 @@ BEGIN
             WHEN 'completed'  THEN FALSE
             WHEN 'cancelled'  THEN FALSE
             ELSE FALSE
-        END THEN
+        END) THEN
             RAISE EXCEPTION 'Invalid action status transition: % -> %', OLD.status, NEW.status;
         END IF;
     END IF;

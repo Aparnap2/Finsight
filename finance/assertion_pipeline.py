@@ -14,16 +14,14 @@ from typing import Any
 from shared.models.assertions import Assertion, AssertionType, SupportLevel
 from shared.models.degraded_mode import DegradedMode
 from shared.utils.confidence import compute_deterministic_confidence
-from shared.utils.validators.claim_validator import (
-    validate_numeric_claim,
-    validate_comparative_claim,
-    validate_causal_claim,
-    validate_action_claim,
-    MonetaryClaim,
-    CausalClaim,
-    ActionClaim,
-)
 from shared.utils.tools.tool_result import ToolResult
+from shared.utils.validators.claim_validator import (
+    ActionClaim,
+    CausalClaim,
+    validate_action_claim,
+    validate_causal_claim,
+    validate_comparative_claim,
+)
 
 
 class AssertionPipelineResult:
@@ -32,7 +30,7 @@ class AssertionPipelineResult:
     def __init__(
         self,
         assertions: list[Assertion] | None = None,
-        rejected: list[dict] | None = None,
+        rejected: list[dict[str, Any]] | None = None,
         degraded_modes: list[str] | None = None,
         summary: str | None = None,
     ):
@@ -126,7 +124,7 @@ def build_numeric_assertion(
 
 def build_comparative_assertion(
     subject: str,
-    candidates: list[dict],
+    candidates: list[dict[str, Any]],
     value_field: str = "amount",
     rank: int | None = None,
     tool_results: list[ToolResult] | None = None,
@@ -179,14 +177,18 @@ def build_comparative_assertion(
         evidence_ids=evidence_ids,
         support_level=SupportLevel.VERIFIED if validation.is_valid else SupportLevel.PROBABLE,
         confidence=confidence,
-        metadata={"candidate_count": len(candidates), "rank": rank, "validated": validation.is_valid},
+        metadata={
+            "candidate_count": len(candidates),
+            "rank": rank,
+            "validated": validation.is_valid,
+        },
     )
 
 
 def build_causal_assertion(
     cause: str,
     effect: str,
-    driver_tree_edges: list[dict] | None = None,
+    driver_tree_edges: list[dict[str, Any]] | None = None,
     evidence_classes: int = 1,
     has_alternative: bool = False,
     tool_results: list[ToolResult] | None = None,
@@ -308,17 +310,17 @@ def build_action_assertion(
 
 
 def run_assertion_pipeline(
-    variances: list[dict],
+    variances: list[dict[str, Any]],
     tool_results: dict[str, list[ToolResult]],
-    candidates: list[dict] | None = None,
-    driver_tree_edges: list[dict] | None = None,
+    candidates: list[dict[str, Any]] | None = None,
+    driver_tree_edges: list[dict[str, Any]] | None = None,
 ) -> AssertionPipelineResult:
     """Run the full assertion pipeline.
 
     Takes variance data and tool results, produces validated assertions.
     """
     assertions: list[Assertion] = []
-    rejected: list[dict] = []
+    rejected: list[dict[str, Any]] = []
     all_degraded: set[str] = set()
 
     # Build NUMERIC assertions from each variance
@@ -381,7 +383,8 @@ def run_assertion_pipeline(
         f"{sum(1 for a in assertions if a.support_level == SupportLevel.PROBABLE)} probable, "
         f"{sum(1 for a in assertions if a.support_level == SupportLevel.WEAK)} weak), "
         f"{n_rejected} rejected, "
-        f"{len(all_degraded)} degraded modes: {', '.join(sorted(all_degraded)) if all_degraded else 'none'}"
+        f"{len(all_degraded)} degraded modes: "
+        f"{', '.join(sorted(all_degraded)) if all_degraded else 'none'}"
     )
 
     return AssertionPipelineResult(

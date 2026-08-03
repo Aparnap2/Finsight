@@ -1,9 +1,20 @@
+"""Variance detection agent node: compute variances and flag materiality.
+
+Materiality thresholds are tenant-driven — they come from the resolved
+:class:`TenantConfig` (or explicit Decimal args), never from hardcoded
+defaults. Comparisons use OR semantics (either threshold crossed is
+material), reconciled with ``finance/variance_engine/materiality.py`` as
+the single source of truth.
+"""
+
 from decimal import Decimal
 
+from finplatform.config.tenant_schema import TenantConfig, TenantConfigError
 from shared.models.state import PipelineState, Variance
 
 
 def compute_variances(actuals: list[dict], budget: list[dict]) -> list[Variance]:
+    """Compute per-account variances between actuals and budget as Decimals."""
     budget_map = {b["account_id"]: b for b in budget}
     variances = []
     for a in actuals:
@@ -26,19 +37,58 @@ def compute_variances(actuals: list[dict], budget: list[dict]) -> list[Variance]
 
 def apply_materiality(
     variances: list[Variance],
-    threshold_amount: float = 5000.0,
-    threshold_pct: float = 5.0,
+    threshold_amount: Decimal | None = None,
+    threshold_pct: Decimal | None = None,
+    tenant_config: TenantConfig | None = None,
 ) -> list[Variance]:
-    threshold_amount_d = Decimal(str(threshold_amount))
-    threshold_pct_d = Decimal(str(threshold_pct))
+    """Mark variances as material using tenant or explicit thresholds.
+
+    Threshold precedence: explicit ``threshold_amount``/``threshold_pct``
+    args > ``tenant_config`` materiality > ``ValueError`` when nothing is
+    provided (no hardcoded defaults). A variance is material when EITHER
+    the absolute or the percentage threshold is crossed (OR semantics —
+    same default as ``MaterialityEngine``'s ``combined_rule="any"``).
+    """
+    if threshold_amount is None or threshold_pct is None:
+        if tenant_config is None:
+            raise ValueError(
+                "materiality thresholds required: pass explicit threshold_amount/"
+                "threshold_pct or tenant_config"
+            )
+        if threshold_amount is None:
+            threshold_amount = tenant_config.materiality.amount
+        if threshold_pct is None:
+            threshold_pct = tenant_config.materiality.pct
+    threshold_amount_d = Decimal(threshold_amount)
+    threshold_pct_d = Decimal(threshold_pct)
     for v in variances:
-        v.is_material = abs(v.variance_amount) >= threshold_amount_d and abs(v.variance_pct) >= threshold_pct_d
+        # OR semantics: any threshold crossed => material (matches
+        # MaterialityEngine default combined_rule="any").
+        v.is_material = (
+            abs(v.variance_amount) >= threshold_amount_d
+            or abs(v.variance_pct) >= threshold_pct_d
+        )
     return variances
 
 
-def variance_node(state: PipelineState) -> dict:
+def variance_node(state: PipelineState, tenant_config: TenantConfig | None = None) -> dict:
+    """Variance detection graph node: compute variances and flag materiality.
+
+    When no explicit ``tenant_config`` is supplied, the tenant is resolved
+    from ``state["tenant_id"]`` via ``TenantConfig.load``. A missing or
+    invalid tenant config falls back to explicit args and raises a clear
+    ``ValueError`` when no thresholds are available.
+    """
     actuals = state.get("actuals", {}).get("accounts", [])
     budget = state.get("budget", {}).get("accounts", [])
     variances = compute_variances(actuals, budget)
-    variances = apply_materiality(variances)
+    resolved = tenant_config
+    if resolved is None:
+        tenant_id = state.get("tenant_id")
+        if tenant_id:
+            try:
+                resolved = TenantConfig.load(tenant_id)
+            except TenantConfigError:
+                resolved = None
+    variances = apply_materiality(variances, tenant_config=resolved)
     return {"variances": variances, "current_step": "variance_complete"}

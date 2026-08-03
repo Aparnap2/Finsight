@@ -1,0 +1,72 @@
+# Department and cost center reference data.
+# Default organizational hierarchy used when a tenant does not define
+# its own. Departments roll up cost centers.
+
+departments:
+  - id: dept.engineering
+    name: Engineering
+    cost_centers:
+      - cc.eng.platform
+      - cc.eng.sre
+  - id: dept.sales
+    name: Sales
+    cost_centers:
+      - cc.sales.enterprise
+      - cc.sales.smb
+  - id: dept.marketing
+    name: Marketing
+    cost_centers:
+      - cc.mkt.demandgen
+      - cc.mkt.brand
+  - id: dept.finance
+    name: Finance
+    cost_centers:
+      - cc.fin.fpna
+      - cc.fin.acc
+  - id: dept.hr
+    name: Human Resources
+    cost_centers:
+      - cc.hr.recruiting
+      - cc.hr.peopleops
+
+cost_centers:
+  - id: cc.eng.platform
+    name: Platform Engineering
+    department: dept.engineering
+    default_budget_owner: FP&A Team
+  - id: cc.eng.sre
+    name: Site Reliability
+    department: dept.engineering
+    default_budget_owner: FP&A Team
+  - id: cc.sales.enterprise
+    name: Enterprise Sales
+    department: dept.sales
+    default_budget_owner: Sales Ops
+  - id: cc.sales.smb
+    name: SMB Sales
+    department: dept.sales
+    default_budget_owner: Sales Ops
+  - id: cc.mkt.demandgen
+    name: Demand Generation
+    department: dept.marketing
+    default_budget_owner: Marketing
+  - id: cc.mkt.brand
+    name: Brand Marketing
+    department: dept.marketing
+    default_budget_owner: Marketing
+  - id: cc.fin.fpna
+    name: FP&A
+    department: dept.finance
+    default_budget_owner: FP&A Team
+  - id: cc.fin.acc
+    name: Accounting
+    department: dept.finance
+    default_budget_owner: Controller Team
+  - id: cc.hr.recruiting
+    name: Recruiting
+    department: dept.hr
+    default_budget_owner: HR
+  - id: cc.hr.peopleops
+    name: People Operations
+    department: dept.hr
+    default_budget_owner: HR

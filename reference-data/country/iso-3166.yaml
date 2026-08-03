@@ -1,0 +1,75 @@
+# ISO 3166 country reference data.
+# Curated to the countries where FinSight demo tenants operate.
+# Canonical alpha-2 / alpha-3 codes follow ISO 3166.
+
+US:
+  alpha2: US
+  alpha3: USA
+  numeric: 840
+  name: United States
+  currency: USD
+  default_locale: en-US
+
+GB:
+  alpha2: GB
+  alpha3: GBR
+  numeric: 826
+  name: United Kingdom
+  currency: GBP
+  default_locale: en-GB
+
+DE:
+  alpha2: DE
+  alpha3: DEU
+  numeric: 276
+  name: Germany
+  currency: EUR
+  default_locale: de-DE
+
+FR:
+  alpha2: FR
+  alpha3: FRA
+  numeric: 250
+  name: France
+  currency: EUR
+  default_locale: fr-FR
+
+JP:
+  alpha2: JP
+  alpha3: JPN
+  numeric: 392
+  name: Japan
+  currency: JPY
+  default_locale: ja-JP
+
+CA:
+  alpha2: CA
+  alpha3: CAN
+  numeric: 124
+  name: Canada
+  currency: CAD
+  default_locale: en-CA
+
+AU:
+  alpha2: AU
+  alpha3: AUS
+  numeric: 036
+  name: Australia
+  currency: AUD
+  default_locale: en-AU
+
+CH:
+  alpha2: CH
+  alpha3: CHE
+  numeric: 756
+  name: Switzerland
+  currency: CHF
+  default_locale: de-CH
+
+IN:
+  alpha2: IN
+  alpha3: IND
+  numeric: 356
+  name: India
+  currency: INR
+  default_locale: en-IN

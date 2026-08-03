@@ -17,7 +17,7 @@ Two tenant identifier columns exist across the schema:
 | `entity_id` | 15 legacy tables (entities, gl_accounts, trial_balance, budget_lines, forecast_lines, actuals, headcount_data, vendor_invoices, sales_pipeline, agent_runs, variances, root_causes, commentary_drafts, scenarios, review_logs) | Entity-scoped — acts as the tenant boundary for the FP&A domain |
 | `tenant_id` | 12 PRD §7 tables (review_decisions, action_items, commentary_versions, audit_logs, pipeline_runs, assertions_db, tool_result_cache, data_quality_snapshots, policy_decision_logs, bridge_analysis_results, variance_snapshots, root_cause_findings_db) | Explicit tenant boundary for the new domain model |
 
-**Design decision:** Both `entity_id` and `tenant_id` serve as the tenant partitioning key. The RLS policy will use a `current_tenant_id` session variable. Legacy tables with `entity_id` will be treated as tenant-scoped using `entity_id`.
+**Design decision:** Both `entity_id` and `tenant_id` serve as the tenant partitioning key. The RLS policy will use the `app.tenant_id` session variable (`current_setting('app.tenant_id')`), as used throughout the SQL examples below and in the live migrations (`001_extensions.sql`, `006_rls.sql`, `007_audit_triggers.sql`). Legacy tables with `entity_id` will be treated as tenant-scoped using `entity_id`.
 
 ### 1.2 Tables Without Tenant Scope
 
