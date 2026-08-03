@@ -1,0 +1,45 @@
+# Fiscal calendar conventions.
+# Defines how tenant fiscal years are structured. A tenant's tenant.yaml
+# references one of these templates by id.
+
+templates:
+  calendar-year-jan:
+    id: calendar-year-jan
+    name: Calendar Year (Jan-Dec)
+    fiscal_year_start_month: 1
+    periods_per_year: 12
+    period_type: monthly
+    quarter_dates: [3, 6, 9, 12]
+    description: Standard calendar year ending 31 December.
+
+  fiscal-year-jul:
+    id: fiscal-year-jul
+    name: Fiscal Year July-June
+    fiscal_year_start_month: 7
+    periods_per_year: 12
+    period_type: monthly
+    quarter_dates: [9, 12, 3, 6]
+    description: Common for UK and education-sector entities.
+
+  fiscal-year-apr:
+    id: fiscal-year-apr
+    name: Fiscal Year April-March
+    fiscal_year_start_month: 4
+    periods_per_year: 12
+    period_type: monthly
+    quarter_dates: [6, 9, 12, 3]
+    description: Common for Indian and many retail entities.
+
+  four-four-five:
+    id: four-four-five
+    name: 4-4-5 Retail Calendar
+    fiscal_year_start_month: 1
+    periods_per_year: 12
+    period_type: 4-4-5
+    quarter_dates: [4, 8, 12]
+    description: Retail calendar with 4-week, 4-week, 5-week quarters.
+
+period_statuses:
+  open: Open for postings
+  locked: Locked for postings (read-only)
+  closed: Closed period, archived

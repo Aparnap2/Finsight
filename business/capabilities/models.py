@@ -4,16 +4,47 @@ Defines :class:`Capability`, :class:`CapabilityTree`,
 :class:`CapabilityMaturity`, and :class:`ProcessFlow` — the core
 value objects that encode FinSight's understanding of which business
 capabilities it supports and how they relate.
+
+Capabilities carry a lifecycle status (see :class:`CapabilityStatus`)
+as well as a finer-grained maturity rating, and are wired to the
+services, events, agents, and KPIs that implement them so the registry
+can feed routing and the service catalog.
 """
+
+# mypy: disable-error-code="misc"
 
 from __future__ import annotations
 
 from collections.abc import Generator, Iterator
+from enum import StrEnum
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 MaturityLevel = Literal["planned", "partial", "full", "production"]
+
+
+class CapabilityStatus(StrEnum):
+    """Lifecycle state of a capability.
+
+    The lifecycle is monotonic: a capability is *discovered*, then
+    *implemented*, then promoted to *production*, and finally
+    *deprecated*. See ``docs/14-platform/implementation-plan.md``.
+    """
+
+    DISCOVERY = "discovery"
+    IMPLEMENTED = "implemented"
+    PRODUCTION = "production"
+    DEPRECATED = "deprecated"
+
+
+#: Mapping from the coarse maturity rating to the lifecycle status.
+_MATURITY_TO_STATUS: dict[MaturityLevel, CapabilityStatus] = {
+    "planned": CapabilityStatus.DISCOVERY,
+    "partial": CapabilityStatus.IMPLEMENTED,
+    "full": CapabilityStatus.IMPLEMENTED,
+    "production": CapabilityStatus.PRODUCTION,
+}
 
 
 class Capability(BaseModel):
@@ -32,8 +63,14 @@ class Capability(BaseModel):
             capability (e.g. ``"Variance Engine"``).
         events: Domain events this capability produces or consumes.
         maturity: How mature the implementation is.
+        status: Lifecycle state; derived from *maturity* when not
+            given explicitly.
         owner: Business owner (team or person).
         tags: Arbitrary classification tags.
+        apis: API routes or services that expose this capability.
+        agent_tools: Agent tools that exercise this capability.
+        kpis: KPI identifiers this capability produces or consumes.
+        policies: Policy identifiers that govern this capability.
     """
 
     capability_id: str = Field(
@@ -57,6 +94,10 @@ class Capability(BaseModel):
         default="planned",
         description="How mature the implementation is",
     )
+    status: CapabilityStatus | None = Field(
+        default=None,
+        description="Lifecycle state; derived from maturity when not given",
+    )
     owner: str = Field(
         default="FP&A Team",
         description="Business owner (team or person)",
@@ -65,6 +106,36 @@ class Capability(BaseModel):
         default_factory=list,
         description="Arbitrary classification tags",
     )
+    apis: list[str] = Field(
+        default_factory=list,
+        description="API routes or services that expose this capability",
+    )
+    agent_tools: list[str] = Field(
+        default_factory=list,
+        description="Agent tools that exercise this capability",
+    )
+    kpis: list[str] = Field(
+        default_factory=list,
+        description="KPI identifiers this capability produces or consumes",
+    )
+    policies: list[str] = Field(
+        default_factory=list,
+        description="Policy identifiers that govern this capability",
+    )
+
+    @model_validator(mode="after")  # type: ignore[untyped-decorator]
+    def _derive_status(self) -> Capability:
+        """Derive the lifecycle status from the maturity rating.
+
+        Keeps the finer-grained maturity rating as the source of truth
+        while exposing the four-state lifecycle used for reporting.
+        """
+        if self.status is None:
+            self.status = _MATURITY_TO_STATUS.get(
+                self.maturity,
+                CapabilityStatus.DISCOVERY,
+            )
+        return self
 
 
 class CapabilityTree(BaseModel):
@@ -238,6 +309,29 @@ class CapabilityTree(BaseModel):
             return self.find_by_id(item.capability_id) is not None
         return False
 
+    def by_status(self, status: CapabilityStatus) -> list[Capability]:
+        """Return capabilities currently in the given lifecycle state.
+
+        Args:
+            status: The lifecycle status to filter on.
+
+        Returns:
+            List of capabilities in that state.
+        """
+        return [cap for cap in self.capabilities if cap.status == status]
+
+    def implemented_capabilities(self) -> list[Capability]:
+        """Return capabilities that are at or beyond *implemented*.
+
+        These are the capabilities the service catalog can route to:
+        they are not merely discovered, they have working engines,
+        agents, or tooling behind them.
+
+        Returns:
+            List of implemented capabilities.
+        """
+        return CapabilityMaturity(capabilities=self.capabilities).implemented()
+
 
 class CapabilityMaturity(BaseModel):
     """Aggregate maturity reporting across capabilities.
@@ -312,6 +406,37 @@ class CapabilityMaturity(BaseModel):
         """
         filtered = [c for c in self.capabilities if c.owner == owner]
         return CapabilityMaturity(capabilities=filtered).summary()
+
+    def lifecycle_summary(self) -> dict[str, int]:
+        """Return counts per lifecycle :class:`CapabilityStatus`.
+
+        Returns:
+            Dict keyed by status value (``"discovery"``,
+            ``"implemented"``, ``"production"``, ``"deprecated"``)
+            with the number of capabilities in that state.
+        """
+        counts: dict[str, int] = {status.value: 0 for status in CapabilityStatus}
+        for cap in self.capabilities:
+            # The after-validator guarantees status is set on instances,
+            # but the field is typed Optional so fall back defensively.
+            status = cap.status or CapabilityStatus.DISCOVERY
+            counts[status.value] = counts.get(status.value, 0) + 1
+        return counts
+
+    def implemented(self) -> list[Capability]:
+        """Return capabilities that are at or beyond *implemented*.
+
+        A capability is counted as implemented when its lifecycle status
+        is ``implemented`` or ``production`` (not merely discovered).
+
+        Returns:
+            List of implemented capabilities.
+        """
+        return [
+            cap
+            for cap in self.capabilities
+            if cap.status in {CapabilityStatus.IMPLEMENTED, CapabilityStatus.PRODUCTION}
+        ]
 
 
 class ProcessStep(BaseModel):
