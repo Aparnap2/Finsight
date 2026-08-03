@@ -1,0 +1,12 @@
+entity_id,period,account_id,account_name,debit,credit
+ent-001,2026-01,acc-1000,Cash,150000.00,0.00
+ent-001,2026-01,acc-2000,Accounts Receivable,85000.00,0.00
+ent-001,2026-01,acc-3000,Inventory,120000.00,0.00
+ent-001,2026-01,acc-4000,Equipment,500000.00,0.00
+ent-001,2026-01,acc-5000,Accounts Payable,0.00,75000.00
+ent-001,2026-01,acc-6000,Notes Payable,0.00,200000.00
+ent-001,2026-01,acc-7000,Revenue,0.00,450000.00
+ent-001,2026-01,acc-8000,COGS,180000.00,0.00
+ent-001,2026-01,acc-8010,Salaries Expense,95000.00,0.00
+ent-001,2026-01,acc-8020,Rent Expense,25000.00,0.00
+ent-001,2026-01,acc-9000,Retained Earnings,0.00,430000.00

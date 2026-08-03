@@ -1,0 +1,11 @@
+entity_id,period,account_id,department,forecast_amount,actual_amount,forecast_version
+ent-001,2026-01,acc-7010,Sales,105000.00,102500.00,1
+ent-001,2026-01,acc-7020,Marketing,52000.00,48300.00,1
+ent-001,2026-01,acc-7030,Engineering,198000.00,205000.00,1
+ent-001,2026-01,acc-7040,Operations,76000.00,74100.00,1
+ent-001,2026-01,acc-7050,HR,30500.00,30150.00,1
+ent-001,2026-02,acc-7010,Sales,109000.00,108000.00,2
+ent-001,2026-02,acc-7020,Marketing,56000.00,55750.00,2
+ent-001,2026-02,acc-7030,Engineering,211000.00,212000.00,2
+ent-001,2026-02,acc-7040,Operations,80500.00,79200.00,2
+ent-001,2026-02,acc-7050,HR,32500.00,32150.00,2

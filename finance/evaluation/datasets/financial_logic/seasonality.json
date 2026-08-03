@@ -1,0 +1,68 @@
+{
+  "metadata": {
+    "id": "seasonality",
+    "name": "Seasonal Revenue Pattern",
+    "category": "financial_logic",
+    "subcategory": "seasonality",
+    "description": "Revenue with strong seasonal patterns across Q1",
+    "tags": ["seasonal", "revenue", "pattern"],
+    "difficulty": "intermediate"
+  },
+  "input": {
+    "query": "Analyse Q1 2026 performance accounting for seasonal patterns",
+    "context": {
+      "accounts": [
+        {"id": "4010", "name": "Product Revenue", "actual": 900000, "budget": 1200000},
+        {"id": "4020", "name": "Service Revenue", "actual": 600000, "budget": 500000}
+      ],
+      "seasonal_factors": {
+        "Q1": 0.7,
+        "Q2": 0.9,
+        "Q3": 1.1,
+        "Q4": 1.3
+      }
+    },
+    "spreadsheet_data": {},
+    "variances": []
+  },
+  "expected": {
+    "planning": {
+      "required_intents": ["compute_variance", "analyse_kpi", "apply_seasonal_adjustment"],
+      "forbidden_intents": [],
+      "min_actions": 3,
+      "max_actions": 7,
+      "max_replans": 0
+    },
+    "execution": {
+      "min_success_rate": 1.0,
+      "max_retries_total": 0,
+      "max_failed_actions": 0
+    },
+    "verification": {
+      "max_unsupported": 0,
+      "max_contradictions": 0,
+      "min_evidence": 1,
+      "min_confidence": 0.7
+    },
+    "reflection": {
+      "expected_decision": "finalize",
+      "max_gaps": 0
+    },
+    "output": {
+      "variances": [
+        {"account_id": "4010", "variance_amount": -300000, "variance_pct": -25.0},
+        {"account_id": "4020", "variance_amount": 100000, "variance_pct": 20.0}
+      ],
+      "kpis": [
+        {"name": "Product Revenue Growth", "value": -25.0},
+        {"name": "Service Revenue Growth", "value": 20.0}
+      ],
+      "report_sections": {
+        "executive_summary": "product revenue 25% below budget due to Q1 seasonality",
+        "details": "service revenue grew 20% partially offsetting product decline"
+      },
+      "required_claims": ["Q1 seasonality impacted product revenue"],
+      "forbidden_claims": ["Revenue overall is on budget"]
+    }
+  }
+}

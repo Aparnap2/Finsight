@@ -1,45 +1,48 @@
-import uuid
 import csv
 import io
+import logging
+import uuid
 from decimal import Decimal
-from fastapi import APIRouter, HTTPException, UploadFile, File
+from uuid import UUID
+
+from fastapi import APIRouter, File, HTTPException, UploadFile
 from sqlalchemy import create_engine
-from apps.api.schemas import (
-    PipelineRunRequest,
-    PipelineRunResponse,
-    PipelineResultResponse,
-    PipelineExecuteRequest,
-    PipelineExecuteResponse,
-    CommentaryResponse,
-    CommentarySectionResponse,
-    AssertionResponse,
-    VarianceResponse,
-    BridgeAnalysisResponse,
-    BridgeComponentResponse,
-    DataQualityResponse,
-    DataQualityCheckResponse,
-    PolicyDecisionResponse,
-    ActionItemResponse,
-    ActionCreateRequest,
-    StatusResponse,
-)
-from shared.config import get_settings
-from finance.ingestion.ingestion_agent import ingestion_node
-from agents.variance.variance_agent import variance_node
-from agents.driver.root_cause_agent import investigate_root_causes
+
 from agents.commentary.commentary_agent import (
-    generate_commentary,
     CommentaryRenderInput,
+    generate_commentary,
     render_commentary,
 )
-from shared.utils.llm_client import LLMClient
-from shared.utils.validators.claim_validator import validate_commentary_claims
-from shared.models.state import PipelineState
+from agents.driver.root_cause_agent import investigate_root_causes
+from agents.variance.variance_agent import variance_node
+from apps.api.schemas import (
+    ActionCreateRequest,
+    ActionItemResponse,
+    AssertionResponse,
+    BridgeAnalysisResponse,
+    BridgeComponentResponse,
+    CommentaryResponse,
+    CommentarySectionResponse,
+    DataQualityCheckResponse,
+    DataQualityResponse,
+    PipelineExecuteRequest,
+    PipelineExecuteResponse,
+    PipelineResultResponse,
+    PipelineRunRequest,
+    PipelineRunResponse,
+    PolicyDecisionResponse,
+    StatusResponse,
+    VarianceResponse,
+)
 from finance.assertion_pipeline import run_assertion_pipeline
-from finance.validation.data_quality import assess_batch
-from shared.utils.policy import evaluate_policy, evaluate_from_pipeline_result
 from finance.driver_engine.bridge_analysis import decompose_bridge
-from shared.models.action import ActionItem, ActionDomain, ActionStatus, ActionImpact, create_action
+from finance.ingestion.ingestion_agent import ingestion_node
+from finance.validation.data_quality import assess_batch
+from shared.config import get_settings
+from shared.models.action import ActionDomain, ActionImpact, ActionItem, create_action
+from shared.models.state import PipelineState
+from shared.utils.llm_client import LLMClient
+from shared.utils.policy import evaluate_from_pipeline_result
 from shared.utils.tools.tool_result import ToolResult
 
 router = APIRouter()
@@ -184,6 +187,14 @@ async def submit_review(run_id: str, checkpoint: str, decision: str, notes: str 
 
 @router.post("/import/csv")
 async def import_csv(file: UploadFile = File(...), tenant_id: str = "CF001"):
+    # DEPRECATED: Use POST /api/v1/jobs/submit with pipeline="analytics"
+    # and source_type="csv" instead. This endpoint routes through the
+    # Compute Runtime for new development.
+    logging.warning(
+        "DEPRECATED: POST /api/v1/import/csv is deprecated. "
+        "Use POST /api/v1/jobs/submit with pipeline='analytics' and "
+        "source_type='csv' via the Compute Runtime endpoint."
+    )
     content = await file.read()
     text = content.decode("utf-8")
     reader = csv.DictReader(io.StringIO(text))
@@ -202,6 +213,7 @@ async def import_csv(file: UploadFile = File(...), tenant_id: str = "CF001"):
     settings = get_settings()
     engine = create_engine(settings.postgres_uri)
     from sqlalchemy.orm import Session
+
     from shared.models.database import Actual, BudgetLine
 
     actuals_count = 0
@@ -764,3 +776,75 @@ async def get_action_item(action_id: str):
         blocked_reason=a.blocked_reason,
         cited_assertion_ids=a.cited_assertion_ids,
     )
+
+
+# ── Compute Runtime routes ──────────────────────────────────────────────
+
+
+from apps.api.schemas import JobStatusResponse, JobSubmitRequest, JobSubmitResponse  # noqa: E402
+from python_runtime.dispatcher import Dispatcher  # noqa: E402
+from python_runtime.handlers.analytics_handler import AnalyticsHandler  # noqa: E402
+from python_runtime.models import Job  # noqa: E402
+
+compute_router = APIRouter(prefix="/api/v1")
+
+_dispatcher = Dispatcher(max_workers=4)
+_dispatcher.register("analytics", AnalyticsHandler())
+
+
+@compute_router.post("/jobs/submit", status_code=202)
+async def submit_job(req: JobSubmitRequest) -> JobSubmitResponse:
+    job = Job(
+        tenant_id=req.tenant_id,
+        pipeline=req.pipeline,
+        params={"source_type": req.source_type, "source_uri": req.source_uri, **req.params},
+    )
+    _dispatcher.submit(job)
+    return JobSubmitResponse(
+        job_id=str(job.id),
+        status=job.status.value,
+        created_at=job.created_at.isoformat(),
+        poll_url=f"/api/v1/jobs/{job.id}/status",
+        result_url=f"/api/v1/jobs/{job.id}/result",
+    )
+
+
+@compute_router.get("/jobs/{job_id}/status")
+async def get_job_status(job_id: UUID) -> JobStatusResponse:
+    job = _dispatcher.get_result(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail=f"Job not found: {job_id}")
+    artifact = None
+    if job.telemetry and job.telemetry.cache_hit:
+        artifact = {"from_cache": True}
+    return JobStatusResponse(
+        job_id=str(job.id),
+        status=job.status.value,
+        created_at=job.created_at.isoformat() if job.created_at else None,
+        started_at=job.started_at.isoformat() if job.started_at else None,
+        completed_at=job.completed_at.isoformat() if job.completed_at else None,
+        duration_ms=job.telemetry.duration_ms if job.telemetry else None,
+        error=job.error.model_dump() if job.error else None,
+        artifact=artifact,
+    )
+
+
+@compute_router.get("/jobs/{job_id}/result")
+async def get_job_result(job_id: UUID) -> dict:
+    job = _dispatcher.get_result(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail=f"Job not found: {job_id}")
+    if job.status.value != "success":
+        raise HTTPException(status_code=400, detail=f"Job not completed: {job.status.value}")
+    return {"job_id": str(job.id), "status": job.status.value, "result_ref": job.result_ref}
+
+
+@compute_router.post("/jobs/{job_id}/cancel")
+async def cancel_job(job_id: UUID) -> dict:
+    cancelled = _dispatcher.cancel(job_id)
+    if not cancelled:
+        raise HTTPException(
+            status_code=400,
+            detail="Job cannot be cancelled (already running or not found)",
+        )
+    return {"job_id": str(job_id), "status": "cancelled"}

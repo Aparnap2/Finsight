@@ -1,0 +1,72 @@
+{
+  "metadata": {
+    "id": "low_confidence",
+    "name": "Low Confidence Due to Ambiguous Data",
+    "category": "governance",
+    "subcategory": "confidence_uncertainty",
+    "description": "Partial data with wide ranges and estimates leads to low overall confidence. The system should acknowledge uncertainty and recommend further data collection",
+    "tags": ["confidence", "uncertainty", "governance", "estimates", "partial_data"],
+    "difficulty": "intermediate"
+  },
+  "input": {
+    "query": "Analyse the budget variances and provide confidence levels for each finding in Q1 2026",
+    "context": {
+      "accounts": [
+        {"id": "4010", "name": "Revenue", "actual": 800000, "budget": 750000, "data_quality": "confirmed"},
+        {"id": "4020", "name": "Deferred Revenue", "actual": 200000, "budget": 250000, "data_quality": "estimated"},
+        {"id": "5010", "name": "COGS", "actual": 500000, "budget": 480000, "data_quality": "confirmed"},
+        {"id": "6010", "name": "R&D Investment", "actual": 350000, "budget": 300000, "data_quality": "estimated"},
+        {"id": "7010", "name": "Joint Venture Income", "actual": 75000, "budget": 50000, "data_quality": "preliminary"},
+        {"id": "8000", "name": "Contingent Liability Reserve", "actual": 100000, "budget": 0, "data_quality": "preliminary"}
+      ]
+    },
+    "spreadsheet_data": {},
+    "variances": []
+  },
+  "expected": {
+    "planning": {
+      "required_intents": ["compute_variance", "assess_confidence", "flag_uncertainty"],
+      "forbidden_intents": [],
+      "min_actions": 4,
+      "max_actions": 9,
+      "max_replans": 1
+    },
+    "execution": {
+      "min_success_rate": 0.85,
+      "max_retries_total": 1,
+      "max_failed_actions": 1
+    },
+    "verification": {
+      "max_unsupported": 1,
+      "max_contradictions": 0,
+      "max_low_confidence": 3,
+      "min_evidence": 1,
+      "min_confidence": 0.3
+    },
+    "reflection": {
+      "expected_decision": "revise",
+      "max_gaps": 2
+    },
+    "output": {
+      "variances": [
+        {"account_id": "4010", "variance_amount": 50000, "variance_pct": 6.67},
+        {"account_id": "4020", "variance_amount": -50000, "variance_pct": -20.0},
+        {"account_id": "5010", "variance_amount": 20000, "variance_pct": 4.17},
+        {"account_id": "6010", "variance_amount": 50000, "variance_pct": 16.67},
+        {"account_id": "7010", "variance_amount": 25000, "variance_pct": 50.0},
+        {"account_id": "8000", "variance_amount": 100000, "variance_pct": null}
+      ],
+      "kpis": [
+        {"name": "Revenue Growth", "value": 6.67},
+        {"name": "R&D Overspend", "value": 16.67},
+        {"name": "Deferred Revenue Decline", "value": -20.0}
+      ],
+      "report_sections": {
+        "executive_summary": "revenue 6.7% above budget (high confidence), but deferred revenue down 20% (estimated), R&D up 16.7% (estimated), and two items with preliminary data only—overall confidence is low",
+        "details": "Data quality breakdown: 2 confirmed accounts (Revenue, COGS), 2 estimated accounts (Deferred Revenue, R&D), 2 preliminary (Joint Venture Income, Contingent Liability). The estimated and preliminary data account for 30% of total variance. Findings based on estimated data should be revisited when confirmed figures are available. Contingent Liability Reserve (8000) is entirely unbudgeted and preliminary—cannot assess with confidence"
+      },
+      "required_claims": ["Overall confidence is low", "Estimated data needs confirmation", "Preliminary items require revision"],
+      "forbidden_claims": ["High confidence in all findings", "Complete data available", "All variances reliably measured"]
+    }
+  }
+}

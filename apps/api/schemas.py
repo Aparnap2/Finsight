@@ -4,8 +4,9 @@ All monetary values use decimal.Decimal — never float.
 """
 
 from decimal import Decimal
-from typing import Annotated
-from pydantic import BaseModel, BeforeValidator, field_validator
+from typing import Annotated, Any
+
+from pydantic import BaseModel, BeforeValidator, Field, field_validator
 
 
 def _reject_float_money(v):
@@ -204,3 +205,33 @@ class StatusResponse(BaseModel):
     status: str
     version: str
     endpoints: list[str] = []
+
+
+# ── Compute Runtime schemas ─────────────────────────────────────────────
+
+
+class JobSubmitRequest(BaseModel):
+    pipeline: str
+    source_type: str = "csv"
+    source_uri: str
+    params: dict[str, Any] = Field(default_factory=dict)
+    tenant_id: str = "CF001"
+
+
+class JobSubmitResponse(BaseModel):
+    job_id: str
+    status: str
+    created_at: str
+    poll_url: str
+    result_url: str
+
+
+class JobStatusResponse(BaseModel):
+    job_id: str
+    status: str
+    created_at: str | None = None
+    started_at: str | None = None
+    completed_at: str | None = None
+    duration_ms: int | None = None
+    error: dict | None = None
+    artifact: dict | None = None

@@ -1,0 +1,320 @@
+# Finance Process Hierarchy — Record-to-Report & Sub-Processes
+# =============================================================
+# Defines the top-down decomposition of FinSight's financial
+# processes, each mapped to the capabilities that implement them.
+
+processes:
+  - process_id: proc.r2r
+    name: Record to Report
+    description: >
+      End-to-end financial process from transaction recording
+      through close and reporting. Encompasses all sub-ledger
+      and general ledger activities.
+    tags: ["core", "r2r", "finance"]
+
+    steps:
+      - step_id: r2r.transaction
+        name: Transaction Recording
+        description: Capture financial transactions from sub-ledgers (AP, AR, payroll, fixed assets).
+        capability_id: cap.ap.invoice
+        depends_on: []
+
+      - step_id: r2r.journal
+        name: Journal Entry Processing
+        description: Create, review, and post adjusting and accrual journal entries.
+        capability_id: cap.close.journal
+        depends_on: ["r2r.transaction"]
+
+      - step_id: r2r.reconciliation
+        name: Account Reconciliation
+        description: Reconcile all balance sheet accounts to sub-ledger and supporting documentation.
+        capability_id: cap.close.reconciliation
+        depends_on: ["r2r.journal"]
+
+      - step_id: r2r.intercompany
+        name: Intercompany Matching
+        description: Match and eliminate intercompany balances across entities.
+        capability_id: cap.close.intercompany
+        depends_on: ["r2r.reconciliation"]
+
+      - step_id: r2r.close
+        name: Period Close
+        description: Execute close checklist, certify sub-ledgers, and lock the period.
+        capability_id: cap.close.period
+        depends_on: ["r2r.intercompany", "r2r.reconciliation"]
+
+      - step_id: r2r.tb
+        name: Trial Balance
+        description: Generate and review the trial balance for the closed period.
+        capability_id: null
+        depends_on: ["r2r.close"]
+
+      - step_id: r2r.fs
+        name: Financial Statement Preparation
+        description: Prepare income statement, balance sheet, and cash flow statement.
+        capability_id: cap.reporting.management
+        depends_on: ["r2r.tb"]
+
+      - step_id: r2r.variance
+        name: Variance Analysis
+        description: Compare actuals to budget/forecast and generate commentary.
+        capability_id: cap.variance
+        depends_on: ["r2r.fs"]
+
+      - step_id: r2r.report
+        name: Report Distribution
+        description: Compile board/management reports and distribute to stakeholders.
+        capability_id: cap.reporting.board
+        depends_on: ["r2r.variance", "r2r.fs"]
+
+  - process_id: proc.p2p
+    name: Procure to Pay
+    description: >
+      End-to-end procurement cycle from requisition through vendor
+      payment and reconciliation.
+    tags: ["core", "p2p", "ap"]
+
+    steps:
+      - step_id: p2p.requisition
+        name: Purchase Requisition
+        description: Create and approve purchase requisitions.
+        capability_id: null
+        depends_on: []
+
+      - step_id: p2p.po
+        name: Purchase Order
+        description: Issue purchase orders to approved vendors.
+        capability_id: null
+        depends_on: ["p2p.requisition"]
+
+      - step_id: p2p.goods
+        name: Goods Receipt
+        description: Record receipt of goods or services against POs.
+        capability_id: null
+        depends_on: ["p2p.po"]
+
+      - step_id: p2p.invoice
+        name: Invoice Processing
+        description: Receive, validate, and match vendor invoices to POs and receipts.
+        capability_id: cap.ap.invoice
+        depends_on: ["p2p.goods", "p2p.po"]
+
+      - step_id: p2p.approval
+        name: Invoice Approval
+        description: Route invoices through approval workflow.
+        capability_id: cap.ap.invoice
+        depends_on: ["p2p.invoice"]
+
+      - step_id: p2p.payment
+        name: Payment Execution
+        description: Schedule and execute vendor payments.
+        capability_id: cap.ap.payment
+        depends_on: ["p2p.approval"]
+
+      - step_id: p2p.reconcile
+        name: Payment Reconciliation
+        description: Reconcile payments to bank statements and GL.
+        capability_id: cap.close.reconciliation
+        depends_on: ["p2p.payment"]
+
+  - process_id: proc.o2c
+    name: Order to Cash
+    description: >
+      End-to-end revenue cycle from customer order through cash
+      application and reconciliation.
+    tags: ["core", "o2c", "ar"]
+
+    steps:
+      - step_id: o2c.order
+        name: Order Management
+        description: Capture and validate customer orders.
+        capability_id: null
+        depends_on: []
+
+      - step_id: o2c.credit
+        name: Credit Check
+        description: Evaluate customer credit and apply holds if needed.
+        capability_id: cap.ar.credit
+        depends_on: ["o2c.order"]
+
+      - step_id: o2c.invoice
+        name: Billing & Invoicing
+        description: Generate and send customer invoices.
+        capability_id: cap.ar.billing
+        depends_on: ["o2c.credit"]
+
+      - step_id: o2c.collections
+        name: Collections
+        description: Manage aging receivables and dunning.
+        capability_id: cap.ar.collections
+        depends_on: ["o2c.invoice"]
+
+      - step_id: o2c.cashapp
+        name: Cash Application
+        description: Match inbound payments to open invoices.
+        capability_id: cap.ar.cashapp
+        depends_on: ["o2c.collections"]
+
+      - step_id: o2c.reconcile
+        name: AR Reconciliation
+        description: Reconcile AR sub-ledger to GL.
+        capability_id: cap.close.reconciliation
+        depends_on: ["o2c.cashapp"]
+
+  - process_id: proc.fp
+    name: Financial Planning
+    description: >
+      Strategic and operational planning cycle including budgeting,
+      forecasting, and scenario analysis.
+    tags: ["core", "fp", "planning"]
+
+    steps:
+      - step_id: fp.targets
+        name: Target Setting
+        description: Set enterprise financial targets and growth objectives.
+        capability_id: null
+        depends_on: []
+
+      - step_id: fp.budget
+        name: Budget Creation
+        description: Build annual operating budgets across all departments.
+        capability_id: cap.planning.budget.create
+        depends_on: ["fp.targets"]
+
+      - step_id: fp.forecast
+        name: Rolling Forecast
+        description: Maintain rolling 12-18 month forecast.
+        capability_id: cap.planning.forecast.rolling
+        depends_on: ["fp.budget"]
+
+      - step_id: fp.scenario
+        name: Scenario Modeling
+        description: Model alternative business scenarios and sensitivities.
+        capability_id: cap.planning.scenario
+        depends_on: ["fp.forecast"]
+
+      - step_id: fp.driver
+        name: Driver-Based Planning
+        description: Link operational drivers to financial outcomes.
+        capability_id: cap.forecast.driver
+        depends_on: ["fp.scenario"]
+
+  - process_id: proc.close
+    name: Close Management
+    description: >
+      Period-end close orchestration including task management,
+      certification, and sub-ledger close.
+    tags: ["core", "close"]
+
+    steps:
+      - step_id: close.pre
+        name: Pre-Close Preparations
+        description: Prepare close checklist, accruals schedule, and cut-off guidance.
+        capability_id: cap.close.period
+        depends_on: []
+
+      - step_id: close.subledger
+        name: Sub-Ledger Close
+        description: Close all sub-ledgers (AP, AR, FA, Payroll).
+        capability_id: cap.close.period
+        depends_on: ["close.pre"]
+
+      - step_id: close.accruals
+        name: Accruals & Adjustments
+        description: Post accrual and adjustment journal entries.
+        capability_id: cap.close.journal
+        depends_on: ["close.subledger"]
+
+      - step_id: close.recon
+        name: Balance Sheet Reconciliation
+        description: Reconcile all balance sheet accounts to supporting detail.
+        capability_id: cap.close.reconciliation
+        depends_on: ["close.accruals"]
+
+      - step_id: close.ic
+        name: Intercompany Elimination
+        description: Match and eliminate intercompany balances.
+        capability_id: cap.close.intercompany
+        depends_on: ["close.recon"]
+
+      - step_id: close.final
+        name: Final Certification
+        description: Management certification and period lock.
+        capability_id: cap.close.period
+        depends_on: ["close.ic"]
+
+      - step_id: close.fs
+        name: Financial Statement Review
+        description: Final review of financial statements before distribution.
+        capability_id: cap.reporting.management
+        depends_on: ["close.final"]
+
+  - process_id: proc.audit
+    name: Audit & Assurance
+    description: >
+      Internal and external audit processes including evidence
+      collection, testing, and representation.
+    tags: ["core", "audit", "compliance"]
+
+    steps:
+      - step_id: audit.plan
+        name: Audit Planning
+        description: Define audit scope, materiality, and risk assessment.
+        capability_id: null
+        depends_on: []
+
+      - step_id: audit.data
+        name: Data Collection
+        description: Extract and prepare audit evidence from financial systems.
+        capability_id: cap.governance.audit
+        depends_on: ["audit.plan"]
+
+      - step_id: audit.test
+        name: Controls Testing
+        description: Test design and operating effectiveness of internal controls.
+        capability_id: cap.governance.audit
+        depends_on: ["audit.data"]
+
+      - step_id: audit.substantive
+        name: Substantive Testing
+        description: Perform substantive audit procedures on account balances.
+        capability_id: cap.governance.audit
+        depends_on: ["audit.test"]
+
+      - step_id: audit.report
+        name: Audit Reporting
+        description: Issue audit opinion and management letter.
+        capability_id: cap.reporting.regulatory
+        depends_on: ["audit.substantive"]
+
+  - process_id: proc.compliance
+    name: Compliance & Governance
+    description: >
+      Regulatory compliance, SOX, data governance, and policy
+      enforcement across the financial function.
+    tags: ["core", "compliance", "governance"]
+
+    steps:
+      - step_id: comp.sox
+        name: SOX Compliance
+        description: Maintain SOX control matrix, test controls, and remediate gaps.
+        capability_id: cap.governance
+        depends_on: []
+
+      - step_id: comp.dataquality
+        name: Data Quality Monitoring
+        description: Monitor, measure, and report data quality metrics.
+        capability_id: cap.governance.dataquality
+        depends_on: ["comp.sox"]
+
+      - step_id: comp.policy
+        name: Policy Enforcement
+        description: Enforce financial policies and approval limits.
+        capability_id: cap.governance
+        depends_on: ["comp.dataquality"]
+
+      - step_id: comp.regulatory
+        name: Regulatory Filings
+        description: Prepare and submit regulatory filings (SEC, tax, statistical).
+        capability_id: cap.reporting.regulatory
+        depends_on: ["comp.policy"]

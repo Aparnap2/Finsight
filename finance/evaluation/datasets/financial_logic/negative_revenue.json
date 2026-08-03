@@ -1,0 +1,61 @@
+{
+  "metadata": {
+    "id": "negative_revenue",
+    "name": "Negative Revenue Reversal",
+    "category": "financial_logic",
+    "subcategory": "negative_revenue",
+    "description": "Revenue reversal due to returns and credits",
+    "tags": ["revenue", "negative", "edge_case"],
+    "difficulty": "intermediate"
+  },
+  "input": {
+    "query": "Analyse the negative revenue variance in Q1 2026",
+    "context": {
+      "accounts": [
+        {"id": "4010", "name": "Product Revenue", "actual": -50000, "budget": 200000},
+        {"id": "4020", "name": "Returns Reserve", "actual": 0, "budget": 30000}
+      ]
+    },
+    "spreadsheet_data": {},
+    "variances": []
+  },
+  "expected": {
+    "planning": {
+      "required_intents": ["compute_variance", "investigate_anomaly"],
+      "forbidden_intents": [],
+      "min_actions": 2,
+      "max_actions": 6,
+      "max_replans": 1
+    },
+    "execution": {
+      "min_success_rate": 0.8,
+      "max_retries_total": 2,
+      "max_failed_actions": 1
+    },
+    "verification": {
+      "max_unsupported": 1,
+      "max_contradictions": 1,
+      "min_evidence": 1,
+      "min_confidence": 0.5
+    },
+    "reflection": {
+      "expected_decision": "finalize",
+      "max_gaps": 1
+    },
+    "output": {
+      "variances": [
+        {"account_id": "4010", "variance_amount": -250000, "variance_pct": -125.0},
+        {"account_id": "4020", "variance_amount": -30000, "variance_pct": -100.0}
+      ],
+      "kpis": [
+        {"name": "Revenue Growth", "value": -125.0}
+      ],
+      "report_sections": {
+        "executive_summary": "revenue reversed 125% below budget driven by returns",
+        "details": "negative revenue of 50000 vs 200000 budgeted requires investigation"
+      },
+      "required_claims": ["Revenue reversal", "Returns investigation needed"],
+      "forbidden_claims": ["Revenue grew"]
+    }
+  }
+}

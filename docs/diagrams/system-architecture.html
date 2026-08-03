@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FinSight — System Architecture</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #020617; color: #e2e8f0; font-family: 'JetBrains Mono', monospace; padding: 40px; display: flex; flex-direction: column; align-items: center; }
+.container { max-width: 1200px; width: 100%; }
+.header { text-align: center; margin-bottom: 40px; }
+.header h1 { font-size: 28px; font-weight: 700; color: #f1f5f9; letter-spacing: 1px; }
+.header .subtitle { font-size: 12px; color: #64748b; margin-top: 8px; letter-spacing: 2px; text-transform: uppercase; }
+.header .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #22d3ee; margin-right: 12px; animation: pulse 2s ease-in-out infinite; vertical-align: middle; }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+.diagram-card { background: #0f172a; border: 1px solid #1e293b; border-radius: 12px; padding: 32px; margin-bottom: 24px; }
+.diagram-card h2 { font-size: 14px; color: #94a3b8; margin-bottom: 20px; font-weight: 500; letter-spacing: 1px; text-transform: uppercase; }
+svg { width: 100%; height: auto; }
+.card-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 24px; }
+.card { background: #0f172a; border: 1px solid #1e293b; border-radius: 8px; padding: 20px; }
+.card-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.card-dot { width: 8px; height: 8px; border-radius: 50%; }
+.card-dot.cyan { background: #22d3ee; }
+.card-dot.emerald { background: #34d399; }
+.card-dot.violet { background: #a78bfa; }
+.card h3 { font-size: 11px; color: #e2e8f0; font-weight: 500; letter-spacing: 0.5px; text-transform: uppercase; }
+.card ul { list-style: none; }
+.card li { font-size: 10px; color: #64748b; padding: 3px 0; line-height: 1.6; }
+.card li strong { color: #94a3b8; }
+.footer { text-align: center; padding: 20px 0; font-size: 9px; color: #475569; letter-spacing: 1px; text-transform: uppercase; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1><span class="dot"></span>FinSight — Finance Operations OS</h1>
+    <div class="subtitle">System Architecture Overview</div>
+  </div>
+
+  <!-- Main Architecture Diagram -->
+  <div class="diagram-card">
+    <h2>System Architecture</h2>
+    <svg viewBox="0 0 1100 750" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+          <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+        </pattern>
+        <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+          <path d="M 0 0 L 10 5 L 0 10 Z" fill="#475569"/>
+        </marker>
+        <marker id="arrow-cyan" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+          <path d="M 0 0 L 10 5 L 0 10 Z" fill="#22d3ee"/>
+        </marker>
+        <marker id="arrow-emerald" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+          <path d="M 0 0 L 10 5 L 0 10 Z" fill="#34d399"/>
+        </marker>
+        <filter id="glow">
+          <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+          <feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+      </defs>
+
+      <rect width="1100" height="750" fill="url(#grid)"/>
+
+      <!-- === BOUNDARIES === -->
+
+      <!-- User Layer -->
+      <rect x="30" y="20" width="1040" height="90" rx="10" fill="rgba(8, 51, 68, 0.06)" stroke="#22d3ee" stroke-width="1" stroke-dasharray="4,4" opacity="0.4"/>
+      <text x="50" y="42" font-size="8" fill="#22d3ee" font-weight="600" letter-spacing="1" text-transform="uppercase">USER INTERFACE</text>
+
+      <!-- Cognitive Layer -->
+      <rect x="30" y="120" width="1040" height="210" rx="10" fill="rgba(6, 78, 59, 0.06)" stroke="#34d399" stroke-width="1" stroke-dasharray="4,4" opacity="0.4"/>
+      <text x="50" y="142" font-size="8" fill="#34d399" font-weight="600" letter-spacing="1">COGNITIVE RUNTIME</text>
+
+      <!-- Domain Layer -->
+      <rect x="30" y="340" width="1040" height="170" rx="10" fill="rgba(76, 29, 149, 0.06)" stroke="#a78bfa" stroke-width="1" stroke-dasharray="4,4" opacity="0.4"/>
+      <text x="50" y="362" font-size="8" fill="#a78bfa" font-weight="600" letter-spacing="1">FINANCE DOMAIN ENGINE</text>
+
+      <!-- Evaluation Layer -->
+      <rect x="30" y="520" width="1040" height="100" rx="10" fill="rgba(120, 53, 15, 0.06)" stroke="#fbbf24" stroke-width="1" stroke-dasharray="4,4" opacity="0.4"/>
+      <text x="50" y="542" font-size="8" fill="#fbbf24" font-weight="600" letter-spacing="1">EVALUATION &amp; GOVERNANCE</text>
+
+      <!-- Data Layer -->
+      <rect x="30" y="630" width="1040" height="90" rx="10" fill="rgba(30, 41, 59, 0.06)" stroke="#94a3b8" stroke-width="1" stroke-dasharray="4,4" opacity="0.4"/>
+      <text x="50" y="652" font-size="8" fill="#94a3b8" font-weight="600" letter-spacing="1">DATA &amp; INFRASTRUCTURE</text>
+
+      <!-- === ARROWS (Drawn first for Z-order) === -->
+
+      <!-- Query → Planner -->
+      <path d="M 300 65 L 300 145" fill="none" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>
+      <text x="312" y="110" font-size="7" fill="#64748b" letter-spacing="1">query</text>
+
+      <!-- Planner → Retriever -->
+      <path d="M 580 190 L 580 220" fill="none" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>
+      <text x="592" y="210" font-size="7" fill="#64748b">action plan</text>
+
+      <!-- Retriever → Executor -->
+      <path d="M 580 260 L 580 290" fill="none" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>
+      <text x="592" y="280" font-size="7" fill="#64748b">context + evidence</text>
+
+      <!-- Executor → Verifier -->
+      <path d="M 580 330 L 580 360" fill="none" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>
+      <text x="592" y="350" font-size="7" fill="#64748b">assertions</text>
+
+      <!-- Verifier → Reflection -->
+      <path d="M 580 400 L 580 450" fill="none" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>
+      <text x="592" y="430" font-size="7" fill="#64748b">verified assertions</text>
+
+      <!-- Reflection → Planner (revise loop) -->
+      <path d="M 390 490 L 390 190" fill="none" stroke="#fb7185" stroke-width="1" stroke-dasharray="4,4" marker-end="url(#arrow)"/>
+      <text x="400" y="340" font-size="7" fill="#fb7185" letter-spacing="1">revise</text>
+
+      <!-- Reflection → Report (finalize) -->
+      <path d="M 580 490 L 580 530" fill="none" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrow-emerald)"/>
+      <text x="592" y="510" font-size="7" fill="#34d399">final report</text>
+
+      <!-- Engines → Evaluation -->
+      <path d="M 400 380 L 400 540" fill="none" stroke="#475569" stroke-width="1" stroke-dasharray="3,3" marker-end="url(#arrow)"/>
+      <text x="410" y="470" font-size="7" fill="#64748b">metrics</text>
+
+      <!-- === NODES === -->
+
+      <!-- Query Input -->
+      <rect x="220" y="35" width="160" height="30" rx="6" fill="#0f172a"/>
+      <rect x="220" y="35" width="160" height="30" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+      <text x="300" y="50" font-size="10" fill="#22d3ee" text-anchor="middle" font-weight="500">Query / Analysis Request</text>
+      <text x="300" y="62" font-size="7" fill="#64748b" text-anchor="middle">natural language or structured</text>
+
+      <!-- Pipeline Row -->
+      <!-- Planner -->
+      <rect x="480" y="155" width="140" height="35" rx="6" fill="#0f172a"/>
+      <rect x="480" y="155" width="140" height="35" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+      <text x="550" y="172" font-size="10" fill="#34d399" text-anchor="middle" font-weight="600">Planner</text>
+      <text x="550" y="184" font-size="7" fill="#64748b" text-anchor="middle">LLM · ActionPlan</text>
+
+      <!-- Retriever -->
+      <rect x="480" y="225" width="140" height="35" rx="6" fill="#0f172a"/>
+      <rect x="480" y="225" width="140" height="35" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+      <text x="550" y="242" font-size="10" fill="#34d399" text-anchor="middle" font-weight="600">Retriever</text>
+      <text x="550" y="254" font-size="7" fill="#64748b" text-anchor="middle">Data · Evidence</text>
+
+      <!-- Executor -->
+      <rect x="480" y="295" width="140" height="35" rx="6" fill="#0f172a"/>
+      <rect x="480" y="295" width="140" height="35" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+      <text x="550" y="312" font-size="10" fill="#34d399" text-anchor="middle" font-weight="600">Executor</text>
+      <text x="550" y="324" font-size="7" fill="#64748b" text-anchor="middle">Deterministic · Engines</text>
+
+      <!-- Verifier -->
+      <rect x="480" y="365" width="140" height="35" rx="6" fill="#0f172a"/>
+      <rect x="480" y="365" width="140" height="35" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+      <text x="550" y="382" font-size="10" fill="#34d399" text-anchor="middle" font-weight="600">Verifier</text>
+      <text x="550" y="394" font-size="7" fill="#64748b" text-anchor="middle">Rules · Policy</text>
+
+      <!-- Reflection -->
+      <rect x="480" y="455" width="140" height="35" rx="6" fill="#0f172a"/>
+      <rect x="480" y="455" width="140" height="35" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+      <text x="550" y="472" font-size="10" fill="#34d399" text-anchor="middle" font-weight="600">Reflection</text>
+      <text x="550" y="484" font-size="7" fill="#64748b" text-anchor="middle">Loop Decision</text>
+
+      <!-- === DOMAIN ENGINES === -->
+
+      <!-- Formula Engine -->
+      <rect x="60" y="365" width="130" height="35" rx="6" fill="#0f172a"/>
+      <rect x="60" y="365" width="130" height="35" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+      <text x="125" y="382" font-size="9" fill="#a78bfa" text-anchor="middle" font-weight="500">Formula Engine</text>
+      <text x="125" y="394" font-size="7" fill="#64748b" text-anchor="middle">KPI definitions</text>
+
+      <!-- Variance Engine -->
+      <rect x="200" y="365" width="130" height="35" rx="6" fill="#0f172a"/>
+      <rect x="200" y="365" width="130" height="35" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+      <text x="265" y="382" font-size="9" fill="#a78bfa" text-anchor="middle" font-weight="500">Variance Engine</text>
+      <text x="265" y="394" font-size="7" fill="#64748b" text-anchor="middle">actual vs budget</text>
+
+      <!-- Scenario Engine -->
+      <rect x="60" y="415" width="130" height="35" rx="6" fill="#0f172a"/>
+      <rect x="60" y="415" width="130" height="35" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+      <text x="125" y="432" font-size="9" fill="#a78bfa" text-anchor="middle" font-weight="500">Scenario Engine</text>
+      <text x="125" y="444" font-size="7" fill="#64748b" text-anchor="middle">what-if analysis</text>
+
+      <!-- Driver Engine -->
+      <rect x="200" y="415" width="130" height="35" rx="6" fill="#0f172a"/>
+      <rect x="200" y="415" width="130" height="35" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+      <text x="265" y="432" font-size="9" fill="#a78bfa" text-anchor="middle" font-weight="500">Driver Engine</text>
+      <text x="265" y="444" font-size="7" fill="#64748b" text-anchor="middle">bridge / decomposition</text>
+
+      <!-- Forecas Engine -->
+      <rect x="60" y="465" width="130" height="35" rx="6" fill="#0f172a"/>
+      <rect x="60" y="465" width="130" height="35" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+      <text x="125" y="482" font-size="9" fill="#a78bfa" text-anchor="middle" font-weight="500">Forecast Engine</text>
+      <text x="125" y="494" font-size="7" fill="#64748b" text-anchor="middle">projection models</text>
+
+      <!-- Validation Pipeline -->
+      <rect x="200" y="465" width="130" height="35" rx="6" fill="#0f172a"/>
+      <rect x="200" y="465" width="130" height="35" rx="6" fill="rgba(136, 19, 55, 0.4)" stroke="#fb7185" stroke-width="1.5"/>
+      <text x="265" y="482" font-size="9" fill="#fb7185" text-anchor="middle" font-weight="500">Validation Suite</text>
+      <text x="265" y="494" font-size="7" fill="#64748b" text-anchor="middle">data quality · policy</text>
+
+      <!-- === EVALUATION === -->
+
+      <!-- Golden Datasets -->
+      <rect x="60" y="540" width="150" height="30" rx="6" fill="#0f172a"/>
+      <rect x="60" y="540" width="150" height="30" rx="6" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+      <text x="135" y="558" font-size="9" fill="#fbbf24" text-anchor="middle" font-weight="500">22 Golden Datasets</text>
+      <text x="135" y="568" font-size="7" fill="#64748b" text-anchor="middle">4 categories</text>
+
+      <!-- Metrics -->
+      <rect x="230" y="540" width="150" height="30" rx="6" fill="#0f172a"/>
+      <rect x="230" y="540" width="150" height="30" rx="6" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+      <text x="305" y="558" font-size="9" fill="#fbbf24" text-anchor="middle" font-weight="500">12 Evaluation Metrics</text>
+      <text x="305" y="568" font-size="7" fill="#64748b" text-anchor="middle">6 business · 6 runtime</text>
+
+      <!-- Regression -->
+      <rect x="400" y="540" width="150" height="30" rx="6" fill="#0f172a"/>
+      <rect x="400" y="540" width="150" height="30" rx="6" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+      <text x="475" y="558" font-size="9" fill="#fbbf24" text-anchor="middle" font-weight="500">Regression Harness</text>
+      <text x="475" y="568" font-size="7" fill="#64748b" text-anchor="middle">YAML thresholds</text>
+
+      <!-- Thresholds -->
+      <rect x="570" y="540" width="150" height="30" rx="6" fill="#0f172a"/>
+      <rect x="570" y="540" width="150" height="30" rx="6" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+      <text x="645" y="558" font-size="9" fill="#fbbf24" text-anchor="middle" font-weight="500">CI Integration</text>
+      <text x="645" y="568" font-size="7" fill="#64748b" text-anchor="middle">breaking change detection</text>
+
+      <!-- === DATA LAYER === -->
+
+      <!-- PostgreSQL -->
+      <rect x="60" y="650" width="150" height="30" rx="6" fill="#0f172a"/>
+      <rect x="60" y="650" width="150" height="30" rx="6" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+      <text x="135" y="668" font-size="9" fill="#94a3b8" text-anchor="middle" font-weight="500">PostgreSQL 16</text>
+      <text x="135" y="678" font-size="7" fill="#64748b" text-anchor="middle">asyncpg</text>
+
+      <!-- Spreadsheets -->
+      <rect x="230" y="650" width="150" height="30" rx="6" fill="#0f172a"/>
+      <rect x="230" y="650" width="150" height="30" rx="6" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+      <text x="305" y="668" font-size="9" fill="#94a3b8" text-anchor="middle" font-weight="500">Spreadsheet Source</text>
+      <text x="305" y="678" font-size="7" fill="#64748b" text-anchor="middle">GL data · budgets</text>
+
+      <!-- Traces -->
+      <rect x="400" y="650" width="150" height="30" rx="6" fill="#0f172a"/>
+      <rect x="400" y="650" width="150" height="30" rx="6" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+      <text x="475" y="668" font-size="9" fill="#94a3b8" text-anchor="middle" font-weight="500">Reasoning Traces</text>
+      <text x="475" y="678" font-size="7" fill="#64748b" text-anchor="middle">JSON · audit trail</text>
+
+      <!-- Docker -->
+      <rect x="570" y="650" width="150" height="30" rx="6" fill="#0f172a"/>
+      <rect x="570" y="650" width="150" height="30" rx="6" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+      <text x="645" y="668" font-size="9" fill="#94a3b8" text-anchor="middle" font-weight="500">Docker Compose</text>
+      <text x="645" y="678" font-size="7" fill="#64748b" text-anchor="middle">container runtime</text>
+
+      <!-- === LLM Boundary annotation === -->
+      <rect x="660" y="155" width="200" height="55" rx="4" fill="#0f172a" stroke="#fb7185" stroke-width="0.5" stroke-dasharray="2,2"/>
+      <text x="670" y="172" font-size="8" fill="#fb7185" font-weight="600" filter="url(#glow)">LLM Boundary</text>
+      <text x="670" y="184" font-size="7" fill="#64748b">Planner + Commentary only</text>
+      <text x="670" y="196" font-size="7" fill="#64748b">Zero math. Zero computation.</text>
+
+      <text x="670" y="230" font-size="8" fill="#34d399" font-weight="600">Deterministic Runtime</text>
+      <text x="670" y="242" font-size="7" fill="#64748b">100% Python · Decimal arithmetic</text>
+      <text x="670" y="254" font-size="7" fill="#64748b">No LLM imports in finance/ layer</text>
+
+      <!-- Legend -->
+      <rect x="840" y="540" width="200" height="100" rx="6" fill="#0f172a" stroke="#1e293b" stroke-width="1"/>
+      <text x="860" y="558" font-size="8" fill="#94a3b8" font-weight="600" letter-spacing="1">LEGEND</text>
+      <rect x="850" y="568" width="12" height="6" rx="2" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1"/>
+      <text x="868" y="574" font-size="7" fill="#94a3b8">Cognitive Node</text>
+      <rect x="850" y="582" width="12" height="6" rx="2" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1"/>
+      <text x="868" y="588" font-size="7" fill="#94a3b8">Domain Engine</text>
+      <rect x="850" y="596" width="12" height="6" rx="2" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1"/>
+      <text x="868" y="602" font-size="7" fill="#94a3b8">Evaluation</text>
+      <rect x="850" y="610" width="12" height="6" rx="2" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1"/>
+      <text x="868" y="616" font-size="7" fill="#94a3b8">Infrastructure</text>
+      <path d="M 850 626 L 862 626" fill="none" stroke="#fb7185" stroke-width="1" stroke-dasharray="3,3"/>
+      <text x="868" y="630" font-size="7" fill="#94a3b8">Revision loop</text>
+    </svg>
+  </div>
+
+  <!-- Info Cards -->
+  <div class="card-grid">
+    <div class="card">
+      <div class="card-header">
+        <div class="card-dot cyan"></div>
+        <h3>Architecture</h3>
+      </div>
+      <ul>
+        <li><strong>5 ADRs</strong> documenting every major design decision</li>
+        <li><strong>4-layer dependency</strong> flow: apps → agents → finance → shared</li>
+        <li><strong>Iterative loop</strong> max 5 iterations, Reflection decides finalize/revise</li>
+        <li><strong>LLM boundary:</strong> 2 calls per pipeline, zero math</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card-header">
+        <div class="card-dot emerald"></div>
+        <h3>Domain</h3>
+      </div>
+      <ul>
+        <li><strong>6 deterministic engines:</strong> formula, variance, scenario, driver, forecast, KPI</li>
+        <li><strong>Validation suite:</strong> data quality, materiality, evidence, policy enforcement</li>
+        <li><strong>Assertion model:</strong> 5 types × 4 support levels, deterministic confidence</li>
+        <li><strong>Monetary:</strong> 100% Decimal arithmetic, zero float</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card-header">
+        <div class="card-dot violet"></div>
+        <h3>Quality</h3>
+      </div>
+      <ul>
+        <li><strong>342 tests</strong> passing, ruff clean, mypy strict</li>
+        <li><strong>22 golden datasets</strong> × 12 metrics = 264 data points per regression</li>
+        <li><strong>Regression harness:</strong> YAML thresholds, breaking change detection</li>
+        <li><strong>Audit trail:</strong> every claim traces to source via evidence IDs</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="footer">FinSight — Finance Operations OS · System Architecture</div>
+</div>
+</body>
+</html>
