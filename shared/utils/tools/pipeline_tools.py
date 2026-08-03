@@ -10,8 +10,8 @@ from shared.models.database import SalesPipeline
 from shared.utils.tools.tool_result import (
     ToolResult,
     compute_degraded_mode,
-    compute_query_fingerprint,
     compute_quality_score,
+    compute_query_fingerprint,
 )
 
 

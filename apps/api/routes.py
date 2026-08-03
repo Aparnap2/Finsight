@@ -101,10 +101,10 @@ async def trigger_pipeline(req: PipelineRunRequest):
                 "account_id": v.account_id,
                 "account_name": v.account_name,
                 "department": v.department,
-                "actual_amount": float(v.actual_amount),
-                "budget_amount": float(v.budget_amount),
-                "variance_amount": float(v.variance_amount),
-                "variance_pct": float(v.variance_pct),
+                "actual_amount": Decimal(str(v.actual_amount)),
+                "budget_amount": Decimal(str(v.budget_amount)),
+                "variance_amount": Decimal(str(v.variance_amount)),
+                "variance_pct": Decimal(str(v.variance_pct)),
                 "is_material": v.is_material,
             }
             for v in state["variances"]
@@ -259,7 +259,7 @@ def _serialize_assertion(a) -> AssertionResponse:
         id=a.id,
         type=a.type.value if hasattr(a.type, "value") else str(a.type),
         text=a.text,
-        value=float(a.value) if a.value is not None else None,
+        value=Decimal(str(a.value)) if a.value is not None else None,
         evidence_ids=a.evidence_ids,
         support_level=a.support_level.value if hasattr(a.support_level, "value") else str(a.support_level),
         confidence=a.confidence,
@@ -525,10 +525,10 @@ async def get_variances(period: str, tenant_id: str = "CF001"):
             account_id=v.account_id,
             account_name=v.account_name,
             department=v.department,
-            actual_amount=float(v.actual_amount),
-            budget_amount=float(v.budget_amount),
-            variance_amount=float(v.variance_amount),
-            variance_pct=float(v.variance_pct),
+            actual_amount=Decimal(str(v.actual_amount)),
+            budget_amount=Decimal(str(v.budget_amount)),
+            variance_amount=Decimal(str(v.variance_amount)),
+            variance_pct=Decimal(str(v.variance_pct)),
             is_material=v.is_material,
         )
         for v in var_result["variances"]
