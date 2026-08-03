@@ -7,6 +7,7 @@ token usage, and success status.
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -23,7 +24,7 @@ class ExecutionContext(BaseModel):
     prompt_version: str
     model: str
     provider: str
-    variables: dict
+    variables: dict[str, Any]
     started_at: datetime
     completed_at: datetime | None = None
     token_count: int | None = None

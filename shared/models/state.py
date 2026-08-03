@@ -66,7 +66,7 @@ class CommentaryDraft(BaseModel):
 class Scenario(BaseModel):
     name: str
     description: str
-    assumptions: dict
+    assumptions: dict[str, object]
     revenue_impact: Decimal
     ebitda_impact: Decimal
     cash_impact: Decimal
@@ -76,18 +76,18 @@ class Scenario(BaseModel):
 class PipelineState(TypedDict):
     period: str
     tenant_id: str
-    actuals: dict
-    budget: dict
-    forecast: dict
+    actuals: dict[str, object]
+    budget: dict[str, object]
+    forecast: dict[str, object]
     variances: Annotated[list[Variance], operator.add]
     root_causes: Annotated[list[RootCauseFinding], operator.add]
     commentary_draft: CommentaryDraft | None
     scenarios: Annotated[list[Scenario], operator.add]
-    review_decisions: Annotated[list[dict], operator.add]
+    review_decisions: Annotated[list[dict[str, object]], operator.add]
     error: str | None
     current_step: str
     # Extended state for PRD §6 states
     degraded_modes: Annotated[list[str], operator.add]
     assertions: Annotated[list[Assertion], operator.add]
-    data_quality: dict | None
-    policy_decision: dict | None
+    data_quality: dict[str, object] | None
+    policy_decision: dict[str, object] | None

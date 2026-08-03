@@ -13,7 +13,7 @@ class ToolResult(BaseModel):
     Immutable once constructed.
     """
 
-    data: list[dict] | dict
+    data: list[dict[str, Any]] | dict[str, Any]
     row_count: int
     coverage_pct: float  # 0.0–1.0, how complete vs expected
     quality_score: float  # 0.0–1.0 — based on completeness, freshness, accuracy signals
