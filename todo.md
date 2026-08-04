@@ -48,12 +48,12 @@ Gates:
 
 Notes: `git diff --name-only` = 106 files modified by the agent (mostly `# type: ignore` removal + annotations). Verify agent changes are all legitimate before commit.
 
-### [ ] Issue #7 — A2: Domain Validation
+### [x] Issue #7 — A2: Domain Validation  ✅ CLOSED (deab92d)
 https://github.com/Aparnap2/Finsight/issues/7
 
-15 aggregates: Invoice, Vendor, Budget, Forecast, Ledger, Journal, TrialBalance, BalanceSheet, IncomeStatement, CashFlow, Variance, Recommendation, Evidence, Assertion, Commentary. Target **250+ tests**. Each: construction / invariants / serialization / validation / version migration / edge cases.
+15 aggregates → **24 aggregates, 703 tests** (baseline 138 → +565). Each: construction / invariants / serialization / validation / version migration / edge cases.
 
-Deliverable: `docs/14-testing/DOMAIN_VALIDATION.md` + `tests/unit/test_domain/`.
+Deliverable: `tests/unit/test_domain/` (703 passing) + `docs/14-testing/DOMAIN_VALIDATION.md`. Test-only; no production changes. Defects D1-D4 documented for future focused bug-fix issue (float-rejection on Money/ExchangeRate deliberately NOT production-modified — verified against actual contract).
 
 ### [ ] Issue #8 — A3: Engine Validation
 https://github.com/Aparnap2/Finsight/issues/8
