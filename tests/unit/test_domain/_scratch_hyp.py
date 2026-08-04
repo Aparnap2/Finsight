@@ -1,0 +1,1 @@
+"""Scratch probe — not collected (leading underscore). Removed from suite."""
