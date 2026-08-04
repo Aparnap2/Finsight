@@ -11,20 +11,21 @@ Test layout (TDD):
   5. Backward compatibility: float raises clear error
 """
 
-from decimal import Decimal
 import json
+from decimal import Decimal
+
 import pytest
 from pydantic import ValidationError
+
 from apps.api.schemas import (
-    VarianceResponse,
-    AssertionResponse,
     ActionCreateRequest,
+    AssertionResponse,
     BridgeAnalysisResponse,
     BridgeComponentResponse,
+    VarianceResponse,
 )
-from shared.utils.encoders import DecimalEncoder
 from apps.api.serializers import serialize_amounts
-
+from shared.utils.encoders import DecimalEncoder
 
 # ── 1. VarianceResponse ──────────────────────────────────────────────────────
 
@@ -32,7 +33,7 @@ from apps.api.serializers import serialize_amounts
 class TestVarianceResponseDecimal:
     """Variance monetary fields must accept Decimal, reject float."""
 
-    def test_variance_response_accepts_decimal(self):
+    def test_variance_response_accepts_decimal(self) -> None:
         """Schema accepts Decimal values for all monetary fields."""
         v = VarianceResponse(
             account_id="a1",
@@ -53,7 +54,7 @@ class TestVarianceResponseDecimal:
         assert v.variance_amount == Decimal("23456.78")
         assert v.variance_pct == Decimal("23.46")
 
-    def test_variance_response_rejects_float(self):
+    def test_variance_response_rejects_float(self) -> None:
         """Schema must raise ValidationError when float is passed for monetary fields."""
         with pytest.raises(ValidationError):
             VarianceResponse(
@@ -67,7 +68,7 @@ class TestVarianceResponseDecimal:
                 is_material=True,
             )
 
-    def test_variance_response_all_fields_decimal_type(self):
+    def test_variance_response_all_fields_decimal_type(self) -> None:
         """All four monetary fields in VarianceResponse must be Decimal type."""
         v = VarianceResponse(
             account_id="a1",
@@ -84,7 +85,7 @@ class TestVarianceResponseDecimal:
             val = getattr(v, field)
             assert isinstance(val, Decimal), f"{field} should be Decimal, got {type(val)}"
 
-    def test_variance_response_rejects_float_for_budget_amount(self):
+    def test_variance_response_rejects_float_for_budget_amount(self) -> None:
         """Even a single float field in VarianceResponse must be rejected."""
         with pytest.raises(ValidationError):
             VarianceResponse(
@@ -105,7 +106,7 @@ class TestVarianceResponseDecimal:
 class TestAssertionResponseDecimal:
     """AssertionResponse.value must be Decimal, never float."""
 
-    def test_assertion_response_value_decimal(self):
+    def test_assertion_response_value_decimal(self) -> None:
         """AssertionResponse.value accepts Decimal."""
         a = AssertionResponse(
             id="a1",
@@ -117,12 +118,12 @@ class TestAssertionResponseDecimal:
         assert isinstance(a.value, Decimal)
         assert a.value == Decimal("150000.00")
 
-    def test_assertion_response_value_none_allowed(self):
+    def test_assertion_response_value_none_allowed(self) -> None:
         """AssertionResponse.value can be None."""
         a = AssertionResponse(id="a1", type="numeric", text="No value")
         assert a.value is None
 
-    def test_assertion_response_rejects_float_for_value(self):
+    def test_assertion_response_rejects_float_for_value(self) -> None:
         """AssertionResponse must reject float for the value field."""
         with pytest.raises(ValidationError):
             AssertionResponse(
@@ -140,13 +141,18 @@ class TestAssertionResponseDecimal:
 class TestScenarioResponseDecimal:
     """Scenario impact fields must use Decimal."""
 
-    def test_scenario_response_decimal(self):
+    def test_scenario_response_decimal(self) -> None:
         """Scenario-like fields (revenue_impact, ebitda_impact, cash_impact) are Decimal."""
 
         class ScenarioResponse:
             """Inline test schema matching Scenario fields from shared.models.state."""
 
-            def __init__(self, revenue_impact, ebitda_impact, cash_impact):
+            def __init__(
+                self,
+                revenue_impact: Decimal,
+                ebitda_impact: Decimal,
+                cash_impact: Decimal,
+            ) -> None:
                 self.revenue_impact = revenue_impact
                 self.ebitda_impact = ebitda_impact
                 self.cash_impact = cash_impact
@@ -167,7 +173,7 @@ class TestScenarioResponseDecimal:
 class TestActionCreateRequestDecimal:
     """ActionCreateRequest impact fields must be Decimal."""
 
-    def test_action_create_request_accepts_decimal(self):
+    def test_action_create_request_accepts_decimal(self) -> None:
         """ActionCreateRequest accepts Decimal for impact fields."""
         req = ActionCreateRequest(
             action="reduce",
@@ -181,7 +187,7 @@ class TestActionCreateRequestDecimal:
         assert isinstance(req.impact_expected_revenue, Decimal)
         assert req.impact_expected_savings == Decimal("50000.00")
 
-    def test_action_create_request_rejects_float(self):
+    def test_action_create_request_rejects_float(self) -> None:
         """ActionCreateRequest must reject float for impact fields."""
         with pytest.raises(ValidationError):
             ActionCreateRequest(
@@ -192,7 +198,7 @@ class TestActionCreateRequestDecimal:
                 impact_expected_savings=50000.0,  # float — rejected
             )
 
-    def test_action_create_request_impact_none_allowed(self):
+    def test_action_create_request_impact_none_allowed(self) -> None:
         """ActionCreateRequest impact fields can be None."""
         req = ActionCreateRequest(
             action="reduce",
@@ -210,7 +216,7 @@ class TestActionCreateRequestDecimal:
 class TestBridgeResponseDecimal:
     """Bridge component amounts are already strings — verify they remain so."""
 
-    def test_bridge_component_amount_is_string(self):
+    def test_bridge_component_amount_is_string(self) -> None:
         """BridgeComponentResponse.amount and .percentage are strings."""
         c = BridgeComponentResponse(
             component="price",
@@ -222,7 +228,7 @@ class TestBridgeResponseDecimal:
         assert isinstance(c.amount, str)
         assert isinstance(c.percentage, str)
 
-    def test_bridge_total_variance_is_string(self):
+    def test_bridge_total_variance_is_string(self) -> None:
         """BridgeAnalysisResponse.total_variance is already a string."""
         resp = BridgeAnalysisResponse(
             account_id="a1",
@@ -241,7 +247,7 @@ class TestBridgeResponseDecimal:
 class TestDecimalEncoder:
     """DecimalEncoder must serialize Decimals to strings, leave floats alone."""
 
-    def test_json_encoder_decimals_to_string(self):
+    def test_json_encoder_decimals_to_string(self) -> None:
         """Decimal serializes to its string representation."""
         data = {"amount": Decimal("123.45")}
         result = json.dumps(data, cls=DecimalEncoder)
@@ -249,21 +255,21 @@ class TestDecimalEncoder:
         assert parsed["amount"] == "123.45"
         assert isinstance(parsed["amount"], str)
 
-    def test_json_encoder_large_decimal(self):
+    def test_json_encoder_large_decimal(self) -> None:
         """Large Decimals serialize correctly."""
         data = {"amount": Decimal("999999999999.99")}
         result = json.dumps(data, cls=DecimalEncoder)
         parsed = json.loads(result)
         assert parsed["amount"] == "999999999999.99"
 
-    def test_json_encoder_negative_decimal(self):
+    def test_json_encoder_negative_decimal(self) -> None:
         """Negative Decimals serialize correctly."""
         data = {"amount": Decimal("-5000.00")}
         result = json.dumps(data, cls=DecimalEncoder)
         parsed = json.loads(result)
         assert parsed["amount"] == "-5000.00"
 
-    def test_json_encoder_float_unchanged(self):
+    def test_json_encoder_float_unchanged(self) -> None:
         """Non-money floats in non-monetary fields are left unchanged."""
         data = {"confidence": 0.95, "score": 85.5}
         result = json.dumps(data, cls=DecimalEncoder)
@@ -271,7 +277,7 @@ class TestDecimalEncoder:
         assert parsed["confidence"] == 0.95
         assert parsed["score"] == 85.5
 
-    def test_json_encoder_mixed_types(self):
+    def test_json_encoder_mixed_types(self) -> None:
         """DecimalEncoder handles dicts with both Decimal and float values."""
         data = {
             "amount": Decimal("50000.00"),
@@ -285,14 +291,14 @@ class TestDecimalEncoder:
         assert parsed["confidence"] == 0.85
         assert parsed["count"] == 42
 
-    def test_json_encoder_none_values(self):
+    def test_json_encoder_none_values(self) -> None:
         """DecimalEncoder handles None values without error."""
         data = {"amount": None}
         result = json.dumps(data, cls=DecimalEncoder)
         parsed = json.loads(result)
         assert parsed["amount"] is None
 
-    def test_json_encoder_precision_preserved(self):
+    def test_json_encoder_precision_preserved(self) -> None:
         """Decimal precision is preserved in string output."""
         data = {"amount": Decimal("0.1") + Decimal("0.2")}
         result = json.dumps(data, cls=DecimalEncoder)
@@ -306,7 +312,7 @@ class TestDecimalEncoder:
 class TestSerializeAmounts:
     """serialize_amounts helper must convert Decimals to strings in models."""
 
-    def test_serialize_amounts_converts_decimals(self):
+    def test_serialize_amounts_converts_decimals(self) -> None:
         """serialize_amounts converts all Decimal fields to strings."""
         v = VarianceResponse(
             account_id="a1",
@@ -326,7 +332,7 @@ class TestSerializeAmounts:
         assert result["is_material"] is True
         assert result["account_id"] == "a1"
 
-    def test_serialize_amounts_leaves_non_decimal(self):
+    def test_serialize_amounts_leaves_non_decimal(self) -> None:
         """Non-Decimal fields are left unchanged by serialize_amounts."""
         v = VarianceResponse(
             account_id="a1",
@@ -342,7 +348,7 @@ class TestSerializeAmounts:
         assert result["account_id"] == "a1"
         assert result["is_material"] is False
 
-    def test_serialize_amounts_with_nested(self):
+    def test_serialize_amounts_with_nested(self) -> None:
         """serialize_amounts handles models with nested Decimal fields."""
         a = AssertionResponse(
             id="a1",
@@ -362,8 +368,8 @@ class TestSerializeAmounts:
 class TestBackwardCompatibility:
     """Providing float for monetary fields must raise a clear error."""
 
-    def test_backward_compatibility_float_rejected_with_clear_error(self):
-        """Float passed to VarianceResponse monetary field raises ValidationError with clear message."""
+    def test_backward_compatibility_float_rejected_with_clear_error(self) -> None:
+        """Float passed to VarianceResponse monetary field raises clear error."""
         with pytest.raises(ValidationError) as excinfo:
             VarianceResponse(
                 account_id="a1",
@@ -379,7 +385,7 @@ class TestBackwardCompatibility:
         # The error should mention the field name and type constraint
         assert "actual_amount" in error_msg
 
-    def test_assertion_float_rejected_clear_error(self):
+    def test_assertion_float_rejected_clear_error(self) -> None:
         """Float passed to AssertionResponse.value raises clear error."""
         with pytest.raises(ValidationError) as excinfo:
             AssertionResponse(
@@ -391,7 +397,7 @@ class TestBackwardCompatibility:
         error_msg = str(excinfo.value)
         assert "value" in error_msg
 
-    def test_action_create_float_rejected_clear_error(self):
+    def test_action_create_float_rejected_clear_error(self) -> None:
         """Float passed to ActionCreateRequest impact fields raises clear error."""
         with pytest.raises(ValidationError) as excinfo:
             ActionCreateRequest(
@@ -411,7 +417,7 @@ class TestBackwardCompatibility:
 class TestRouteResponseNoFloats:
     """Verify VarianceResponse model_dump produces no float monetary values."""
 
-    def test_variance_model_dump_has_no_floats_in_amounts(self):
+    def test_variance_model_dump_has_no_floats_in_amounts(self) -> None:
         """model_dump() of VarianceResponse must not contain float in amount fields."""
         v = VarianceResponse(
             account_id="a1",

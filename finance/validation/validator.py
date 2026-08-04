@@ -1,7 +1,10 @@
 """PeriodValidator — validates fiscal period consistency."""
-from finance.validation.calendar import FiscalCalendar
-from finance.validation.models import FiscalPeriod
+from datetime import timedelta
+
 from pydantic import BaseModel
+
+from finance.validation.calendar import FiscalCalendar
+from finance.validation.models import FiscalPeriod, PeriodStatus
 
 
 class PeriodValidationResult(BaseModel):
@@ -88,20 +91,19 @@ class PeriodValidator:
         for i in range(len(sorted_periods) - 1):
             current = sorted_periods[i]
             next_p = sorted_periods[i + 1]
-            expected_next_start = current.end_date + __import__("datetime").timedelta(days=1)
-            if next_p.start_date != expected_next_start:
-                if next_p.start_date > expected_next_start:
-                    prev_end = current.end_date
-                    gap_id = f"gap_{prev_end.isoformat()}"
-                    gap = FiscalPeriod(
-                        id=gap_id,
-                        tenant_id="default",
-                        fiscal_year=year,
-                        fiscal_period=0,
-                        period_type=current.period_type,
-                        start_date=expected_next_start,
-                        end_date=next_p.start_date - __import__("datetime").timedelta(days=1),
-                        status=__import__("finance.validation.models", fromlist=["PeriodStatus"]).PeriodStatus.OPEN,
-                    )
-                    gaps.append(gap)
+            expected_next_start = current.end_date + timedelta(days=1)
+            if next_p.start_date > expected_next_start:
+                prev_end = current.end_date
+                gap_id = f"gap_{prev_end.isoformat()}"
+                gap = FiscalPeriod(
+                    id=gap_id,
+                    tenant_id="default",
+                    fiscal_year=year,
+                    fiscal_period=0,
+                    period_type=current.period_type,
+                    start_date=expected_next_start,
+                    end_date=next_p.start_date - timedelta(days=1),
+                    status=PeriodStatus.OPEN,
+                )
+                gaps.append(gap)
         return gaps

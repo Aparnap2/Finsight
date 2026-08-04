@@ -37,7 +37,6 @@ from finance.evaluation.metrics import (
     VarianceAccuracy,
 )
 
-
 # ── Thin interfaces for the parallel-built layers ───────────────────────────
 
 

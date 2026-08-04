@@ -40,6 +40,7 @@ class TestJSONExporter:
 
     def test_payload_contains_all_rows(self, sample_dataframe: pl.DataFrame) -> None:
         artifact = self.exporter.export(sample_dataframe, self.job_id)
+        assert artifact.payload is not None
         parsed = json.loads(artifact.payload)
         assert len(parsed) == 5
 
@@ -52,6 +53,7 @@ class TestJSONExporter:
     def test_round_trip(self, sample_dataframe: pl.DataFrame) -> None:
         """Export JSON, then re-import and verify columns match."""
         artifact = self.exporter.export(sample_dataframe, self.job_id)
+        assert artifact.payload is not None
         parsed = json.loads(artifact.payload)
         reimported = pl.DataFrame(parsed)
         assert reimported.columns == sample_dataframe.columns
@@ -60,6 +62,7 @@ class TestJSONExporter:
     def test_empty_dataframe(self) -> None:
         df = pl.DataFrame({"a": [], "b": []})
         artifact = self.exporter.export(df, self.job_id)
+        assert artifact.payload is not None
         parsed = json.loads(artifact.payload)
         assert len(parsed) == 0
 
@@ -95,6 +98,7 @@ class TestCSVExporter:
 
     def test_csv_has_header(self, sample_dataframe: pl.DataFrame) -> None:
         artifact = self.exporter.export(sample_dataframe, self.job_id)
+        assert artifact.payload is not None
         lines = artifact.payload.strip().split("\n")
         assert lines[0] == "account_id,period,amount,department,currency"
         assert len(lines) == 6  # header + 5 data rows
@@ -106,6 +110,7 @@ class TestCSVExporter:
     def test_round_trip(self, sample_dataframe: pl.DataFrame) -> None:
         """Export CSV, then re-import and verify columns."""
         artifact = self.exporter.export(sample_dataframe, self.job_id)
+        assert artifact.payload is not None
         reimported = pl.read_csv(artifact.payload.encode())
         assert reimported.columns == sample_dataframe.columns
         assert reimported.height == sample_dataframe.height

@@ -69,12 +69,6 @@ def query_headcount(
         ]
         row_count = len(data)
 
-        # Aggregate totals
-        total_headcount = sum(r["headcount"] for r in data)
-        total_compensation = sum(r["total_compensation"] for r in data)
-        total_new_hires = sum(r["new_hires"] for r in data)
-        total_departures = sum(r["departures"] for r in data)
-
         # ---- coverage: depts found / total depts in headcount_data ----
         depts_found = (
             session.execute(

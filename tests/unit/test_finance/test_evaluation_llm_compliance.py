@@ -10,11 +10,9 @@ from __future__ import annotations
 
 import json
 from decimal import Decimal
-
-import pytest
+from typing import Any
 
 from finance.reasoning.llm_boundary import (
-    CommentaryOutput,
     NullCommentaryProvider,
     StructuredCommentaryProvider,
     _extract_json,
@@ -57,7 +55,7 @@ class FakeLLMClient:
         return self.response
 
 
-def _compliant_payload() -> dict:
+def _compliant_payload() -> dict[str, Any]:
     return {
         "summary": "Revenue exceeded budget.",
         "sections": [{"heading": "Variance Analysis", "content": "Revenue is up."}],

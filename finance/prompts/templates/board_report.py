@@ -20,4 +20,5 @@ TEMPLATE = """You are an FP&A analyst preparing a comprehensive board report.
 4. Provide management recommendations for board consideration.
 
 ## Output Format
-Generate a comprehensive board report with executive summary, variance highlights, KPI summary, recommendations, and risk assessment."""
+Generate a comprehensive board report with executive summary, variance highlights, \
+KPI summary, recommendations, and risk assessment."""

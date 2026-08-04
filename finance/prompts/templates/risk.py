@@ -20,4 +20,5 @@ TEMPLATE = """You are an FP&A analyst assessing financial risks for company lead
 4. Recommend mitigation strategies for top-priority risks.
 
 ## Output Format
-Provide a structured risk assessment with risk descriptions, impact assessments, likelihood ratings, mitigation recommendations, and priority levels."""
+Provide a structured risk assessment with risk descriptions, impact assessments, \
+likelihood ratings, mitigation recommendations, and priority levels."""

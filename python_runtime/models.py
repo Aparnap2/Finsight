@@ -69,7 +69,7 @@ class ComputeError(Exception):
         }
 
 
-class JobTelemetry(BaseModel):  # type: ignore[misc]
+class JobTelemetry(BaseModel):
     """Captured at job completion for observability and billing."""
 
     duration_ms: int = 0
@@ -81,7 +81,7 @@ class JobTelemetry(BaseModel):  # type: ignore[misc]
     stages: dict[str, int] = Field(default_factory=dict)
 
 
-class Job(BaseModel):  # type: ignore[misc]
+class Job(BaseModel):
     """A single compute job with full lifecycle tracking.
 
     Attributes:

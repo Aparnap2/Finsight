@@ -71,7 +71,7 @@ def _values_equal(left: Any, right: Any) -> bool:
     right_dec = _as_decimal(right)
     if left_dec is not None and right_dec is not None:
         return left_dec == right_dec
-    return left == right
+    return bool(left == right)
 
 
 class PolicyEngine:
@@ -111,7 +111,11 @@ class PolicyEngine:
 
         # combine == "all": matched iff every rule passed (none failed).
         # combine == "any": matched iff at least one rule passed.
-        matched = (first_fail_reason is None) if combine == "all" else (first_pass_reason is not None)
+        matched = (
+            (first_fail_reason is None)
+            if combine == "all"
+            else (first_pass_reason is not None)
+        )
 
         if effect == "allow":
             if matched:
@@ -163,7 +167,11 @@ class PolicyEngine:
         elif op == "in":
             if isinstance(rule_value, str):
                 if not isinstance(ctx_value, str):
-                    return False, True, f"'in' needs a string or collection value for field {field!r}"
+                    return (
+                        False,
+                        True,
+                        f"'in' needs a string or collection value for field {field!r}",
+                    )
                 passed = ctx_value in rule_value
             elif isinstance(rule_value, (list, tuple, set, frozenset)):
                 try:
@@ -171,16 +179,28 @@ class PolicyEngine:
                 except TypeError:
                     return False, True, f"cannot test membership for field {field!r}"
             else:
-                return False, True, f"'in' requires a collection or string value for field {field!r}"
+                return (
+                    False,
+                    True,
+                    f"'in' requires a collection or string value for field {field!r}",
+                )
         else:  # contains
             if isinstance(ctx_value, str):
                 if not isinstance(rule_value, str):
-                    return False, True, f"'contains' needs a string value for field {field!r}"
+                    return (
+                        False,
+                        True,
+                        f"'contains' needs a string value for field {field!r}",
+                    )
                 passed = rule_value.lower() in ctx_value.lower()
             elif isinstance(ctx_value, (list, tuple, set, frozenset)):
                 passed = rule_value in ctx_value
             else:
-                return False, True, f"'contains' needs a string or collection value for field {field!r}"
+                return (
+                    False,
+                    True,
+                    f"'contains' needs a string or collection value for field {field!r}",
+                )
 
         display = _OP_DISPLAY[op] if passed else _INVERSE_DISPLAY[op]
         rendered_value = f"{value_label} {rule_value}" if value_label else str(rule_value)

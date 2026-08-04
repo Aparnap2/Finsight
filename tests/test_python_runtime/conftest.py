@@ -1,5 +1,7 @@
 """Shared test fixtures for Python Compute Runtime tests."""
 
+from pathlib import Path
+
 import polars as pl
 import pytest
 
@@ -17,7 +19,7 @@ def sample_dataframe() -> pl.DataFrame:
 
 
 @pytest.fixture
-def sample_csv_path(tmp_path, sample_dataframe) -> str:
+def sample_csv_path(tmp_path: Path, sample_dataframe: pl.DataFrame) -> str:
     """Write sample_dataframe to a temp CSV and return the path."""
     path = tmp_path / "test_data.csv"
     sample_dataframe.write_csv(path)

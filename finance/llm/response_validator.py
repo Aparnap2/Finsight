@@ -26,5 +26,8 @@ class ResponseValidator:
     ) -> ValidationResult:
         errors: list[str] = []
         if len(evidence_ids) < min_evidence:
-            errors.append(f"Claim requires at least {min_evidence} evidence source(s), got {len(evidence_ids)}")
+            errors.append(
+                f"Claim requires at least {min_evidence} evidence source(s), "
+                f"got {len(evidence_ids)}"
+            )
         return ValidationResult(is_valid=len(errors) == 0, errors=errors)

@@ -123,7 +123,7 @@ class Capability(BaseModel):
         description="Policy identifiers that govern this capability",
     )
 
-    @model_validator(mode="after")  # type: ignore[untyped-decorator]
+    @model_validator(mode="after")
     def _derive_status(self) -> Capability:
         """Derive the lifecycle status from the maturity rating.
 
@@ -293,7 +293,7 @@ class CapabilityTree(BaseModel):
                 ),
             )
 
-    def __iter__(self) -> Iterator[Capability]:
+    def __iter__(self) -> Iterator[Capability]:  # type: ignore[override]
         """Iterate over capabilities in depth-first order."""
         return self.traverse(mode="depth-first")
 

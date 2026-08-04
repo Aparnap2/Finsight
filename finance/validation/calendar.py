@@ -40,10 +40,8 @@ class FiscalCalendar:
         sm = self.fiscal_year_start_month
         for i in range(12):
             cal_month = ((sm - 1 + i) % 12) + 1
-            if sm == 1:
-                cal_year = year
-            else:
-                cal_year = year - 1 if i < (12 - sm + 1) else year
+            # Prior-year months (sm > 1) belong to the previous fiscal year
+            cal_year = year - 1 if sm != 1 and i < (12 - sm + 1) else year
             period_start = date(cal_year, cal_month, 1)
             period_end = _last_day_of_month(cal_year, cal_month)
             fp = FiscalPeriod(

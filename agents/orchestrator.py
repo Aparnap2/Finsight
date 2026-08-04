@@ -1,9 +1,9 @@
 """Orchestrator — LangGraph pipeline with full PRD §6 states.
 
 State machine:
-  ingestion → variance_detection → root_cause (if material) → commentary → scenario → review (if HITL) → complete
-                    ↓ commentary                           ↓ skip       ↓ remediation → scenario (retry)
-                  (immaterial)                          (degraded)
+  ingestion → variance_detection → root_cause (if material) → commentary → scenario
+  → review (if HITL) → complete
+  ↓ commentary (immaterial)   ↓ skip   ↓ remediation → scenario (retry)
 
 Added states:
   - review: HITL review based on PolicyDecision
@@ -15,9 +15,13 @@ Added routing:
   - _route_after_review: approved → complete, rejected → remediation
 """
 
-from shared.models.state import PipelineState
-from shared.models.degraded_mode import DegradedMode
+from typing import Any
 
+from langgraph.checkpoint.base import BaseCheckpointSaver
+from langgraph.graph.state import CompiledStateGraph
+
+from shared.models.degraded_mode import DegradedMode
+from shared.models.state import PipelineState
 
 # ---------------------------------------------------------------------------
 # Routing functions
@@ -82,7 +86,7 @@ def _route_after_review(state: PipelineState) -> str:
 # Review and remediation nodes
 # ---------------------------------------------------------------------------
 
-def review_node(state: PipelineState) -> dict:
+def review_node(state: PipelineState) -> dict[str, Any]:
     """HITL review node — records the review decision.
 
     In production, this would integrate with a human review system.
@@ -98,7 +102,7 @@ def review_node(state: PipelineState) -> dict:
     return {"current_step": "review_complete"}
 
 
-def remediation_node(state: PipelineState) -> dict:
+def remediation_node(state: PipelineState) -> dict[str, Any]:
     """Remediation node — applies corrective actions for rejected reviews.
 
     In production, this would:
@@ -132,18 +136,21 @@ def remediation_node(state: PipelineState) -> dict:
 # Graph builder
 # ---------------------------------------------------------------------------
 
-def build_graph(checkpointer: "BaseCheckpointSaver | None" = None):
+def build_graph(
+    checkpointer: BaseCheckpointSaver[Any] | None = None,
+) -> CompiledStateGraph[PipelineState, Any]:
     """Build the full PRD §6 state graph with checkpoint support.
 
-    States: ingestion → variance_detection → root_cause → commentary → scenario → review → remediation → complete
+    States: ingestion → variance_detection → root_cause → commentary → scenario
+    → review → remediation → complete
     """
-    from langgraph.graph import StateGraph, END
-    from langgraph.checkpoint.base import BaseCheckpointSaver
-    from finance.ingestion.ingestion_agent import ingestion_node
-    from agents.variance.variance_agent import variance_node
-    from agents.driver.root_cause_agent import root_cause_node
+    from langgraph.graph import END, StateGraph
+
     from agents.commentary.commentary_agent import commentary_node
+    from agents.driver.root_cause_agent import root_cause_node
     from agents.scenario import scenario_node
+    from agents.variance.variance_agent import variance_node
+    from finance.ingestion.ingestion_agent import ingestion_node
 
     builder = StateGraph(PipelineState)
 
@@ -193,8 +200,6 @@ def build_graph(checkpointer: "BaseCheckpointSaver | None" = None):
     builder.add_edge("remediation", "scenario")
 
     # --- Compile ---
-    compile_kwargs = {}
     if checkpointer:
-        compile_kwargs["checkpointer"] = checkpointer
-
-    return builder.compile(**compile_kwargs)
+        return builder.compile(checkpointer=checkpointer)
+    return builder.compile()

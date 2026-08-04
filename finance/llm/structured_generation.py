@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import json
 import time
+from typing import Any
+
 import httpx
 from pydantic import BaseModel
-from typing import Any
 
 
 class StructuredGeneration:
@@ -61,7 +62,7 @@ class StructuredGeneration:
         return response_model.model_validate(parsed)
 
     @staticmethod
-    def _extract_json(text: str) -> dict | None:
+    def _extract_json(text: str) -> dict[str, Any] | None:
         text = text.strip()
         if text.startswith("```"):
             lines = text.splitlines()
@@ -69,10 +70,7 @@ class StructuredGeneration:
             end = -1 if lines[-1].strip().startswith("```") else len(lines)
             text = "\n".join(lines[start:end]).strip()
         try:
-            return json.loads(text)
+            parsed: Any = json.loads(text)
+            return parsed if isinstance(parsed, dict) else None
         except json.JSONDecodeError:
             return None
-
-
-
-        return response_model.model_validate(parsed)

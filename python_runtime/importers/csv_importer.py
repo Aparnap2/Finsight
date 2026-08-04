@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import Any
 
 import polars as pl
 
@@ -27,7 +28,7 @@ class CSVImporter:
         *,
         has_header: bool = True,
         infer_schema_length: int = 100,
-        **kwargs: str,
+        **kwargs: Any,
     ) -> Dataset:
         """Read a CSV file and return a typed Dataset.
 

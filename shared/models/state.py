@@ -1,9 +1,10 @@
+import operator
 from decimal import Decimal
 from typing import Annotated, TypedDict
-import operator
+
 from pydantic import BaseModel
 
-from shared.models.assertions import Assertion, AssertionType, SupportLevel
+from shared.models.assertions import Assertion
 
 
 class Variance(BaseModel):

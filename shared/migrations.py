@@ -54,7 +54,7 @@ _FILENAME_RE = re.compile(r"(\d{3})_(.+)\.sql")
 
 
 # pydantic mypy plugin unavailable on mypy 2.x (see pyproject.toml)
-class Migration(BaseModel):  # type: ignore[misc]
+class Migration(BaseModel):
     """Declarative description of one SQL migration file."""
 
     model_config = ConfigDict(frozen=True)
@@ -85,7 +85,7 @@ class Migration(BaseModel):  # type: ignore[misc]
 
 
 # pydantic mypy plugin unavailable on mypy 2.x (see pyproject.toml)
-class MigrationResult(BaseModel):  # type: ignore[misc]
+class MigrationResult(BaseModel):
     """Outcome of running (or skipping) one migration."""
 
     model_config = ConfigDict(frozen=True)

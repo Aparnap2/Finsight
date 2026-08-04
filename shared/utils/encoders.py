@@ -6,6 +6,7 @@ to avoid precision loss.
 
 import json
 from decimal import Decimal
+from typing import Any
 
 
 class DecimalEncoder(json.JSONEncoder):
@@ -15,12 +16,12 @@ class DecimalEncoder(json.JSONEncoder):
     by the default JSON encoder.
     """
 
-    def default(self, obj):
+    def default(self, obj: Any) -> Any:
         if isinstance(obj, Decimal):
             return str(obj)
         return super().default(obj)
 
 
-def dumps(obj, **kwargs) -> str:
+def dumps(obj: Any, **kwargs: Any) -> str:
     """Convenience wrapper around json.dumps that uses DecimalEncoder."""
     return json.dumps(obj, cls=DecimalEncoder, **kwargs)

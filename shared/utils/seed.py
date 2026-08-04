@@ -9,8 +9,14 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from shared.models.database import (
-    Entity, GLAccount, TrialBalance, BudgetLine, Actual,
-    HeadcountData, VendorInvoice, SalesPipeline
+    Actual,
+    BudgetLine,
+    Entity,
+    GLAccount,
+    HeadcountData,
+    SalesPipeline,
+    TrialBalance,
+    VendorInvoice,
 )
 from shared.utils.encoders import dumps
 
@@ -22,12 +28,13 @@ def _id() -> str:
 def seed_database(session: Session) -> None:
     entity = Entity(id="CF001", name="CloudForge Inc.", currency="USD", fiscal_year_start="01")
     session.add(entity)
+    entity_id = str(entity.id)
 
     departments = ["Sales", "Marketing", "Engineering", "G&A", "Customer Success"]
     regions = ["North America", "EMEA"]
     products = ["Product X", "Product Y", "Services"]
 
-    gl_accounts = _create_gl_accounts(entity.id, departments, regions, products)
+    gl_accounts = _create_gl_accounts(entity_id, departments, regions, products)
     for acc in gl_accounts:
         session.add(acc)
     session.flush()
@@ -35,17 +42,22 @@ def seed_database(session: Session) -> None:
     periods = [f"2025-{m:02d}" for m in range(1, 13)] + [f"2026-{m:02d}" for m in range(1, 7)]
 
     for period in periods:
-        _seed_period(session, entity.id, gl_accounts, departments, regions, period)
+        _seed_period(session, entity_id, gl_accounts, departments, regions, period)
 
-    _seed_headcount(session, entity.id, periods, departments)
-    _seed_vendors(session, entity.id, periods, gl_accounts)
-    _seed_pipeline(session, entity.id, periods, regions, products)
+    _seed_headcount(session, entity_id, periods, departments)
+    _seed_vendors(session, entity_id, periods, gl_accounts)
+    _seed_pipeline(session, entity_id, periods, regions, products)
 
     session.commit()
 
 
-def _create_gl_accounts(entity_id: str, departments: list, regions: list, products: list) -> list:
-    accounts = []
+def _create_gl_accounts(
+    entity_id: str,
+    departments: list[str],
+    regions: list[str],
+    products: list[str],
+) -> list[GLAccount]:
+    accounts: list[GLAccount] = []
     templates = [
         ("4000", "Revenue - Product X", "revenue", "Sales", "North America"),
         ("4001", "Revenue - Product Y", "revenue", "Sales", "EMEA"),
@@ -74,7 +86,14 @@ def _create_gl_accounts(entity_id: str, departments: list, regions: list, produc
     return accounts
 
 
-def _seed_period(session: Session, entity_id: str, accounts: list, departments: list, regions: list, period: str):
+def _seed_period(
+    session: Session,
+    entity_id: str,
+    accounts: list[GLAccount],
+    departments: list[str],
+    regions: list[str],
+    period: str,
+) -> None:
     # First pass: compute amounts, create Actual and BudgetLine records,
     # and collect trial-balance rows so we can balance them.
     tb_rows = []          # (account, debit, credit)
@@ -141,7 +160,12 @@ def _seed_period(session: Session, entity_id: str, accounts: list, departments: 
         ))
 
 
-def _seed_headcount(session: Session, entity_id: str, periods: list, departments: list):
+def _seed_headcount(
+    session: Session,
+    entity_id: str,
+    periods: list[str],
+    departments: list[str],
+) -> None:
     hc_data = {
         "Sales": (45, 12000), "Marketing": (25, 9500), "Engineering": (120, 15000),
         "G&A": (30, 8500), "Customer Success": (60, 8000),
@@ -158,8 +182,13 @@ def _seed_headcount(session: Session, entity_id: str, periods: list, departments
             ))
 
 
-def _seed_vendors(session: Session, entity_id: str, periods: list, accounts: list):
-    acct_lookup = {acc.account_number: acc.id for acc in accounts}
+def _seed_vendors(
+    session: Session,
+    entity_id: str,
+    periods: list[str],
+    accounts: list[GLAccount],
+) -> None:
+    acct_lookup = {str(acc.account_number): str(acc.id) for acc in accounts}
     vendors = [
         ("AWS", "7000", 80000), ("Stripe", "7001", 15000), ("Slack", "7001", 8000),
         ("Datadog", "7001", 12000), ("Google Cloud", "7000", 25000),
@@ -169,7 +198,11 @@ def _seed_vendors(session: Session, entity_id: str, periods: list, accounts: lis
         if not acct_id:
             continue
         for period in periods:
-            amt = base * 1.35 if (period == "2026-06" and vendor_name == "AWS") else base * random.uniform(0.9, 1.1)
+            amt = (
+                base * 1.35
+                if (period == "2026-06" and vendor_name == "AWS")
+                else base * random.uniform(0.9, 1.1)
+            )
             session.add(VendorInvoice(
                 id=_id(), entity_id=entity_id, period=period,
                 vendor_name=vendor_name, account_id=acct_id,
@@ -178,7 +211,13 @@ def _seed_vendors(session: Session, entity_id: str, periods: list, accounts: lis
             ))
 
 
-def _seed_pipeline(session: Session, entity_id: str, periods: list, regions: list, products: list):
+def _seed_pipeline(
+    session: Session,
+    entity_id: str,
+    periods: list[str],
+    regions: list[str],
+    products: list[str],
+) -> None:
     deals = [
         ("Enterprise Deal A", "Negotiation", 2000000, "EMEA", "Product X"),
         ("Mid-Market Deal B", "Closed Won", 500000, "North America", "Product Y"),

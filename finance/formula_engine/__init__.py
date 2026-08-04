@@ -9,9 +9,9 @@ Exported Public API:
     FormulaEvaluator, EvaluationContext, EvaluationError — orchestration
 """
 
-from finance.formula_engine.formula_registry import Formula, FormulaRegistry
 from finance.formula_engine.dependency_resolver import DependencyResolver
-from finance.formula_engine.evaluator import FormulaEvaluator, EvaluationContext, EvaluationError
+from finance.formula_engine.evaluator import EvaluationContext, EvaluationError, FormulaEvaluator
+from finance.formula_engine.formula_registry import Formula, FormulaRegistry
 
 __all__ = [
     "Formula",

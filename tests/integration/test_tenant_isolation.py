@@ -74,8 +74,8 @@ def _db_reachable(engine: sqlalchemy.Engine) -> bool:
 
 
 # pytest does not ship type stubs; the decorator type is Any under strict mypy.
-@pytest.fixture(scope="module")  # type: ignore[untyped-decorator]
-def engine() -> sqlalchemy.Engine:
+@pytest.fixture(scope="module")
+def engine() -> Generator[sqlalchemy.Engine, None, None]:
     """Engine bound to the integration database, with migrations + role applied.
 
     ``NullPool`` guarantees every ``engine.connect()`` opens a fresh session, so
@@ -132,7 +132,7 @@ def _ensure_limited_role(engine: sqlalchemy.Engine) -> None:
 
 
 # pytest does not ship type stubs; the decorator type is Any under strict mypy.
-@pytest.fixture(scope="module")  # type: ignore[untyped-decorator]
+@pytest.fixture(scope="module")
 def probe_rows(engine: sqlalchemy.Engine) -> Generator[tuple[str, str], None, None]:
     """Insert one audit_logs row per tenant; yield the two row ids.
 
@@ -175,7 +175,7 @@ def _count_rows(engine: sqlalchemy.Engine, row_ids: tuple[str, str]) -> int:
 
 
 # pytest does not ship type stubs; the decorator type is Any under strict mypy.
-@pytest.mark.integration  # type: ignore[untyped-decorator]
+@pytest.mark.integration
 def test_a_no_tenant_context_sees_nothing(
     engine: sqlalchemy.Engine, probe_rows: tuple[str, str]
 ) -> None:
@@ -196,7 +196,7 @@ def test_a_no_tenant_context_sees_nothing(
 
 
 # pytest does not ship type stubs; the decorator type is Any under strict mypy.
-@pytest.mark.integration  # type: ignore[untyped-decorator]
+@pytest.mark.integration
 def test_b_tenant_a_sees_only_own_rows(
     engine: sqlalchemy.Engine, probe_rows: tuple[str, str]
 ) -> None:
@@ -221,7 +221,7 @@ def test_b_tenant_a_sees_only_own_rows(
 
 
 # pytest does not ship type stubs; the decorator type is Any under strict mypy.
-@pytest.mark.integration  # type: ignore[untyped-decorator]
+@pytest.mark.integration
 def test_c_tenant_b_sees_only_own_rows(
     engine: sqlalchemy.Engine, probe_rows: tuple[str, str]
 ) -> None:
@@ -246,14 +246,14 @@ def test_c_tenant_b_sees_only_own_rows(
 
 
 # pytest does not ship type stubs; the decorator type is Any under strict mypy.
-@pytest.mark.integration  # type: ignore[untyped-decorator]
+@pytest.mark.integration
 def test_d_superuser_bypasses_rls(engine: sqlalchemy.Engine, probe_rows: tuple[str, str]) -> None:
     """The superuser (table owner) bypasses RLS and sees all rows regardless of context."""
     assert _count_rows(engine, probe_rows) == 2
 
 
 # pytest does not ship type stubs; the decorator type is Any under strict mypy.
-@pytest.mark.integration  # type: ignore[untyped-decorator]
+@pytest.mark.integration
 def test_tenant_ids_populated_across_boundary_tables(engine: sqlalchemy.Engine) -> None:
     """010 backfill left no NULL tenant_id rows across the 27 tenant-scoped tables."""
     tables = [

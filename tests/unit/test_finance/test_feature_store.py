@@ -496,14 +496,12 @@ class TestRegistryBehaviour:
         registry = FeatureRegistry()
         # Monkeypatch the builder to return something non-polars.
         original = registry.builder
-        registry.builder = lambda group: (  # type: ignore[method-assign]
-            lambda _df: "not a frame"
-        )
+        setattr(registry, "builder", lambda group: lambda _df: "not a frame")  # noqa: B010
         try:
             with pytest.raises(FeatureStoreError):
                 registry.build("vendor", pl.DataFrame())
         finally:
-            registry.builder = original  # type: ignore[method-assign]
+            setattr(registry, "builder", original)  # noqa: B010
 
     def test_schema_registry_covers_all_groups(self) -> None:
         """Every registered group has a structural pandera schema."""

@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 
 
 class Telemetry:
-    def __init__(self):
-        self._records: list[dict] = []
+    def __init__(self) -> None:
+        self._records: list[dict[str, Any]] = []
 
     def record(
         self,
@@ -28,7 +29,7 @@ class Telemetry:
             "timestamp": datetime.now(),
         })
 
-    def summary(self) -> dict:
+    def summary(self) -> dict[str, Any]:
         total_calls = len(self._records)
         if total_calls == 0:
             return {
@@ -43,11 +44,16 @@ class Telemetry:
         successes = sum(1 for r in self._records if r["success"])
         avg_latency = sum(r["latency_ms"] for r in self._records) / total_calls
 
-        by_provider: dict[str, dict] = {}
+        by_provider: dict[str, dict[str, Any]] = {}
         for r in self._records:
             p = r["provider"]
             if p not in by_provider:
-                by_provider[p] = {"calls": 0, "tokens": 0, "avg_latency_ms": 0.0, "success_rate": 0.0}
+                by_provider[p] = {
+                    "calls": 0,
+                    "tokens": 0,
+                    "avg_latency_ms": 0.0,
+                    "success_rate": 0.0,
+                }
             by_provider[p]["calls"] += 1
             by_provider[p]["tokens"] += r["prompt_tokens"] + r["completion_tokens"]
 

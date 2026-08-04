@@ -1,5 +1,7 @@
 """Tests for python_runtime.importers.factory — ImporterFactory."""
 
+from typing import Any
+
 import pytest
 
 from python_runtime.importers.csv_importer import CSVImporter
@@ -34,11 +36,11 @@ class TestImporterFactory:
         class MockImporter:
             source_type: str = "mock"
 
-            def import_data(self, source_uri: str, **kwargs) -> Dataset:  # type: ignore[empty-body]
-                ...
+            def import_data(self, source_uri: str, **kwargs: Any) -> Dataset:
+                raise NotImplementedError
 
         # Must be registered as type[Importer]
-        ImporterFactory.register("mock", MockImporter)  # type: ignore[arg-type]
+        ImporterFactory.register("mock", MockImporter)
         try:
             assert "mock" in ImporterFactory.list_sources()
             importer = ImporterFactory.create("mock")
@@ -53,10 +55,10 @@ class TestImporterFactory:
         class NewCSV:
             source_type: str = "csv"
 
-            def import_data(self, source_uri: str, **kwargs) -> Dataset:  # type: ignore[empty-body]
-                ...
+            def import_data(self, source_uri: str, **kwargs: Any) -> Dataset:
+                raise NotImplementedError
 
-        ImporterFactory.register("csv", NewCSV)  # type: ignore[arg-type]
+        ImporterFactory.register("csv", NewCSV)
         importer = ImporterFactory.create("csv")
         assert isinstance(importer, NewCSV)
         # Restore original

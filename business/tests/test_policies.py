@@ -116,7 +116,7 @@ class TestBusinessPolicy:
             effective_from=date(2024, 1, 1),
         )
         with pytest.raises(ValidationError):
-            policy.name = "Modified"
+            setattr(policy, "name", "Modified")  # noqa: B010 — runtime frozen validation
 
 
 class TestPolicyRegistry:

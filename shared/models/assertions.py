@@ -1,10 +1,11 @@
-from enum import Enum
 from decimal import Decimal
+from enum import StrEnum
 from typing import Any
+
 from pydantic import BaseModel
 
 
-class AssertionType(str, Enum):
+class AssertionType(StrEnum):
     NUMERIC = "numeric"
     COMPARATIVE = "comparative"
     CAUSAL = "causal"
@@ -12,7 +13,7 @@ class AssertionType(str, Enum):
     ACTION = "action"
 
 
-class SupportLevel(str, Enum):
+class SupportLevel(StrEnum):
     VERIFIED = "verified"
     PROBABLE = "probable"
     WEAK = "weak"

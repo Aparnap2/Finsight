@@ -57,6 +57,10 @@ python_version = "3.12"
 strict = true
 ignore_missing_imports = true
 
+# info/ is a vendored virtualenv (activate scripts reference sys.real_prefix,
+# which no longer exists on 3.13); exclude it from type-checking.
+exclude = ["^info/"]
+
 plugins = ["pydantic.mypy"]
 
 [tool.pytest.ini_options]

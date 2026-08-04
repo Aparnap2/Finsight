@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from typing import Any
 
 import pytest
 
@@ -28,7 +29,7 @@ from finance.evaluation.loader import GoldenDatasetLoader
 from finance.evaluation.runner import main, run_golden_regression
 
 
-def _accounts() -> list[dict]:
+def _accounts() -> list[dict[str, Any]]:
     """Deterministic account fixture with one material variance."""
     return [
         {"id": "4010", "name": "Product Revenue", "actual": 1250000, "budget": 1000000},
@@ -37,7 +38,7 @@ def _accounts() -> list[dict]:
     ]
 
 
-def _base_dataset(**overrides) -> GoldenDataset:
+def _base_dataset(**overrides: Any) -> GoldenDataset:
     raw = {
         "metadata": DatasetMetadata(id="unit_golden", name="Unit Golden", category="regression"),
         "input": DatasetInput(query="Run golden regression", context={"accounts": _accounts()}),
@@ -228,7 +229,7 @@ class TestGoldenRegressionHarness:
 
     def test_detection_forbidden_ids_flagged(self) -> None:
         class FlagEverything:
-            def detect_anomalies(self, ds) -> list[str]:
+            def detect_anomalies(self, ds: Any) -> list[str]:
                 return ["4010", "4020", "5010"]
 
         ds = _base_dataset(
@@ -299,14 +300,16 @@ class TestRegressionDatasets:
 
 
 class TestGoldenRegressionCli:
-    def test_main_returns_zero_on_pass(self, capsys) -> None:
+    def test_main_returns_zero_on_pass(self, capsys: pytest.CaptureFixture[str]) -> None:
         code = main(["--dataset-id", "regression_forecast_naive"])
         captured = capsys.readouterr()
         assert code == 0
         assert '"status": "ok"' in captured.out
 
-    def test_main_returns_one_when_regression_fails(self, monkeypatch, capsys) -> None:
-        def _boom(*args, **kwargs):
+    def test_main_returns_one_when_regression_fails(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        def _boom(*args: Any, **kwargs: Any) -> None:
             raise GoldenRegressionError("synthetic regression failure")
 
         monkeypatch.setattr(

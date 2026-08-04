@@ -102,8 +102,6 @@ def query_factual(
             })
 
         row_count = len(data)
-        # Estimate coverage based on how many actuals have matching budgets
-        matched = sum(1 for d in data if d["budget_amount"] != 0.0)
         coverage_pct = round(min(1.0, row_count / 20.0), 4) if row_count > 0 else 0.0
         quality_score = compute_quality_score(coverage_pct, row_count, freshness_seconds=None)
         degraded_mode = compute_degraded_mode(coverage_pct, row_count)

@@ -3,6 +3,7 @@ import io
 import logging
 import uuid
 from decimal import Decimal
+from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
@@ -40,6 +41,7 @@ from finance.ingestion.ingestion_agent import ingestion_node
 from finance.validation.data_quality import assess_batch
 from shared.config import get_settings
 from shared.models.action import ActionDomain, ActionImpact, ActionItem, create_action
+from shared.models.assertions import Assertion
 from shared.models.state import PipelineState
 from shared.utils.llm_client import LLMClient
 from shared.utils.policy import evaluate_from_pipeline_result
@@ -47,19 +49,21 @@ from shared.utils.tools.tool_result import ToolResult
 
 router = APIRouter()
 
-_runs: dict[str, dict] = {}
+_runs: dict[str, dict[str, Any]] = {}
 
 # In-memory store for action items (would be DB-backed in production)
 _action_items: dict[str, ActionItem] = {}
 
 
 @router.get("/health")
-async def health():
+async def health() -> dict[str, Any]:
     return {"status": "healthy"}
 
 
 @router.post("/pipeline/run")
-async def trigger_pipeline(req: PipelineRunRequest):
+async def trigger_pipeline(
+    req: PipelineRunRequest,
+) -> PipelineRunResponse | PipelineResultResponse:
     run_id = str(uuid.uuid4())[:8]
 
     if req.run_sync:
@@ -79,10 +83,16 @@ async def trigger_pipeline(req: PipelineRunRequest):
             "review_decisions": [],
             "error": None,
             "current_step": "start",
+            "degraded_modes": [],
+            "assertions": [],
+            "data_quality": None,
+            "policy_decision": None,
         }
 
-        ingestion = ingestion_node(state, engine=engine)
-        state.update(ingestion)
+        ingestion_result = ingestion_node(state, engine=engine)
+        state["actuals"] = ingestion_result["actuals"]
+        state["budget"] = ingestion_result["budget"]
+        state["current_step"] = ingestion_result["current_step"]
 
         var_result = variance_node(state)
         state["variances"] = var_result["variances"]
@@ -134,8 +144,8 @@ async def trigger_pipeline(req: PipelineRunRequest):
                 "material_count": len(material),
                 "root_causes": root_cause_data,
                 "commentary_sections": commentary_data,
-                "actuals_count": len(state["actuals"].get("accounts", [])),
-                "budget_count": len(state["budget"].get("accounts", [])),
+                "actuals_count": _account_count(state["actuals"]),
+                "budget_count": _account_count(state["budget"]),
             },
         }
 
@@ -144,8 +154,8 @@ async def trigger_pipeline(req: PipelineRunRequest):
             status="completed",
             period=req.period,
             tenant_id=req.tenant_id,
-            actuals_count=len(state["actuals"].get("accounts", [])),
-            budget_count=len(state["budget"].get("accounts", [])),
+            actuals_count=_account_count(state["actuals"]),
+            budget_count=_account_count(state["budget"]),
             variances=variance_data,
             material_count=len(material),
             root_causes=root_cause_data,
@@ -157,24 +167,29 @@ async def trigger_pipeline(req: PipelineRunRequest):
 
 
 @router.get("/pipeline/{run_id}/status")
-async def get_pipeline_status(run_id: str):
+async def get_pipeline_status(run_id: str) -> dict[str, Any]:
     if run_id not in _runs:
         raise HTTPException(status_code=404, detail="Run not found")
     return _runs[run_id]
 
 
 @router.get("/pipeline/{run_id}/results")
-async def get_pipeline_results(run_id: str):
+async def get_pipeline_results(run_id: str) -> dict[str, Any]:
     if run_id not in _runs:
         raise HTTPException(status_code=404, detail="Run not found")
     run = _runs[run_id]
     if run.get("status") != "completed":
         raise HTTPException(status_code=400, detail="Pipeline not completed yet")
-    return run.get("result", {})
+    result = run.get("result")
+    if not isinstance(result, dict):
+        raise HTTPException(status_code=500, detail="Run result is malformed")
+    return result
 
 
 @router.post("/pipeline/{run_id}/review")
-async def submit_review(run_id: str, checkpoint: str, decision: str, notes: str = ""):
+async def submit_review(
+    run_id: str, checkpoint: str, decision: str, notes: str = ""
+) -> dict[str, Any]:
     if run_id not in _runs:
         raise HTTPException(status_code=404, detail="Run not found")
     if decision not in ("approve", "reject"):
@@ -186,7 +201,9 @@ async def submit_review(run_id: str, checkpoint: str, decision: str, notes: str 
 
 
 @router.post("/import/csv")
-async def import_csv(file: UploadFile = File(...), tenant_id: str = "CF001"):
+async def import_csv(
+    file: Annotated[UploadFile, File()], tenant_id: str = "CF001"
+) -> dict[str, Any]:
     # DEPRECATED: Use POST /api/v1/jobs/submit with pipeline="analytics"
     # and source_type="csv" instead. This endpoint routes through the
     # Compute Runtime for new development.
@@ -253,7 +270,13 @@ async def import_csv(file: UploadFile = File(...), tenant_id: str = "CF001"):
 # ── New endpoints: truth/render separation API ──────────────────────────────
 
 
-def _serialize_assertion(a) -> AssertionResponse:
+def _account_count(wrapper: dict[str, object]) -> int:
+    """Count account rows in an actuals/budget wrapper dict."""
+    accounts = wrapper.get("accounts")
+    return len(accounts) if isinstance(accounts, list) else 0
+
+
+def _serialize_assertion(a: Assertion) -> AssertionResponse:
     """Convert an Assertion model to an AssertionResponse."""
     return AssertionResponse(
         id=a.id,
@@ -261,13 +284,15 @@ def _serialize_assertion(a) -> AssertionResponse:
         text=a.text,
         value=Decimal(str(a.value)) if a.value is not None else None,
         evidence_ids=a.evidence_ids,
-        support_level=a.support_level.value if hasattr(a.support_level, "value") else str(a.support_level),
+        support_level=(
+            a.support_level.value if hasattr(a.support_level, "value") else str(a.support_level)
+        ),
         confidence=a.confidence,
         metadata=a.metadata or {},
     )
 
 
-def _run_full_pipeline(period: str, tenant_id: str) -> dict:
+def _run_full_pipeline(period: str, tenant_id: str) -> dict[str, Any]:
     """Execute the full pipeline: ingest → variance → assertions → commentary → policy.
 
     Returns a dict with all intermediate results for the API response.
@@ -289,10 +314,16 @@ def _run_full_pipeline(period: str, tenant_id: str) -> dict:
         "review_decisions": [],
         "error": None,
         "current_step": "start",
+        "degraded_modes": [],
+        "assertions": [],
+        "data_quality": None,
+        "policy_decision": None,
     }
 
     ingestion = ingestion_node(state, engine=engine)
-    state.update(ingestion)
+    state["actuals"] = ingestion["actuals"]
+    state["budget"] = ingestion["budget"]
+    state["current_step"] = ingestion["current_step"]
 
     # 2. Variance computation
     var_result = variance_node(state)
@@ -323,7 +354,7 @@ def _run_full_pipeline(period: str, tenant_id: str) -> dict:
     tool_results_for_pipeline = [
         ToolResult(
             data=[],
-            row_count=len(state["actuals"].get("accounts", [])),
+            row_count=_account_count(state["actuals"]),
             coverage_pct=0.8,
             quality_score=0.8,
             freshness_seconds=3600,
@@ -385,7 +416,7 @@ def _run_full_pipeline(period: str, tenant_id: str) -> dict:
 
 
 @router.get("/status", response_model=StatusResponse)
-async def get_status():
+async def get_status() -> StatusResponse:
     """System status and available endpoints."""
     return StatusResponse(
         status="healthy",
@@ -408,7 +439,7 @@ async def get_status():
 
 
 @router.post("/pipeline/execute", response_model=PipelineExecuteResponse)
-async def execute_full_pipeline(req: PipelineExecuteRequest):
+async def execute_full_pipeline(req: PipelineExecuteRequest) -> PipelineExecuteResponse:
     """Full pipeline: ingest → variance → assertions → commentary → policy.
 
     Returns both raw truth (assertions) and rendered commentary.
@@ -416,7 +447,7 @@ async def execute_full_pipeline(req: PipelineExecuteRequest):
     try:
         result = _run_full_pipeline(req.period, req.tenant_id)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Pipeline execution failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Pipeline execution failed: {e}") from e
 
     assertions_resp = [_serialize_assertion(a) for a in result["assertions"]]
     commentary_resp = [
@@ -460,12 +491,12 @@ async def execute_full_pipeline(req: PipelineExecuteRequest):
 
 
 @router.get("/commentary/{period}", response_model=CommentaryResponse)
-async def get_commentary(period: str, tenant_id: str = "CF001"):
+async def get_commentary(period: str, tenant_id: str = "CF001") -> CommentaryResponse:
     """Get commentary + assertions for a period (truth/render separation)."""
     try:
         result = _run_full_pipeline(period, tenant_id)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Commentary generation failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Commentary generation failed: {e}") from e
 
     assertions_resp = [_serialize_assertion(a) for a in result["assertions"]]
     commentary_resp = [
@@ -496,7 +527,7 @@ async def get_commentary(period: str, tenant_id: str = "CF001"):
 
 
 @router.get("/variances/{period}", response_model=list[VarianceResponse])
-async def get_variances(period: str, tenant_id: str = "CF001"):
+async def get_variances(period: str, tenant_id: str = "CF001") -> list[VarianceResponse]:
     """Get computed variances for a period."""
     settings = get_settings()
     engine = create_engine(settings.postgres_uri)
@@ -514,10 +545,16 @@ async def get_variances(period: str, tenant_id: str = "CF001"):
         "review_decisions": [],
         "error": None,
         "current_step": "start",
+        "degraded_modes": [],
+        "assertions": [],
+        "data_quality": None,
+        "policy_decision": None,
     }
 
     ingestion = ingestion_node(state, engine=engine)
-    state.update(ingestion)
+    state["actuals"] = ingestion["actuals"]
+    state["budget"] = ingestion["budget"]
+    state["current_step"] = ingestion["current_step"]
     var_result = variance_node(state)
 
     return [
@@ -536,7 +573,9 @@ async def get_variances(period: str, tenant_id: str = "CF001"):
 
 
 @router.get("/bridge/{period}/{account_id}", response_model=BridgeAnalysisResponse)
-async def get_bridge_analysis(period: str, account_id: str, tenant_id: str = "CF001"):
+async def get_bridge_analysis(
+    period: str, account_id: str, tenant_id: str = "CF001"
+) -> BridgeAnalysisResponse:
     """Get bridge (variance decomposition) analysis for a specific account."""
     # Fetch variances for the period
     settings = get_settings()
@@ -555,10 +594,16 @@ async def get_bridge_analysis(period: str, account_id: str, tenant_id: str = "CF
         "review_decisions": [],
         "error": None,
         "current_step": "start",
+        "degraded_modes": [],
+        "assertions": [],
+        "data_quality": None,
+        "policy_decision": None,
     }
 
     ingestion = ingestion_node(state, engine=engine)
-    state.update(ingestion)
+    state["actuals"] = ingestion["actuals"]
+    state["budget"] = ingestion["budget"]
+    state["current_step"] = ingestion["current_step"]
     var_result = variance_node(state)
 
     # Find the matching variance
@@ -611,7 +656,7 @@ async def get_bridge_analysis(period: str, account_id: str, tenant_id: str = "CF
 
 
 @router.get("/data-quality/{period}", response_model=DataQualityResponse)
-async def get_data_quality(period: str, tenant_id: str = "CF001"):
+async def get_data_quality(period: str, tenant_id: str = "CF001") -> DataQualityResponse:
     """Get data quality assessment for a period."""
     settings = get_settings()
     engine = create_engine(settings.postgres_uri)
@@ -629,16 +674,22 @@ async def get_data_quality(period: str, tenant_id: str = "CF001"):
         "review_decisions": [],
         "error": None,
         "current_step": "start",
+        "degraded_modes": [],
+        "assertions": [],
+        "data_quality": None,
+        "policy_decision": None,
     }
 
     ingestion = ingestion_node(state, engine=engine)
-    state.update(ingestion)
+    state["actuals"] = ingestion["actuals"]
+    state["budget"] = ingestion["budget"]
+    state["current_step"] = ingestion["current_step"]
 
     # Create tool results for quality assessment
     tool_results = [
         ToolResult(
             data=[],
-            row_count=len(state["actuals"].get("accounts", [])),
+            row_count=_account_count(state["actuals"]),
             coverage_pct=0.8,
             quality_score=0.8,
             freshness_seconds=3600,
@@ -665,12 +716,12 @@ async def get_data_quality(period: str, tenant_id: str = "CF001"):
 
 
 @router.get("/policy/{period}", response_model=PolicyDecisionResponse)
-async def get_policy_decision(period: str, tenant_id: str = "CF001"):
+async def get_policy_decision(period: str, tenant_id: str = "CF001") -> PolicyDecisionResponse:
     """Get policy (autonomy/routing) decision for a period."""
     try:
         result = _run_full_pipeline(period, tenant_id)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Policy evaluation failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Policy evaluation failed: {e}") from e
 
     pd = result["policy_decision"]
     return PolicyDecisionResponse(
@@ -684,7 +735,7 @@ async def get_policy_decision(period: str, tenant_id: str = "CF001"):
 
 
 @router.get("/actions", response_model=list[ActionItemResponse])
-async def list_actions():
+async def list_actions() -> list[ActionItemResponse]:
     """List all action items."""
     return [
         ActionItemResponse(
@@ -705,21 +756,32 @@ async def list_actions():
 
 
 @router.post("/actions", response_model=ActionItemResponse)
-async def create_action_item(req: ActionCreateRequest):
+async def create_action_item(req: ActionCreateRequest) -> ActionItemResponse:
     """Create a new action item with gate enforcement."""
     try:
         domain = ActionDomain(req.domain)
     except ValueError:
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid domain: {req.domain}. Must be one of: {[d.value for d in ActionDomain]}",
-        )
+            detail=(
+                f"Invalid domain: {req.domain}. Must be one of: "
+                f"{[d.value for d in ActionDomain]}"
+            ),
+        ) from None
 
     impact = None
     if req.impact_expected_savings is not None or req.impact_expected_revenue is not None:
         impact = ActionImpact(
-            expected_savings=Decimal(str(req.impact_expected_savings)) if req.impact_expected_savings is not None else None,
-            expected_revenue=Decimal(str(req.impact_expected_revenue)) if req.impact_expected_revenue is not None else None,
+            expected_savings=(
+                Decimal(str(req.impact_expected_savings))
+                if req.impact_expected_savings is not None
+                else None
+            ),
+            expected_revenue=(
+                Decimal(str(req.impact_expected_revenue))
+                if req.impact_expected_revenue is not None
+                else None
+            ),
         )
 
     result = create_action(
@@ -734,11 +796,20 @@ async def create_action_item(req: ActionCreateRequest):
     )
 
     if not result.created:
-        raise HTTPException(status_code=422, detail={"errors": result.errors, "warnings": result.warnings})
+        raise HTTPException(
+            status_code=422,
+            detail={"errors": result.errors, "warnings": result.warnings},
+        )
 
     # Store in memory
     if result.action_item:
         _action_items[result.action_item.id] = result.action_item
+
+    if result.action_item is None:
+        raise HTTPException(
+            status_code=500,
+            detail="Action item was not materialized after creation",
+        )
 
     a = result.action_item
     return ActionItemResponse(
@@ -757,7 +828,7 @@ async def create_action_item(req: ActionCreateRequest):
 
 
 @router.get("/actions/{action_id}", response_model=ActionItemResponse)
-async def get_action_item(action_id: str):
+async def get_action_item(action_id: str) -> ActionItemResponse:
     """Get a specific action item by ID."""
     if action_id not in _action_items:
         raise HTTPException(status_code=404, detail=f"Action item {action_id} not found")
@@ -830,7 +901,7 @@ async def get_job_status(job_id: UUID) -> JobStatusResponse:
 
 
 @compute_router.get("/jobs/{job_id}/result")
-async def get_job_result(job_id: UUID) -> dict:
+async def get_job_result(job_id: UUID) -> dict[str, Any]:
     job = _dispatcher.get_result(job_id)
     if job is None:
         raise HTTPException(status_code=404, detail=f"Job not found: {job_id}")
@@ -840,7 +911,7 @@ async def get_job_result(job_id: UUID) -> dict:
 
 
 @compute_router.post("/jobs/{job_id}/cancel")
-async def cancel_job(job_id: UUID) -> dict:
+async def cancel_job(job_id: UUID) -> dict[str, Any]:
     cancelled = _dispatcher.cancel(job_id)
     if not cancelled:
         raise HTTPException(

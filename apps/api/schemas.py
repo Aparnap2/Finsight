@@ -6,10 +6,10 @@ All monetary values use decimal.Decimal — never float.
 from decimal import Decimal
 from typing import Annotated, Any
 
-from pydantic import BaseModel, BeforeValidator, Field, field_validator
+from pydantic import BaseModel, BeforeValidator, Field, ValidationInfo, field_validator
 
 
-def _reject_float_money(v):
+def _reject_float_money(v: Any) -> Any:
     """Reject float values for monetary fields — Decimal, int, str, or None only."""
     if isinstance(v, float):
         raise ValueError(
@@ -47,9 +47,11 @@ class VarianceResponse(BaseModel):
     variance_pct: MoneyDecimal
     is_material: bool
 
-    @field_validator("actual_amount", "budget_amount", "variance_amount", "variance_pct", mode="before")
+    @field_validator(
+        "actual_amount", "budget_amount", "variance_amount", "variance_pct", mode="before"
+    )
     @classmethod
-    def reject_floats(cls, v, info):
+    def reject_floats(cls, v: Any, info: ValidationInfo) -> Any:
         if isinstance(v, float):
             raise ValueError(f"Float not allowed for {info.field_name}, use Decimal or string")
         return v
@@ -64,8 +66,8 @@ class PipelineResultResponse(BaseModel):
     budget_count: int
     variances: list[VarianceResponse]
     material_count: int
-    root_causes: list[dict]
-    commentary_sections: list[dict]
+    root_causes: list[dict[str, Any]]
+    commentary_sections: list[dict[str, Any]]
 
 
 # ── New schemas for truth/render separation API ─────────────────────────────
@@ -80,11 +82,11 @@ class AssertionResponse(BaseModel):
     evidence_ids: list[str] = []
     support_level: str = "insufficient"
     confidence: float = 0.0
-    metadata: dict = {}
+    metadata: dict[str, Any] = {}
 
     @field_validator("value", mode="before")
     @classmethod
-    def reject_floats(cls, v, info):
+    def reject_floats(cls, v: Any, info: ValidationInfo) -> Any:
         if isinstance(v, float):
             raise ValueError(f"Float not allowed for {info.field_name}, use Decimal or string")
         return v
@@ -147,7 +149,7 @@ class ActionCreateRequest(BaseModel):
 
     @field_validator("impact_expected_savings", "impact_expected_revenue", mode="before")
     @classmethod
-    def reject_floats(cls, v, info):
+    def reject_floats(cls, v: Any, info: ValidationInfo) -> Any:
         if isinstance(v, float):
             raise ValueError(f"Float not allowed for {info.field_name}, use Decimal or string")
         return v
@@ -233,5 +235,5 @@ class JobStatusResponse(BaseModel):
     started_at: str | None = None
     completed_at: str | None = None
     duration_ms: int | None = None
-    error: dict | None = None
-    artifact: dict | None = None
+    error: dict[str, Any] | None = None
+    artifact: dict[str, Any] | None = None

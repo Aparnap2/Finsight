@@ -55,4 +55,4 @@ def test_discover_migrations_sorts_by_version() -> None:
     for migration in migrations:
         assert migration.checksum
         with pytest.raises(ValidationError):
-            migration.version = "999"  # frozen model rejects assignment at runtime
+            setattr(migration, "version", "999")  # noqa: B010 — frozen model rejects assignment at runtime

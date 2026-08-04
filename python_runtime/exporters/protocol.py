@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     import polars as pl
 
 
-class Artifact(BaseModel):  # type: ignore[misc]
+class Artifact(BaseModel):
     """A stored export artifact — the result of a compute job.
 
     Attributes:

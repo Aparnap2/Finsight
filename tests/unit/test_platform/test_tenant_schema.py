@@ -76,7 +76,7 @@ class TestFrozenModel:
     def test_attribute_assignment_raises(self) -> None:
         cfg = TenantConfig.load("acme-corp")
         with pytest.raises(ValidationError):
-            cfg.currency = "XXX"
+            setattr(cfg, "currency", "XXX")  # noqa: B010 — runtime frozen validation
 
     def test_money_fields_are_decimal(self) -> None:
         cfg = TenantConfig.load("acme-corp")

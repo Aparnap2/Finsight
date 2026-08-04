@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import os
 import time
-from datetime import datetime, timedelta
+from typing import Any, ClassVar
+
 from pydantic import BaseModel
-from typing import ClassVar
 
 
 class ProviderConfig(BaseModel):
@@ -23,7 +23,7 @@ class ProviderConfig(BaseModel):
 
 
 class ModelRouter:
-    _PROVIDER_DEFS: ClassVar[list[dict]] = [
+    _PROVIDER_DEFS: ClassVar[list[dict[str, Any]]] = [
         {
             "name": "groq",
             "api_key_env": "GROQ_API_KEY",

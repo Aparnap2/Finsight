@@ -3,7 +3,9 @@
 Every claim made by the LLM must reference supporting evidence.
 """
 from __future__ import annotations
+
 from decimal import Decimal
+
 from pydantic import BaseModel
 
 

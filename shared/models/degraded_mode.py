@@ -1,7 +1,7 @@
-from enum import Enum
+from enum import StrEnum
 
 
-class DegradedMode(str, Enum):
+class DegradedMode(StrEnum):
     NONE = "none"
     PRELIMINARY_ONLY = "preliminary_only"
     MISSING_FX = "missing_fx"

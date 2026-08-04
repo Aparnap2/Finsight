@@ -12,8 +12,9 @@ Two families of metrics live here:
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from decimal import Decimal
-from typing import Any, Sequence
+from typing import Any
 
 from finance.cognition.state.action import Action, ActionPlan, ActionStatus
 

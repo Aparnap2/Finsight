@@ -197,10 +197,6 @@ def query_trial_balance(
         ]
         row_count = len(data)
 
-        # Totals for quick reconcilation checks
-        total_debits = sum(r["debit"] for r in data)
-        total_credits = sum(r["credit"] for r in data)
-
         # ---- coverage ----
         tb_acct_count = (
             session.execute(

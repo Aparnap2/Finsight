@@ -8,12 +8,15 @@ the single source of truth.
 """
 
 from decimal import Decimal
+from typing import Any, cast
 
 from finplatform.config.tenant_schema import TenantConfig, TenantConfigError
 from shared.models.state import PipelineState, Variance
 
 
-def compute_variances(actuals: list[dict], budget: list[dict]) -> list[Variance]:
+def compute_variances(
+    actuals: list[dict[str, Any]], budget: list[dict[str, Any]]
+) -> list[Variance]:
     """Compute per-account variances between actuals and budget as Decimals."""
     budget_map = {b["account_id"]: b for b in budget}
     variances = []
@@ -71,7 +74,9 @@ def apply_materiality(
     return variances
 
 
-def variance_node(state: PipelineState, tenant_config: TenantConfig | None = None) -> dict:
+def variance_node(
+    state: PipelineState, tenant_config: TenantConfig | None = None
+) -> dict[str, Any]:
     """Variance detection graph node: compute variances and flag materiality.
 
     When no explicit ``tenant_config`` is supplied, the tenant is resolved
@@ -79,8 +84,16 @@ def variance_node(state: PipelineState, tenant_config: TenantConfig | None = Non
     invalid tenant config falls back to explicit args and raises a clear
     ``ValueError`` when no thresholds are available.
     """
-    actuals = state.get("actuals", {}).get("accounts", [])
-    budget = state.get("budget", {}).get("accounts", [])
+    actuals_wrapper = state.get("actuals")
+    actuals = cast(
+        list[dict[str, Any]],
+        actuals_wrapper.get("accounts", []) if isinstance(actuals_wrapper, dict) else [],
+    )
+    budget_wrapper = state.get("budget")
+    budget = cast(
+        list[dict[str, Any]],
+        budget_wrapper.get("accounts", []) if isinstance(budget_wrapper, dict) else [],
+    )
     variances = compute_variances(actuals, budget)
     resolved = tenant_config
     if resolved is None:

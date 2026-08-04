@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pydantic import BaseModel
+
 from finance.llm.model_router import ModelRouter
 from finance.llm.structured_generation import StructuredGeneration
 from finance.llm.telemetry import Telemetry

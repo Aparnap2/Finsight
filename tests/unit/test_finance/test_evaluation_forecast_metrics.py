@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from typing import Any, cast
 
 import pytest
 
@@ -22,7 +23,7 @@ class TestAsDecimal:
 
     def test_rejects_float(self) -> None:
         with pytest.raises(TypeError):
-            _as_decimal(1.5)
+            _as_decimal(cast(Any, 1.5))
 
 
 class TestMeanAbsoluteError:

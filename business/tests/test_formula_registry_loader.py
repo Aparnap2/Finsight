@@ -6,6 +6,8 @@ lookup helpers.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from business.formula_registry.loader import (
@@ -33,12 +35,12 @@ class TestLoadRecords:
         assert "references" in sample
         assert "status" in sample
 
-    def test_missing_file_raises(self, tmp_path: pytest.TempPathFactory) -> None:
+    def test_missing_file_raises(self, tmp_path: Path) -> None:
         """A missing file raises RegistryFileError."""
         with pytest.raises(RegistryFileError):
             load_records(tmp_path / "nope.yaml")
 
-    def test_wrong_schema_raises(self, tmp_path: pytest.TempPathFactory) -> None:
+    def test_wrong_schema_raises(self, tmp_path: Path) -> None:
         """A file with the wrong schema raises RegistryFileError."""
         target = tmp_path / "registry.yaml"
         target.write_text(

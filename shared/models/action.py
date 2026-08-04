@@ -9,12 +9,16 @@ Actions can only be created if they satisfy ALL gates:
 """
 
 from decimal import Decimal
-from enum import Enum
-from typing import Any
+from enum import StrEnum
+from typing import TYPE_CHECKING, Any
+
 from pydantic import BaseModel, field_validator
 
+if TYPE_CHECKING:
+    from shared.models.assertions import Assertion
 
-class ActionStatus(str, Enum):
+
+class ActionStatus(StrEnum):
     PROPOSED = "proposed"
     APPROVED = "approved"
     IN_PROGRESS = "in_progress"
@@ -23,7 +27,7 @@ class ActionStatus(str, Enum):
     REJECTED = "rejected"
 
 
-class ActionDomain(str, Enum):
+class ActionDomain(StrEnum):
     COST = "cost"
     REVENUE = "revenue"
     HEADCOUNT = "headcount"
@@ -94,7 +98,7 @@ class ActionItem(BaseModel):
     def can_execute(self) -> bool:
         return self.status == ActionStatus.APPROVED and not self.is_blocked
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
             "action": self.action,

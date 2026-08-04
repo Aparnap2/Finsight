@@ -12,16 +12,15 @@ This is enforced by:
 3. Post-rendering validation (all $ claims are cross-checked)
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
+
 from shared.models.assertions import Assertion, AssertionType, SupportLevel
-from shared.models.degraded_mode import DegradedMode
 from shared.models.state import (
-    PipelineState,
-    RootCauseFinding,
     CommentaryDraft,
     CommentarySection,
-    ActionItem,
+    PipelineState,
+    RootCauseFinding,
 )
 from shared.utils.llm_client import LLMClient
 
@@ -110,11 +109,13 @@ def build_render_prompt(render_input: CommentaryRenderInput) -> str:
     )
     degraded = _format_degraded_modes(render_input.degraded_modes)
 
-    prompt = f"""You are a financial commentary renderer for {render_input.entity_name or 'the company'}.
+    entity_display = render_input.entity_name or "the company"
+    prompt = f"""You are a financial commentary renderer for {entity_display}.
 Period: {render_input.period}
 Audience: {render_input.audience}
 
-You receive TRUTH that has been deterministically verified. Your job is to render it into clear, professional narrative text.
+You receive TRUTH that has been deterministically verified. Your job is to render it into \
+clear, professional narrative text.
 
 ## TRUTH INPUT
 
@@ -135,7 +136,8 @@ You receive TRUTH that has been deterministically verified. Your job is to rende
 5. You may NOT invent any causes or explanations.
 6. You may NOT merge hypotheses into facts.
 7. You may NOT add any new claims not present in the input.
-8. If the weak section is non-empty, include a caveat like "These hypotheses require further investigation."
+8. If the weak section is non-empty, include a caveat like "These hypotheses require \
+further investigation."
 9. Every $ amount in your output MUST correspond to a VERIFIED assertion above.
 
 ## SECTIONS TO RENDER
@@ -144,7 +146,8 @@ You receive TRUTH that has been deterministically verified. Your job is to rende
 
 ## OUTPUT FORMAT
 
-Write professional financial commentary using the sections above. Be concise but complete. Use the confidence levels to calibrate your language:
+Write professional financial commentary using the sections above. Be concise but complete. \
+Use the confidence levels to calibrate your language:
 - Confidence >= 0.8: State directly ("Revenue increased by...")
 - Confidence 0.5-0.8: Add qualifier ("The data indicates that...")
 - Confidence < 0.5: Add uncertainty ("This suggests that..." or "Further analysis is needed")
@@ -280,7 +283,7 @@ def _fallback_render(render_input: CommentaryRenderInput) -> str:
 
 def generate_commentary(
     root_causes: list[RootCauseFinding],
-    variances: list[dict],
+    variances: list[dict[str, Any]],
     llm_client: LLMClient | None = None,
 ) -> CommentaryDraft:
     """Generate commentary from root causes and variances.
@@ -293,10 +296,8 @@ def generate_commentary(
     """
     # Extract assertions from root causes
     assertions: list[Assertion] = []
-    has_explicit_assertions = False
     for rc in root_causes:
         if rc.assertions:
-            has_explicit_assertions = True
             assertions.extend(rc.assertions)
         elif rc.summary:
             # Backward compat: promote summary to assertion
@@ -335,7 +336,7 @@ def generate_commentary(
 
     return CommentaryDraft(
         sections=sections,
-        generated_at=datetime.now(timezone.utc).isoformat(),
+        generated_at=datetime.now(UTC).isoformat(),
         version=1,
         status="draft",
     )
@@ -363,7 +364,7 @@ def _parse_sections_from_text(text: str) -> list[CommentarySection]:
 
 def commentary_node(
     state: PipelineState, llm_client: LLMClient | None = None
-) -> dict:
+) -> dict[str, Any]:
     """LangGraph node: produce commentary from pipeline state.
 
     This node bridges the pipeline state to the new assertion-based
@@ -373,10 +374,9 @@ def commentary_node(
         llm_client = LLMClient()
 
     root_causes: list[RootCauseFinding] = state.get("root_causes", [])
-    variances: list[dict] = state.get("variances", [])
 
     period = state.get("period", "")
-    entity_id = state.get("entity_id", "")
+    entity_id = str(state.get("entity_id") or "")
 
     # Collect all assertions from root causes
     assertions: list[Assertion] = []
@@ -409,7 +409,7 @@ def commentary_node(
 
     draft = CommentaryDraft(
         sections=sections,
-        generated_at=datetime.now(timezone.utc).isoformat(),
+        generated_at=datetime.now(UTC).isoformat(),
         version=1,
         status="draft",
     )

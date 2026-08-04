@@ -13,13 +13,13 @@ Test design follows project conventions:
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from collections.abc import Callable
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Any, Callable
+from typing import Any
+from unittest.mock import MagicMock
 
 import pytest
-
 
 # =============================================================================
 # Helper factories (shared across test classes)
@@ -95,10 +95,8 @@ class TestFinanceAnalysisWorkflow:
     # ── Fixtures ──────────────────────────────────────────────────────────
 
     @pytest.fixture
-    def mock_sheets_adapter(self):
+    def mock_sheets_adapter(self) -> MagicMock:
         """Return a mock ``SheetsAdapter``."""
-        from unittest.mock import MagicMock
-
         adapter = MagicMock()
         adapter.read_range.return_value = [
             ["account_id", "account_name", "actual", "budget"],
@@ -113,10 +111,8 @@ class TestFinanceAnalysisWorkflow:
         return adapter
 
     @pytest.fixture
-    def mock_context_builder(self):
+    def mock_context_builder(self) -> MagicMock:
         """Return a mock ``ContextBuilder``."""
-        from unittest.mock import MagicMock
-
         builder = MagicMock()
         ctx = MagicMock()
         ctx.company_id = "CF001"
@@ -131,10 +127,8 @@ class TestFinanceAnalysisWorkflow:
         return builder
 
     @pytest.fixture
-    def mock_variance_engine(self):
+    def mock_variance_engine(self) -> MagicMock:
         """Return a mock ``MaterialityEngine`` (variance engine)."""
-        from unittest.mock import MagicMock
-
         engine = MagicMock()
         engine.assess_batch.return_value = []
         engine.get_material_variances.return_value = [
@@ -143,20 +137,16 @@ class TestFinanceAnalysisWorkflow:
         return engine
 
     @pytest.fixture
-    def mock_evidence_engine(self):
+    def mock_evidence_engine(self) -> MagicMock:
         """Return a mock ``EvidenceEngine``."""
-        from unittest.mock import MagicMock
-
         engine = MagicMock()
         engine.collect.return_value = []
         engine.coverage_score.return_value = Decimal("0.85")
         return engine
 
     @pytest.fixture
-    def mock_llm_client(self):
+    def mock_llm_client(self) -> MagicMock:
         """Return a mock ``LLMClient`` that returns a valid Pydantic model."""
-        from unittest.mock import MagicMock
-
         from pydantic import BaseModel
 
         class FakeOutput(BaseModel):
@@ -173,10 +163,8 @@ class TestFinanceAnalysisWorkflow:
         return client
 
     @pytest.fixture
-    def mock_validation_suite(self):
+    def mock_validation_suite(self) -> MagicMock:
         """Return a mock ``ValidationSuite`` that passes everything."""
-        from unittest.mock import MagicMock
-
         suite = MagicMock()
         report = MagicMock()
         report.passed = True
@@ -186,29 +174,23 @@ class TestFinanceAnalysisWorkflow:
         return suite
 
     @pytest.fixture
-    def mock_report_builder(self):
+    def mock_report_builder(self) -> MagicMock:
         """Return a mock ``ReportBuilder`` that returns a valid ``BoardReport``."""
-        from unittest.mock import MagicMock
-
         builder = MagicMock()
         builder.build.return_value = _make_board_report()
         builder.finalize.return_value = _make_board_report(is_draft=False)
         return builder
 
     @pytest.fixture
-    def mock_markdown_exporter(self):
+    def mock_markdown_exporter(self) -> MagicMock:
         """Return a mock ``MarkdownExporter``."""
-        from unittest.mock import MagicMock
-
         exporter = MagicMock()
         exporter.export.return_value = "# Q2 2026 Board Report\n\nExecutive summary..."
         return exporter
 
     @pytest.fixture
-    def mock_prompt_registry(self):
+    def mock_prompt_registry(self) -> MagicMock:
         """Return a mock ``PromptRegistry`` with registered prompts."""
-        from unittest.mock import MagicMock
-
         registry = MagicMock()
         registry.has.return_value = True
         registry.get.return_value = MagicMock(
@@ -218,10 +200,8 @@ class TestFinanceAnalysisWorkflow:
         return registry
 
     @pytest.fixture
-    def mock_prompt_renderer(self):
+    def mock_prompt_renderer(self) -> MagicMock:
         """Return a mock ``PromptRenderer``."""
-        from unittest.mock import MagicMock
-
         renderer = MagicMock()
         renderer.render.return_value = "Rendered prompt text."
         return renderer
@@ -229,17 +209,17 @@ class TestFinanceAnalysisWorkflow:
     @pytest.fixture
     def workflow(
         self,
-        mock_sheets_adapter,
-        mock_context_builder,
-        mock_variance_engine,
-        mock_evidence_engine,
-        mock_llm_client,
-        mock_validation_suite,
-        mock_report_builder,
-        mock_markdown_exporter,
-        mock_prompt_registry,
-        mock_prompt_renderer,
-    ):
+        mock_sheets_adapter: MagicMock,
+        mock_context_builder: MagicMock,
+        mock_variance_engine: MagicMock,
+        mock_evidence_engine: MagicMock,
+        mock_llm_client: MagicMock,
+        mock_validation_suite: MagicMock,
+        mock_report_builder: MagicMock,
+        mock_markdown_exporter: MagicMock,
+        mock_prompt_registry: MagicMock,
+        mock_prompt_renderer: MagicMock,
+    ) -> Any:
         """Build a ``FinanceAnalysisWorkflow`` with all mocked dependencies."""
         from finance.workflows import FinanceAnalysisWorkflow
 
@@ -258,7 +238,9 @@ class TestFinanceAnalysisWorkflow:
 
     # ── Tests ─────────────────────────────────────────────────────────────
 
-    def test_workflow_creates_report(self, workflow, mock_sheets_adapter):
+    def test_workflow_creates_report(
+        self, workflow: Any, mock_sheets_adapter: MagicMock
+    ) -> None:
         """Full pipeline returns a ``WorkflowResult`` with a valid ``BoardReport``."""
         from finance.workflows import WorkflowResult
 
@@ -280,10 +262,10 @@ class TestFinanceAnalysisWorkflow:
 
     def test_workflow_with_partial_data(
         self,
-        workflow,
-        mock_variance_engine,
-        mock_evidence_engine,
-    ):
+        workflow: Any,
+        mock_variance_engine: MagicMock,
+        mock_evidence_engine: MagicMock,
+    ) -> None:
         """Workflow still produces a valid report when variance data is sparse."""
         mock_variance_engine.get_material_variances.return_value = []
         mock_evidence_engine.collect.return_value = []
@@ -301,7 +283,9 @@ class TestFinanceAnalysisWorkflow:
         assert isinstance(result.report.material_variances, list)
         assert len(result.report.material_variances) == 0
 
-    def test_workflow_fallback_on_llm_failure(self, workflow, mock_llm_client):
+    def test_workflow_fallback_on_llm_failure(
+        self, workflow: Any, mock_llm_client: MagicMock
+    ) -> None:
         """When the LLM fails, the workflow falls back to deterministic analysis.
 
         The fallback should still produce a valid ``BoardReport`` with
@@ -332,10 +316,10 @@ class TestFinanceAnalysisWorkflow:
 
     def test_workflow_respects_materiality(
         self,
-        workflow,
-        mock_variance_engine,
-        mock_report_builder,
-    ):
+        workflow: Any,
+        mock_variance_engine: MagicMock,
+        mock_report_builder: MagicMock,
+    ) -> None:
         """Only material variances appear in the final ``BoardReport``.
 
         Non-material variances are filtered before the report is assembled.
@@ -344,15 +328,6 @@ class TestFinanceAnalysisWorkflow:
             account_id="4010",
             account_name="Consulting Revenue",
             is_material=True,
-        )
-        non_material_variance = _make_variance(
-            account_id="6010",
-            account_name="Office Supplies",
-            actual=Decimal("5200"),
-            budget=Decimal("5000"),
-            variance_pct=Decimal("4.0"),
-            is_material=False,
-            direction="adverse",
         )
 
         # Both variances returned from engine, but only material ones
@@ -379,7 +354,7 @@ class TestFinanceAnalysisWorkflow:
             "Non-material variance leaked into the report"
         )
 
-    def test_workflow_pipeline_state(self, workflow):
+    def test_workflow_pipeline_state(self, workflow: Any) -> None:
         """Workflow tracks pipeline state through each phase.
 
         The ``WorkflowResult.steps`` dict should contain an entry for
@@ -430,7 +405,7 @@ class TestFinanceAnalysisWorkflow:
             sr.status == "success" for sr in result.steps.values()
         ), "Not all steps succeeded in happy-path pipeline"
 
-    def test_workflow_custom_steps(self):
+    def test_workflow_custom_steps(self) -> None:
         """Workflow supports custom step hooks injected at construction.
 
         Custom steps are executed as part of the pipeline alongside the
@@ -473,7 +448,7 @@ class TestFinanceAnalysisWorkflow:
         assert "custom_audit_log" in result.steps
         assert result.steps["custom_audit_log"].status == "success"
 
-    def test_workflow_run_accepts_overrides(self, workflow):
+    def test_workflow_run_accepts_overrides(self, workflow: Any) -> None:
         """``run()`` keyword arguments override default dependencies per-call.
 
         This allows per-invocation configuration like changing the
@@ -497,12 +472,12 @@ class TestFinanceAnalysisWorkflow:
         assert result.success is True
         override_adapter.sync.assert_called_once()
 
-    def test_workflow_raises_on_missing_required_config(self):
+    def test_workflow_raises_on_missing_required_config(self) -> None:
         """Workflow constructor raises when required dependencies are absent."""
         from finance.workflows import FinanceAnalysisWorkflow
 
         with pytest.raises(TypeError):
-            FinanceAnalysisWorkflow(
+            FinanceAnalysisWorkflow(  # type: ignore[call-arg]
                 # Intentionally missing required args
             )
 
@@ -518,13 +493,13 @@ class TestWorkflowStep:
     # ── Fixtures ──────────────────────────────────────────────────────────
 
     @pytest.fixture
-    def successful_fn(self) -> Callable:
+    def successful_fn(self) -> Callable[..., Any]:
         def fn(**kwargs: Any) -> dict[str, Any]:
             return {"processed": True, "data": kwargs.get("data")}
         return fn
 
     @pytest.fixture
-    def failing_fn(self) -> Callable:
+    def failing_fn(self) -> Callable[..., Any]:
         def fn(**kwargs: Any) -> dict[str, Any]:
             msg = kwargs.get("msg", "Step execution failed")
             raise RuntimeError(msg)
@@ -532,7 +507,7 @@ class TestWorkflowStep:
 
     # ── Tests ─────────────────────────────────────────────────────────────
 
-    def test_step_execution(self, successful_fn):
+    def test_step_execution(self, successful_fn: Callable[..., Any]) -> None:
         """``WorkflowStep.execute()`` returns a ``StepResult`` with success."""
         from finance.workflows import StepResult, WorkflowStep
 
@@ -545,7 +520,7 @@ class TestWorkflowStep:
         assert result.error is None
         assert result.duration_ms >= 0
 
-    def test_step_execution_with_failure(self, failing_fn):
+    def test_step_execution_with_failure(self, failing_fn: Callable[..., Any]) -> None:
         """``WorkflowStep`` returns a failed ``StepResult`` when ``fn`` raises."""
         from finance.workflows import StepResult, WorkflowStep
 
@@ -559,7 +534,7 @@ class TestWorkflowStep:
         assert "Something went wrong" in result.error
         assert result.duration_ms >= 0
 
-    def test_step_with_retry(self, successful_fn):
+    def test_step_with_retry(self, successful_fn: Callable[..., Any]) -> None:
         """``WorkflowStep`` retries on failure per ``retry_count``."""
         from unittest.mock import MagicMock
 
@@ -580,7 +555,7 @@ class TestWorkflowStep:
             f"Expected 2 calls (1 failure + 1 retry), got {fn.call_count}"
         )
 
-    def test_step_retry_exhaustion(self):
+    def test_step_retry_exhaustion(self) -> None:
         """``WorkflowStep`` returns failure after exhausting all retries."""
         from unittest.mock import MagicMock
 
@@ -598,7 +573,7 @@ class TestWorkflowStep:
         # 1 original + 2 retries = 3 total attempts
         assert fn.call_count == 3
 
-    def test_step_skip_condition(self, successful_fn):
+    def test_step_skip_condition(self, successful_fn: Callable[..., Any]) -> None:
         """``WorkflowStep`` is skipped when ``skip_condition`` evaluates to True."""
         from finance.workflows import StepResult, WorkflowStep
 
@@ -618,7 +593,7 @@ class TestWorkflowStep:
         executed = step.execute(data="test", skip=False)
         assert executed.status == "success"
 
-    def test_step_skip_condition_with_no_args(self, successful_fn):
+    def test_step_skip_condition_with_no_args(self, successful_fn: Callable[..., Any]) -> None:
         """``skip_condition`` receives no keyword args — must not crash."""
         from finance.workflows import WorkflowStep
 
@@ -631,7 +606,7 @@ class TestWorkflowStep:
         result = step.execute(data="whatever")
         assert result.status == "success"
 
-    def test_step_execution_records_duration(self, successful_fn):
+    def test_step_execution_records_duration(self, successful_fn: Callable[..., Any]) -> None:
         """``StepResult.duration_ms`` reflects actual execution time."""
         import time
 
@@ -649,7 +624,7 @@ class TestWorkflowStep:
             f"Expected at least 10ms, got {result.duration_ms}"
         )
 
-    def test_step_result_defaults(self):
+    def test_step_result_defaults(self) -> None:
         """``StepResult`` provides sensible defaults for optional fields."""
         from finance.workflows import StepResult
 
@@ -657,7 +632,7 @@ class TestWorkflowStep:
         assert result.error is None
         assert result.duration_ms == 0.0
 
-    def test_workflow_result_defaults(self):
+    def test_workflow_result_defaults(self) -> None:
         """``WorkflowResult`` provides sensible defaults for optional fields."""
         from finance.workflows import WorkflowResult
 
@@ -666,7 +641,7 @@ class TestWorkflowStep:
         assert hasattr(result, "steps"), "WorkflowResult missing 'steps' attribute"
         assert result.success is True
 
-    def test_step_retry_preserves_kwargs(self):
+    def test_step_retry_preserves_kwargs(self) -> None:
         """``WorkflowStep`` passes the same kwargs on every retry attempt."""
         from unittest.mock import MagicMock
 
@@ -687,7 +662,7 @@ class TestWorkflowStep:
             assert call[1].get("user") == "alice"
             assert call[1].get("action") == "analyze"
 
-    def test_step_skipped_when_condition_raises(self):
+    def test_step_skipped_when_condition_raises(self) -> None:
         """A ``skip_condition`` that raises is treated as False (step runs)."""
         from finance.workflows import WorkflowStep
 

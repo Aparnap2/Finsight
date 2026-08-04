@@ -11,7 +11,8 @@ TEMPLATE = """You are an FP&A analyst preparing an executive summary for company
 - Period: {period_id}
 
 ## Financial Overview
-You have access to {kpi_count} KPI values and {material_variance_count} material variances for this period.
+You have access to {kpi_count} KPI values and {material_variance_count} material \
+variances for this period.
 
 ## Instructions
 1. Write a concise executive summary highlighting the key financial results.

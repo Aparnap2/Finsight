@@ -8,6 +8,7 @@ datasets.
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 
 import pytest
 
@@ -42,13 +43,14 @@ class TestRegistryEntry:
 
     def test_extra_fields_forbidden(self) -> None:
         """Unknown fields are rejected."""
+        kwargs: dict[str, Any] = {
+            "id": "formula:test",
+            "kind": "formula",
+            "owner": "FP&A Team",
+        }
+        kwargs["bogus"] = "x"
         with pytest.raises(ValueError):
-            RegistryEntry(
-                id="formula:test",
-                kind="formula",
-                owner="FP&A Team",
-                bogus="x",
-            )
+            RegistryEntry(**kwargs)
 
     def test_unknown_kind_rejected(self) -> None:
         """Kind must come from the canonical set."""

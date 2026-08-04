@@ -1,6 +1,7 @@
 """Tools for querying vendor invoice / spend data."""
 
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import Engine, create_engine, func, select
 from sqlalchemy.orm import Session
@@ -66,7 +67,7 @@ def query_vendor_spend(
             stmt = stmt.where(VendorInvoice.category == category)
 
         rows = session.execute(stmt).scalars().all()
-        data = [
+        data: list[dict[str, Any]] = [
             {
                 "id": str(r.id),
                 "entity_id": str(r.entity_id),
@@ -85,10 +86,10 @@ def query_vendor_spend(
         totals_by_vendor: dict[str, float] = {}
         totals_by_category: dict[str, float] = {}
         for r in data:
-            v = r["vendor_name"]
-            totals_by_vendor[v] = totals_by_vendor.get(v, 0) + r["amount"]
-            cat = r["category"] or "Uncategorized"
-            totals_by_category[cat] = totals_by_category.get(cat, 0) + r["amount"]
+            v = str(r["vendor_name"])
+            totals_by_vendor[v] = totals_by_vendor.get(v, 0) + float(r["amount"])
+            cat = str(r["category"] or "Uncategorized")
+            totals_by_category[cat] = totals_by_category.get(cat, 0) + float(r["amount"])
 
         # ---- coverage: vendors invoiced / total vendors on record ----
         vendors_found = (

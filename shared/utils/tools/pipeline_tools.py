@@ -1,6 +1,7 @@
 """Tools for querying sales-pipeline data."""
 
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import Engine, create_engine, func, select
 from sqlalchemy.orm import Session
@@ -66,7 +67,7 @@ def query_sales_pipeline(
             stmt = stmt.where(SalesPipeline.region == region)
 
         rows = session.execute(stmt).scalars().all()
-        data = [
+        data: list[dict[str, Any]] = [
             {
                 "id": str(r.id),
                 "entity_id": str(r.entity_id),
@@ -87,10 +88,8 @@ def query_sales_pipeline(
         # Aggregate: pipeline value by stage
         value_by_stage: dict[str, float] = {}
         for r in data:
-            stage = r["stage"] or "Unknown"
-            value_by_stage[stage] = value_by_stage.get(stage, 0) + r["amount"]
-
-        total_pipeline_value = sum(r["amount"] for r in data)
+            stage = str(r["stage"] or "Unknown")
+            value_by_stage[stage] = value_by_stage.get(stage, 0) + float(r["amount"])
 
         # ---- coverage: deals in period / total distinct deals across all periods ----
         deals_found = (

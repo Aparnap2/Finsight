@@ -14,7 +14,7 @@ import pandera.polars as pa
 from pandera.typing.polars import Series
 
 
-class FinancialDatasetSchema(pa.DataFrameModel):  # type: ignore[misc]
+class FinancialDatasetSchema(pa.DataFrameModel):
     """Standard financial dataset: account-level actuals/budget lines.
 
     Columns:
@@ -34,7 +34,7 @@ class FinancialDatasetSchema(pa.DataFrameModel):  # type: ignore[misc]
     )
 
 
-class VarianceInputSchema(pa.DataFrameModel):  # type: ignore[misc]
+class VarianceInputSchema(pa.DataFrameModel):
     """Schema for variance analysis input rows.
 
     Columns:

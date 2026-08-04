@@ -1,5 +1,7 @@
 """Tests for python_runtime.importers.csv_importer — CSVImporter."""
 
+from pathlib import Path
+
 import polars as pl
 import pytest
 
@@ -38,7 +40,9 @@ class TestCSVImporter:
         amounts = dataset.data["amount"].to_list()
         assert amounts == [1000.0, 2500.0, 0.0, 500.0, 7500.0]
 
-    def test_import_with_has_header_false(self, tmp_path, sample_dataframe) -> None:
+    def test_import_with_has_header_false(
+        self, tmp_path: Path, sample_dataframe: pl.DataFrame
+    ) -> None:
         """CSV without header row — column names become default."""
         path = tmp_path / "no_header.csv"
         sample_dataframe.write_csv(path, include_header=False)
@@ -63,7 +67,7 @@ class TestCSVImporter:
         with pytest.raises(FileNotFoundError, match="not found"):
             self.importer.import_data("/nonexistent/path.csv")
 
-    def test_empty_csv(self, tmp_path) -> None:
+    def test_empty_csv(self, tmp_path: Path) -> None:
         """Empty CSV (header only) produces 0-row dataset."""
         path = tmp_path / "empty.csv"
         with open(path, "w") as f:
@@ -79,5 +83,5 @@ class TestCSVImporter:
 
     def test_kwargs_passed_to_polars(self, sample_csv_path: str) -> None:
         """Additional kwargs are passed through to pl.read_csv."""
-        dataset = self.importer.import_data(sample_csv_path, null_values=["N/A"])
+        dataset = self.importer.import_data(sample_csv_path, null_values="N/A")
         assert dataset.row_count == 5

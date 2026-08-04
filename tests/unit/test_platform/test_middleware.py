@@ -27,8 +27,8 @@ class FakeSession:
     def __enter__(self) -> "FakeSession":
         return self
 
-    def __exit__(self, *exc: object) -> bool:
-        return False
+    def __exit__(self, *exc: object) -> None:
+        """Exit the context manager without suppressing exceptions."""
 
     def execute(self, statement: Any, params: dict[str, str] | None = None) -> None:
         self.executed.append((str(statement), params or {}))

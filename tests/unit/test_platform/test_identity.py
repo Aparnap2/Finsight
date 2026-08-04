@@ -132,7 +132,7 @@ class TestFrozenModels:
     @staticmethod
     def _assert_frozen(model: BaseModel) -> None:
         with pytest.raises(ValidationError):
-            model.id = uuid4()
+            setattr(model, "id", uuid4())  # noqa: B010 — runtime frozen validation
 
     def test_all_identity_models_are_frozen(self) -> None:
         models: list[BaseModel] = [

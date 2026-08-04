@@ -174,4 +174,4 @@ class TestEventContract:
             producer="CSV Connector",
         )
         with pytest.raises(ValidationError):
-            event.payload = {"x": 1}
+            setattr(event, "payload", {"x": 1})  # noqa: B010 — runtime frozen validation
