@@ -1,6 +1,12 @@
+"""Application settings loaded from environment variables only."""
+
+import json
+import logging
 from functools import lru_cache
 
 from pydantic_settings import BaseSettings
+
+logger = logging.getLogger(__name__)
 
 
 class Settings(BaseSettings):
@@ -25,8 +31,34 @@ class Settings(BaseSettings):
     langfuse_host: str = "https://cloud.langfuse.com"
     app_env: str = "development"
     log_level: str = "INFO"
+    stripe_webhook_secret: str = ""
+    stripe_tenant_map: str = ""
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+
+    @property
+    def stripe_tenant_mapping(self) -> dict[str, object]:
+        """Parse the trusted stripe_account -> tenant_id map (env-only).
+
+        The ``STRIPE_TENANT_MAP`` env var holds a JSON object such as
+        ``{"acct_123": "tenant-acme"}``. Values are normally tenant-id
+        strings; a list value marks the account as ambiguous. Returns an
+        empty mapping when unset; logs a warning and returns empty when
+        the JSON is invalid (callers then quarantine every delivery
+        instead of guessing a tenant).
+        """
+        raw = self.stripe_tenant_map.strip()
+        if not raw:
+            return {}
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            logger.warning("STRIPE_TENANT_MAP is not valid JSON; using empty map.")
+            return {}
+        if not isinstance(parsed, dict):
+            logger.warning("STRIPE_TENANT_MAP must be a JSON object; using empty map.")
+            return {}
+        return parsed
 
 
 @lru_cache

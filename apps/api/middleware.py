@@ -75,6 +75,13 @@ class TenantAuthMiddleware(BaseHTTPMiddleware):
         path = request.url.path
         if path == "/health" or path.endswith("/health"):
             return await call_next(request)
+        if path == "/webhooks/stripe" or path.startswith("/webhooks/"):
+            # Commit 2: Stripe webhook ingest authenticates via HMAC-SHA256
+            # over the raw body in apps/api/webhooks.py, not via user
+            # TenantAuth headers. Bypass the header gate here; tenant
+            # isolation is enforced per-delivery through the trusted
+            # stripe_account map plus the Postgres RLS tenant context.
+            return await call_next(request)
 
         tenant_id = request.headers.get("X-Tenant-ID")
         role = request.headers.get("X-Role")
