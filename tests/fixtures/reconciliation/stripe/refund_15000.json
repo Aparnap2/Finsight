@@ -1,0 +1,13 @@
+{
+  "currency": "USD",
+  "fee_minor": 0,
+  "gross_minor": 5000000,
+  "idempotency_key": "stripe-flagship-001-refund",
+  "occurred_at": "2026-05-02T12:00:00Z",
+  "payment_id": "pi-flagship-charge",
+  "provider": "stripe",
+  "provider_event_id": "evt-flagship-refund",
+  "refund_minor": 1500000,
+  "status": "PARTIALLY_REFUNDED",
+  "tenant_id": "tenant-acme"
+}

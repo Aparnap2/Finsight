@@ -1,0 +1,12 @@
+{
+  "created": 1746105600,
+  "data": {
+    "amount_minor": 5000000,
+    "currency": "USD",
+    "payment_id": "pi-flagship-charge"
+  },
+  "event_id": "evt-flagship-charge",
+  "event_type": "charge.succeeded",
+  "idempotency_key": "stripe-flagship-001",
+  "tenant_id": "tenant-acme"
+}

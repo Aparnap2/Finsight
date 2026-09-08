@@ -1,0 +1,10 @@
+{
+  "created": 1746105600,
+  "data": {
+    "amount_minor": 5000000.0,
+    "currency": "USD"
+  },
+  "event_type": "charge.succeeded",
+  "idempotency_key": "",
+  "tenant_id": "tenant-acme"
+}
