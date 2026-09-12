@@ -4,6 +4,12 @@
 
 ---
 
+
+<img width="1536" height="1024" alt="ChatGPT Image Sep 12, 2026, 09_33_04 AM" src="https://github.com/user-attachments/assets/08a60c2e-dff8-4a9f-840d-baad6811ff4c" />
+
+
+
+
 ## Engagement Summary
 
 | Role | Duration | Delivery |
