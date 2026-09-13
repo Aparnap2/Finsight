@@ -131,9 +131,7 @@ def _assert_no_cf001(engine: Any) -> None:
 class TestValidAccept:
     """A valid new envelope is accepted with 202 and exactly one row."""
 
-    def test_valid_delivery_returns_202_and_persists(
-        self, client: tuple[TestClient, Any]
-    ) -> None:
+    def test_valid_delivery_returns_202_and_persists(self, client: tuple[TestClient, Any]) -> None:
         """Arrange a signed envelope; Act POST; Assert 202 + one RECEIVED row."""
         # Arrange: signed bytes for a known tenant account.
         http, engine = client
@@ -192,9 +190,12 @@ class TestIdempotencyConflict:
         # Arrange: original delivery persists.
         http, engine = client
         original = _raw("evt_conflict_001")
-        assert http.post(
-            "/webhooks/stripe", content=original, headers=_signed_headers(original)
-        ).status_code == 202
+        assert (
+            http.post(
+                "/webhooks/stripe", content=original, headers=_signed_headers(original)
+            ).status_code
+            == 202
+        )
         stored_raw = _events(engine)[0].raw
         # Act: same event id with different payload bytes (fresh valid signature).
         tampered = _raw("evt_conflict_001", extra={"tampered": True})
@@ -211,13 +212,12 @@ class TestIdempotencyConflict:
         audits = _audits(engine, "IDEMPOTENCY_CONFLICT")
         assert len(audits) == 1
         assert audits[0].event_data["event_id"] == "evt_conflict_001"
-        assert audits[0].event_data["stored_fingerprint"] != (
-            audits[0].event_data["incoming_fingerprint"]
+        assert (
+            audits[0].event_data["stored_fingerprint"]
+            != (audits[0].event_data["incoming_fingerprint"])
         )
         # Assert: faithful replay of the original still dedups to 200.
-        replay = http.post(
-            "/webhooks/stripe", content=original, headers=_signed_headers(original)
-        )
+        replay = http.post("/webhooks/stripe", content=original, headers=_signed_headers(original))
         assert replay.status_code == 200
         assert len(_events(engine)) == 1
         _assert_no_cf001(engine)
@@ -347,9 +347,7 @@ class TestAmbiguousTenant:
         assert len(_audits(engine, "WEBHOOK_QUARANTINED")) == 1
         _assert_no_cf001(engine)
 
-    def test_conflicting_envelope_accounts_return_400(
-        self, client: tuple[TestClient, Any]
-    ) -> None:
+    def test_conflicting_envelope_accounts_return_400(self, client: tuple[TestClient, Any]) -> None:
         """Top-level vs nested accounts disagreeing is ambiguous."""
         # Arrange: envelope names two different candidate accounts.
         http, engine = client
@@ -399,9 +397,7 @@ class TestMalformedEnvelope:
         assert _events(engine) == []
         assert _audits(engine) == []
 
-    def test_non_object_body_returns_400_without_rows(
-        self, client: tuple[TestClient, Any]
-    ) -> None:
+    def test_non_object_body_returns_400_without_rows(self, client: tuple[TestClient, Any]) -> None:
         """A JSON array body is a malformed envelope."""
         # Arrange: signed non-object JSON.
         http, engine = client
@@ -416,9 +412,7 @@ class TestMalformedEnvelope:
 class TestNoInMemoryIdempotency:
     """Idempotency is DB-only: two clients sharing the DB dedup correctly."""
 
-    def test_two_clients_share_only_the_database(
-        self, client: tuple[TestClient, Any]
-    ) -> None:
+    def test_two_clients_share_only_the_database(self, client: tuple[TestClient, Any]) -> None:
         """Arrange two clients on one app; Act split deliver/replay; Assert 1 row."""
         # Arrange: a second client bound to the same app (no shared memory).
         http, engine = client
@@ -440,9 +434,7 @@ class TestNoInMemoryIdempotency:
 class TestRlsDialectGuard:
     """Postgres RLS context is set on Postgres and skipped elsewhere."""
 
-    def test_sqlite_delivery_skips_rls_and_succeeds(
-        self, client: tuple[TestClient, Any]
-    ) -> None:
+    def test_sqlite_delivery_skips_rls_and_succeeds(self, client: tuple[TestClient, Any]) -> None:
         """Arrange SQLite session; Act set tenant context; Assert no raise."""
         # Arrange: a raw SQLite session from the test engine.
         _, engine = client
@@ -452,6 +444,7 @@ class TestRlsDialectGuard:
         # Assert: reached here without raising (guard held); ingest also passes.
         http, _ = client
         raw = _raw("evt_rls_001")
-        assert http.post(
-            "/webhooks/stripe", content=raw, headers=_signed_headers(raw)
-        ).status_code == 202
+        assert (
+            http.post("/webhooks/stripe", content=raw, headers=_signed_headers(raw)).status_code
+            == 202
+        )
