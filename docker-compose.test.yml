@@ -1,0 +1,67 @@
+# Minimal gated compose for `make test-integration` and local parity with
+# .github/workflows/integration.yml.
+# Scope: postgres:17-alpine + app (healthcheck gate) + test runner ONLY.
+# No MiniStack services here: no redis, qdrant, kafka/redpanda, temporal,
+# jaeger, or litellm (no queue seam exists). Do NOT extend this file with
+# dev-stack services — those live in docker-compose.yml.
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: finsight
+      POSTGRES_USER: finsight
+      POSTGRES_PASSWORD: finsight
+    # No published ports: app/test reach postgres over the compose network,
+    # and this avoids clashing with a locally running dev stack on 5432.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U finsight"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://finsight:finsight@postgres:5432/finsight
+      - PYTHONPATH=/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # Same urllib pattern as the Dockerfile HEALTHCHECK; path is /api/v1/health
+    # because the router is mounted with prefix /api/v1 (see apps/api/main.py).
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')\""]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    # The runtime image does not COPY tests/, so mount them read-only.
+    volumes:
+      - ./tests:/app/tests:ro
+    environment:
+      # Integration suites honour FINSIGHT_TEST_DSN (default: localhost);
+      # inside the compose network the host is the postgres service.
+      - FINSIGHT_TEST_DSN=postgresql+psycopg://finsight:finsight@postgres:5432/finsight
+      - PYTHONPATH=/app
+    command: >
+      python -m pytest tests/integration tests/failure tests/e2e -q -rs
+    depends_on:
+      app:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 512M
