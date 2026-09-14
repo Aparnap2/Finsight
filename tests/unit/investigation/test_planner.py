@@ -525,3 +525,402 @@ def test_provider_independence_fake_and_groq_yield_equal_plans(
     fake_planner, _ = _fake_planner(dict(payload))
     groq_planner, _ = _groq_planner(dict(payload))
     assert fake_planner.plan(request) == groq_planner.plan(request)
+
+
+# ---------------------------------------------------------------------------
+# D1: Tool Calling — additional gap tests
+# ---------------------------------------------------------------------------
+
+
+def test_subset_of_capabilities_selected(no_sockets: None) -> None:
+    """Arrange plan with only 2 of 5 capabilities; Act; Assert accepted."""
+    del no_sockets
+    payload = _valid_payload()
+    payload["capability_calls"] = [
+        {"capability": "get_stripe_payment", "args": {"payment_id": "p1"}, "order_index": 0},
+        {"capability": "search_gmail", "args": {"query": "refund"}, "order_index": 1},
+    ]
+    planner, _ = _fake_planner(payload)
+    plan = planner.plan(_make_request())
+    assert len(plan.capability_calls) == 2
+
+
+def test_non_string_args_value_rejected(no_sockets: None) -> None:
+    """Arrange args with int value; Act; Assert PlanRejectedError."""
+    del no_sockets
+    payload = _valid_payload()
+    payload["capability_calls"] = [
+        {"capability": "get_stripe_payment", "args": {"payment_id": 123}, "order_index": 0},
+    ]
+    planner, _ = _fake_planner(payload)
+    with pytest.raises(PlannerError):
+        planner.plan(_make_request())
+
+
+def test_order_index_mismatch_rejected_by_pydantic(no_sockets: None) -> None:
+    """Arrange wrong order_index (2 instead of 0); Act; Assert PlannerError."""
+    del no_sockets
+    payload = _valid_payload()
+    payload["capability_calls"] = [
+        {"capability": "get_stripe_payment", "args": {"payment_id": "p1"}, "order_index": 2},
+    ]
+    planner, _ = _fake_planner(payload)
+    with pytest.raises(PlannerError):
+        planner.plan(_make_request())
+
+
+def test_empty_capability_calls_rejected(no_sockets: None) -> None:
+    """Arrange zero capability calls; Act; Assert PlannerError."""
+    del no_sockets
+    payload = _valid_payload()
+    payload["capability_calls"] = []
+    planner, _ = _fake_planner(payload)
+    with pytest.raises(PlannerError):
+        planner.plan(_make_request())
+
+
+def test_blank_args_key_rejected_by_pydantic(no_sockets: None) -> None:
+    """Arrange blank args key; Act; Assert PlannerError."""
+    del no_sockets
+    payload = _valid_payload()
+    payload["capability_calls"] = [
+        {"capability": "get_stripe_payment", "args": {"": "value"}, "order_index": 0},
+    ]
+    planner, _ = _fake_planner(payload)
+    with pytest.raises(PlannerError):
+        planner.plan(_make_request())
+
+
+def test_all_five_capabilities_in_order(no_sockets: None) -> None:
+    """Arrange all 5 allowlisted capabilities; Act; Assert dense 0-4 ordering."""
+    del no_sockets
+    payload = _valid_payload()
+    payload["capability_calls"] = [
+        {"capability": "get_stripe_payment", "args": {"payment_id": "p1"}, "order_index": 0},
+        {"capability": "get_stripe_refunds", "args": {"payment_id": "p1"}, "order_index": 1},
+        {"capability": "get_qb_transaction", "args": {"entry_id": "e1"}, "order_index": 2},
+        {"capability": "get_expected_state", "args": {"payment_id": "p1"}, "order_index": 3},
+        {"capability": "search_gmail", "args": {"query": "receipt"}, "order_index": 4},
+    ]
+    planner, _ = _fake_planner(payload)
+    plan = planner.plan(_make_request())
+    assert len(plan.capability_calls) == 5
+    assert [c.order_index for c in plan.capability_calls] == [0, 1, 2, 3, 4]
+
+
+# ---------------------------------------------------------------------------
+# D2: Hypothesis Quality — additional gap tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "hypothesis",
+    [
+        "Possible refund posting lag between processor and ledger.",
+        "Suspected timing difference in settlement records.",
+        "May be a fee calculation discrepancy.",
+    ],
+    ids=["possible", "suspected", "may-be"],
+)
+def test_hedging_hypothesis_accepted(no_sockets: None, hypothesis: str) -> None:
+    """Arrange hedging wording; Act; Assert plan accepted."""
+    del no_sockets
+    planner, _ = _fake_planner(_valid_payload(hypothesis=hypothesis))
+    plan = planner.plan(_make_request())
+    assert plan.hypothesis_text == hypothesis
+
+
+def test_escalation_true_accepted(no_sockets: None) -> None:
+    """Arrange escalation=True; Act; Assert accepted with escalation flag."""
+    del no_sockets
+    payload = _valid_payload()
+    payload["escalation"] = True
+    planner, _ = _fake_planner(payload)
+    plan = planner.plan(_make_request())
+    assert plan.escalation is True
+
+
+def test_hypothesis_at_max_length_accepted(no_sockets: None) -> None:
+    """Arrange hypothesis at exactly MAX_HYPOTHESIS_CHARS; Act; Assert accepted."""
+    del no_sockets
+    hypothesis = "h" * MAX_HYPOTHESIS_CHARS
+    planner, _ = _fake_planner(_valid_payload(hypothesis=hypothesis))
+    plan = planner.plan(_make_request())
+    assert len(plan.hypothesis_text) == MAX_HYPOTHESIS_CHARS
+
+
+def test_hypothesis_one_over_max_rejected(no_sockets: None) -> None:
+    """Arrange hypothesis at MAX+1 chars; Act; Assert PlannerError."""
+    del no_sockets
+    hypothesis = "h" * (MAX_HYPOTHESIS_CHARS + 1)
+    planner, _ = _fake_planner(_valid_payload(hypothesis=hypothesis))
+    with pytest.raises(PlannerError):
+        planner.plan(_make_request())
+
+
+def test_causal_hypothesis_without_authority_accepted(no_sockets: None) -> None:
+    """Arrange causal verb without authoritative framing; Act; Assert accepted."""
+    del no_sockets
+    hypothesis = "Possible root cause is a refund posting delay."
+    planner, _ = _fake_planner(_valid_payload(hypothesis=hypothesis))
+    plan = planner.plan(_make_request())
+    assert "root cause" in plan.hypothesis_text.lower()
+
+
+# ---------------------------------------------------------------------------
+# D3: Recall / Evidence — additional gap tests
+# ---------------------------------------------------------------------------
+
+
+def test_multiple_evidence_ids_all_in_request(no_sockets: None) -> None:
+    """Arrange 2 evidence ids all in request; Act; Assert subset enforced."""
+    del no_sockets
+    payload = _valid_payload()
+    payload["evidence_required"] = ["ev-ledger-001", "ev-processor-002"]
+    request = _make_request(evidence_ids=("ev-ledger-001", "ev-processor-002"))
+    planner, _ = _fake_planner(payload)
+    plan = planner.plan(request)
+    assert set(plan.evidence_required) <= set(request.evidence_ids)
+
+
+def test_evidence_not_in_request_rejected(no_sockets: None) -> None:
+    """Arrange evidence id not in request; Act; Assert PlanRejectedError."""
+    del no_sockets
+    payload = _valid_payload(evidence_id="ev-unknown-999")
+    planner, _ = _fake_planner(payload)
+    with pytest.raises(PlanRejectedError, match="outside the request set"):
+        planner.plan(_make_request())
+
+
+def test_overlong_evidence_id_rejected_by_pydantic(no_sockets: None) -> None:
+    """Arrange evidence id >128 chars; Act; Assert PlannerError."""
+    del no_sockets
+    payload = _valid_payload(evidence_id="e" * 129)
+    planner, _ = _fake_planner(payload)
+    with pytest.raises(PlannerError):
+        planner.plan(_make_request())
+
+
+def test_blank_evidence_id_rejected_by_pydantic(no_sockets: None) -> None:
+    """Arrange blank evidence id; Act; Assert PlannerError."""
+    del no_sockets
+    payload = _valid_payload(evidence_id="   ")
+    planner, _ = _fake_planner(payload)
+    with pytest.raises(PlannerError):
+        planner.plan(_make_request())
+
+
+def test_duplicate_evidence_ids_rejected_by_pydantic(no_sockets: None) -> None:
+    """Arrange duplicate evidence ids; Act; Assert PlannerError."""
+    del no_sockets
+    payload = _valid_payload()
+    payload["evidence_required"] = ["ev-ledger-001", "ev-ledger-001"]
+    planner, _ = _fake_planner(payload)
+    with pytest.raises(PlannerError):
+        planner.plan(_make_request())
+
+
+# ---------------------------------------------------------------------------
+# D4: RAG / Context — additional gap tests
+# ---------------------------------------------------------------------------
+
+
+def test_empty_context_window_accepted(no_sockets: None) -> None:
+    """Arrange empty context; Act; Assert valid plan produced."""
+    del no_sockets
+    request = InvestigationRequest(
+        exception_id="exc-ctx-001",
+        exception_type="I-REFUND-LAG",
+        evidence_ids=("ev-ledger-001",),
+        context_window="",
+        round_budget=3,
+    )
+    planner, _ = _fake_planner(_valid_payload())
+    plan = planner.plan(request)
+    assert plan.hypothesis_text.strip()
+
+
+def test_max_context_window_accepted(no_sockets: None) -> None:
+    """Arrange 4000-char context; Act; Assert valid plan produced."""
+    del no_sockets
+    request = InvestigationRequest(
+        exception_id="exc-ctx-002",
+        exception_type="I-REFUND-LAG",
+        evidence_ids=("ev-ledger-001",),
+        context_window="x" * 4000,
+        round_budget=3,
+    )
+    planner, _ = _fake_planner(_valid_payload())
+    plan = planner.plan(request)
+    assert plan.hypothesis_text.strip()
+
+
+def test_context_truncation_flag_set(no_sockets: None) -> None:
+    """Arrange 5000-char context; Act; Assert truncation flag and prompt note."""
+    del no_sockets
+    request = InvestigationRequest(
+        exception_id="exc-ctx-003",
+        exception_type="I-REFUND-LAG",
+        evidence_ids=("ev-ledger-001",),
+        context_window="x" * 5000,
+        round_budget=3,
+    )
+    assert request.context_truncated is True
+    assert len(request.context_window) == 4000
+    prompt = render_investigation_prompt(request)
+    assert "truncated" in prompt.user_prompt.lower()
+
+
+def test_short_context_accepted(no_sockets: None) -> None:
+    """Arrange 10-char context; Act; Assert valid plan produced."""
+    del no_sockets
+    request = InvestigationRequest(
+        exception_id="exc-ctx-004",
+        exception_type="I-REFUND-LAG",
+        evidence_ids=("ev-ledger-001",),
+        context_window="short ctx",
+        round_budget=3,
+    )
+    planner, _ = _fake_planner(_valid_payload())
+    plan = planner.plan(request)
+    assert plan.hypothesis_text.strip()
+
+
+def test_prompt_determinism_same_request(no_sockets: None) -> None:
+    """Arrange two identical requests; Act render twice; Assert byte-identical."""
+    del no_sockets
+    request = _make_request()
+    first = render_investigation_prompt(request)
+    second = render_investigation_prompt(request)
+    assert first == second
+    assert first.user_prompt == second.user_prompt
+    assert first.system_prompt == second.system_prompt
+
+
+# ---------------------------------------------------------------------------
+# D9: Adversarial — additional gap tests (extending existing coverage)
+# ---------------------------------------------------------------------------
+
+
+def test_verifier_garbage_never_raises() -> None:
+    """Arrange garbage input; Act verify; Assert verdict returned, never raises."""
+    from agents.verification.verdict import Verdict
+    from agents.verification.verifier import Verifier
+
+    verifier = Verifier()
+    for garbage in [None, 123, "plan", [], {}, object()]:
+        verdict = verifier.verify(garbage, frozenset({"ev-001"}), 0)
+        assert isinstance(verdict, Verdict)
+
+
+def test_executor_forbidden_url_rejected() -> None:
+    """Arrange URL in args; Act execute; Assert ExecutorRejectedError."""
+    from agents.capabilities.capabilities import AdapterBundle
+    from agents.capabilities.executor import CapabilityExecutor
+    from agents.capabilities.types import ExecutorRejectedError
+    from finance.accounting.mock import MockQuickBooksAdapter
+    from finance.reconciliation.ledger_resolution import InMemoryLedgerRepository
+
+    bundle = AdapterBundle(
+        stripe_payments={},
+        qb_adapter=MockQuickBooksAdapter(),
+        ledger_repository=InMemoryLedgerRepository.from_records([]),
+        gmail_corpus={},
+    )
+    executor = CapabilityExecutor(bundle)
+    bad_plan = _raw_plan_from_calls(
+        [
+            ("get_stripe_payment", {"payment_id": "https://evil.com/steal"}, 0),
+        ]
+    )
+    with pytest.raises(ExecutorRejectedError, match="URL"):
+        executor.execute(bad_plan, "tenant-acme")
+
+
+def test_executor_sql_injection_rejected() -> None:
+    """Arrange SQL injection in args; Act; Assert ExecutorRejectedError."""
+    from agents.capabilities.capabilities import AdapterBundle
+    from agents.capabilities.executor import CapabilityExecutor
+    from agents.capabilities.types import ExecutorRejectedError
+    from finance.accounting.mock import MockQuickBooksAdapter
+    from finance.reconciliation.ledger_resolution import InMemoryLedgerRepository
+
+    bundle = AdapterBundle(
+        stripe_payments={},
+        qb_adapter=MockQuickBooksAdapter(),
+        ledger_repository=InMemoryLedgerRepository.from_records([]),
+        gmail_corpus={},
+    )
+    executor = CapabilityExecutor(bundle)
+    bad_plan = _raw_plan_from_calls(
+        [
+            ("get_stripe_payment", {"payment_id": "p1; DROP TABLE"}, 0),
+        ]
+    )
+    with pytest.raises(ExecutorRejectedError, match="SQL"):
+        executor.execute(bad_plan, "tenant-acme")
+
+
+def test_executor_credential_pattern_rejected() -> None:
+    """Arrange credential in args; Act; Assert ExecutorRejectedError."""
+    from agents.capabilities.capabilities import AdapterBundle
+    from agents.capabilities.executor import CapabilityExecutor
+    from agents.capabilities.types import ExecutorRejectedError
+    from finance.accounting.mock import MockQuickBooksAdapter
+    from finance.reconciliation.ledger_resolution import InMemoryLedgerRepository
+
+    bundle = AdapterBundle(
+        stripe_payments={},
+        qb_adapter=MockQuickBooksAdapter(),
+        ledger_repository=InMemoryLedgerRepository.from_records([]),
+        gmail_corpus={},
+    )
+    executor = CapabilityExecutor(bundle)
+    bad_plan = _raw_plan_from_calls(
+        [
+            ("get_stripe_payment", {"payment_id": "sk-abc123secret"}, 0),
+        ]
+    )
+    with pytest.raises(ExecutorRejectedError, match="credential"):
+        executor.execute(bad_plan, "tenant-acme")
+
+
+def test_executor_cross_tenant_rejected() -> None:
+    """Arrange cross-tenant identifier; Act; Assert ExecutorRejectedError."""
+    from agents.capabilities.capabilities import AdapterBundle
+    from agents.capabilities.executor import CapabilityExecutor
+    from agents.capabilities.types import ExecutorRejectedError
+    from finance.accounting.mock import MockQuickBooksAdapter
+    from finance.reconciliation.ledger_resolution import InMemoryLedgerRepository
+
+    bundle = AdapterBundle(
+        stripe_payments={},
+        qb_adapter=MockQuickBooksAdapter(),
+        ledger_repository=InMemoryLedgerRepository.from_records([]),
+        gmail_corpus={},
+    )
+    executor = CapabilityExecutor(bundle)
+    bad_plan = _raw_plan_from_calls(
+        [
+            ("get_stripe_payment", {"tenant_id": "other-tenant", "payment_id": "p1"}, 0),
+        ]
+    )
+    with pytest.raises(ExecutorRejectedError, match="tenant"):
+        executor.execute(bad_plan, "tenant-acme")
+
+
+def _raw_plan_from_calls(
+    calls: list[tuple[str, dict[str, str], int]],
+) -> InvestigationPlan:
+    """Build a plan via model_construct bypassing validation (adversarial)."""
+    from agents.investigation.plan import CapabilityCall
+
+    cc_calls = tuple(
+        CapabilityCall.model_construct(capability=c, args=a, order_index=i) for c, a, i in calls
+    )
+    return InvestigationPlan.model_construct(
+        hypothesis_text="adversarial probe",
+        capability_calls=cc_calls,
+        evidence_required=("ev-001",),
+        escalation=False,
+    )
