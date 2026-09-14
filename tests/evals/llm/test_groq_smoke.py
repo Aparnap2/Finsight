@@ -15,8 +15,10 @@ import pytest
 # Gate: require explicit opt-in
 _allow_live = os.environ.get("FINSIGHT_ALLOW_LIVE_LLM", "")
 
-# Skip all tests in this file unless gated
+# Skip all tests in this file unless gated. live_llm marks quota-consuming
+# tests so the default suite stays zero-quota: pytest -m "not live_llm".
 pytestmark = [
+    pytest.mark.live_llm,
     pytest.mark.skipif(
         not _allow_live,
         reason="Live LLM tests require FINSIGHT_ALLOW_LIVE_LLM=1",
@@ -78,8 +80,7 @@ def duplicate_entry_request():
         exception_type="DUPLICATE_LEDGER_ENTRY",
         evidence_ids=("ev_qb_txn_a", "ev_qb_txn_b", "ev_stripe_ch_001"),
         context_window=(
-            "Two QB entries reference Stripe charge ch_001. "
-            "One matches exactly. Other is 2x."
+            "Two QB entries reference Stripe charge ch_001. One matches exactly. Other is 2x."
         ),
         capability_allowlist=(
             "get_stripe_payment",
@@ -162,9 +163,9 @@ class TestPlannerSmoke:
 
         plan = live_planner.plan(partial_refund_request)
         verifier = Verifier(max_replans=2, confidence_cap=0.85)
-        verdict = verifier.verify(plan, partial_refund_request)
+        verdict = verifier.verify(plan, set(partial_refund_request.evidence_ids), 0)
 
-        print(f"\n  Verdict: {verdict.status.value}")
-        print(f"  Confidence: {verdict.confidence}")
+        print(f"\n  Verdict: {verdict.status}")
+        print(f"  Reasons: {verdict.reasons}")
         # We accept either ACCEPTED or REJECTED_REPLAN — both prove the boundary works
-        assert verdict.status.value in ("accepted", "rejected_replan")
+        assert verdict.status in ("ACCEPTED", "REJECTED_REPLAN")

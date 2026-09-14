@@ -68,6 +68,8 @@ asyncio_mode = "auto"
 testpaths = ["tests"]
 markers = [
     "llm: tests that call real LLM providers (requires API keys)",
+    "live_llm: live-provider validation (Groq quota; requires FINSIGHT_ALLOW_LIVE_LLM=1; excluded by default)",
+    "evals: LLM evaluation tests — manual/controlled, never in dev loop",
     "integration: tests that require a real reachable Postgres (skipped otherwise)",
 ]
 
