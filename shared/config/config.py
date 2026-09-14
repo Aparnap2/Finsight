@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     default_llm_model: str = "poolside/laguna-m.1"
     groq_api_key: str = ""
     groq_base_url: str = "https://api.groq.com/openai/v1"
-    groq_chat_model: str = "llama-3.3-70b-versatile"
+    groq_chat_model: str = "openai/gpt-oss-20b"
     openrouter_api_key: str = ""
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
     openrouter_chat_model: str = "meta-llama/llama-3.1-8b-instruct:free"

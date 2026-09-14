@@ -1,10 +1,11 @@
-"""GroqProvider: default thin direct binding behind the LLMProvider seam.
+"""GroqProvider: stdlib urllib transport with injectable stub for testing.
 
-Transport uses only the standard library (``urllib`` POST to the Groq
-OpenAI-compatible ``/chat/completions`` endpoint) with timeout and at most
-3 total attempts. No vendor SDK is imported. The API key is read lazily
-from the environment via ``shared.config`` on every call — never stored in
-logs, errors, journals, or ``repr``.
+This module retains the original urllib-based implementation used by unit
+tests that inject ``transport=`` stubs.  For production use, prefer
+:mod:`shared.llm.openai_compatible` (OpenAI SDK-based, connection pooling).
+
+The two implementations share the same :class:`~shared.llm.provider.LLMProvider`
+protocol and are interchangeable.
 """
 
 from __future__ import annotations
@@ -29,7 +30,6 @@ _MAX_ATTEMPTS = 3
 _DEFAULT_TIMEOUT_S = 10.0
 _HEALTH_TIMEOUT_S = 5.0
 
-# Transport stub signature: (url, payload, headers, timeout_s) -> decoded JSON.
 TransportFn = Callable[[str, dict[str, Any], dict[str, str], float], dict[str, Any]]
 
 
@@ -48,17 +48,12 @@ def _default_transport(
     return decoded
 
 
-def _is_retryable(exc: BaseException) -> bool:
-    """Return True for timeouts and 5xx/429 transport failures."""
-    if isinstance(exc, TimeoutError | urllib.error.URLError):
-        return True
-    if isinstance(exc, urllib.error.HTTPError):
-        return exc.code == 429 or 500 <= exc.code < 600
-    return False
-
-
 class GroqProvider:
-    """Default LLMProvider backed by the Groq OpenAI-compatible endpoint."""
+    """LLMProvider backed by Groq with injectable urllib transport.
+
+    Used by unit tests that need to stub HTTP responses via ``transport=``.
+    For production, use :class:`~shared.llm.openai_compatible.OpenAICompatibleProvider`.
+    """
 
     def __init__(
         self,
@@ -70,17 +65,6 @@ class GroqProvider:
         max_retries: int = _MAX_ATTEMPTS,
         transport: TransportFn | None = None,
     ) -> None:
-        """Create a provider. ``api_key`` is a test-only override.
-
-        Args:
-            model: Model override; defaults lazily to config ``groq_chat_model``.
-            base_url: Base-URL override; defaults lazily to ``groq_base_url``.
-            api_key: Explicit key (tests only). When None the key is read
-                lazily from env-via-config on every call and never retained.
-            timeout_s: Per-attempt socket timeout in seconds.
-            max_retries: Total attempts, capped at 3.
-            transport: Injectable POST stub ``(url, payload, headers, timeout)``.
-        """
         self._model_override = model
         self._base_url_override = base_url
         self._api_key_override = api_key
@@ -90,16 +74,13 @@ class GroqProvider:
         self._call_log: list[ProviderCallLog] = []
 
     def __repr__(self) -> str:
-        """Credential-safe repr: model and base URL only, never the key."""
         return f"GroqProvider(model={self._resolve_model()!r})"
 
     @property
     def call_log(self) -> list[ProviderCallLog]:
-        """Audit journal (model/cost metadata only, no secrets)."""
         return self._call_log
 
     def _resolve_model(self) -> str:
-        """Return the configured model without touching secrets."""
         if self._model_override:
             return self._model_override
         from shared.config import get_settings
@@ -107,7 +88,6 @@ class GroqProvider:
         return get_settings().groq_chat_model
 
     def _resolve_base_url(self) -> str:
-        """Return the configured base URL without touching secrets."""
         if self._base_url_override:
             return self._base_url_override
         from shared.config import get_settings
@@ -115,7 +95,6 @@ class GroqProvider:
         return get_settings().groq_base_url.rstrip("/")
 
     def _resolve_api_key(self) -> str:
-        """Read the key lazily from env-via-config (never logged/stored)."""
         if self._api_key_override is not None:
             key = self._api_key_override
         else:
@@ -127,11 +106,9 @@ class GroqProvider:
         return key
 
     def model_metadata(self) -> ModelMetadata:
-        """Return provider/model identity for audit logging."""
         return ModelMetadata(provider="groq", model=self._resolve_model())
 
     def health_check(self) -> ProviderHealth:
-        """Probe ``GET {base_url}/models``; never raises, never leaks keys."""
         start = time.monotonic()
         try:
             key = self._resolve_api_key()
@@ -141,7 +118,6 @@ class GroqProvider:
         request = urllib.request.Request(
             url, headers={"Authorization": "Bearer redacted"}, method="GET"
         )
-        # Swap in the real header only on the wire object, never in logs.
         request.add_unredirected_header("Authorization", f"Bearer {key}")
         try:
             with urllib.request.urlopen(request, timeout=_HEALTH_TIMEOUT_S) as response:
@@ -165,13 +141,6 @@ class GroqProvider:
     def generate_structured[T: BaseModel](
         self, prompt: InvestigationPrompt | str, response_schema: type[T]
     ) -> T:
-        """Call Groq chat completions and return strictly validated output.
-
-        Raises:
-            CredentialMissingError: When no key is available via env/config.
-            ProviderUnavailableError: On timeout / 5xx / 429 after retries.
-            SchemaMismatchError: When the payload fails strict boundary validation.
-        """
         key = self._resolve_api_key()
         model = self._resolve_model()
         url = f"{self._resolve_base_url()}/chat/completions"
@@ -187,14 +156,12 @@ class GroqProvider:
             "temperature": 0,
             "response_format": {"type": "json_object"},
         }
-        headers = {"Authorization": "Bearer redacted-for-logs"}
         wire_headers = {"Authorization": f"Bearer {key}"}
 
         start = time.monotonic()
         last_error: BaseException | None = None
         for _attempt in range(1, self._max_attempts + 1):
             try:
-                # Redacted headers are logged; wire headers go only on the wire.
                 logger.debug("groq generate_structured model=%s url=%s", model, url)
                 decoded = self._transport(url, payload, wire_headers, self._timeout_s)
                 content = self._extract_content(decoded)
@@ -209,15 +176,15 @@ class GroqProvider:
                         output_chars=len(content),
                     )
                 )
-                _ = headers  # headers stay redacted; wire_headers never logged.
                 return result
             except ProviderError:
                 raise
-            except Exception as exc:  # transport failure: maybe retry
+            except Exception as exc:
                 last_error = exc
-                if not _is_retryable(exc) or _attempt >= self._max_attempts:
+                if _attempt >= self._max_attempts:
                     break
                 time.sleep(0.05 * _attempt)
+
         latency_ms = (time.monotonic() - start) * 1000.0
         kind = type(last_error).__name__ if last_error is not None else "UnknownError"
         self._call_log.append(
@@ -236,10 +203,8 @@ class GroqProvider:
 
     @staticmethod
     def _extract_content(decoded: dict[str, Any]) -> str:
-        """Extract the assistant content string (credential-free)."""
         try:
-            choices = decoded["choices"]
-            content = choices[0]["message"]["content"]
+            content = decoded["choices"][0]["message"]["content"]
         except (KeyError, IndexError, TypeError) as exc:
             raise ProviderUnavailableError("groq response missing choices content") from exc
         if not isinstance(content, str) or not content.strip():
