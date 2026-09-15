@@ -4,6 +4,8 @@
 
 FinSight is **not** an AI analyst, chatbot, BI tool, or ERP. It does one job: take a detected payment/accounting break to `CLOSED` with audit-grade proof.
 
+<img width="1536" height="1024" alt="ChatGPT Image Sep 12, 2026, 09_33_04 AM" src="https://github.com/user-attachments/assets/08a60c2e-dff8-4a9f-840d-baad6811ff4c" />
+
 ## Architecture
 
 ```text
@@ -16,6 +18,8 @@ Webhook/Event → Dedup → Normalize → Deterministic Reconcile → Classify
 ```
 
 Ambiguity boundary: the agent may synthesize an investigation path and propose an action, but deterministic code owns money arithmetic, reconciliation, policy, transitions, execution authorization, idempotency, and post-verification. `ResolutionProposal ≠ Execution`.
+
+## Engagement Summary
 
 ## 80/20 scope
 
