@@ -3,17 +3,17 @@
 Key design:
 - NUMERIC: exact or tolerance-based match against deterministic facts
 - COMPARATIVE: prove ranking/order from a deterministic candidate set
-- CAUSAL: never "verified" from prose alone; links to driver tree + evidence classes
-- ACTION: must map to approved taxonomy, cite validated cause(s), satisfy policy, identify owner + impact
+- CAUSAL: never "verified" from prose alone; links to driver tree + evidence
+  classes
+- ACTION: must map to approved taxonomy, cite validated cause(s), satisfy
+  policy, identify owner + impact
 """
 
 import re
 from decimal import Decimal
-from typing import Literal
+from typing import Any
 
-from shared.models.assertions import AssertionType, SupportLevel
 from shared.models.degraded_mode import DegradedMode
-
 
 # ── Data classes ──────────────────────────────────────────────────────────────
 
@@ -61,9 +61,9 @@ class ValidationResult:
     def __init__(
         self,
         is_valid: bool = True,
-        verified_claims: list | None = None,
-        unverified_claims: list | None = None,
-        errors: list | None = None,
+        verified_claims: list[Any] | None = None,
+        unverified_claims: list[Any] | None = None,
+        errors: list[Any] | None = None,
         degraded_modes: list[tuple[str, DegradedMode]] | None = None,
         confidence: float = 1.0,
     ):
@@ -75,10 +75,10 @@ class ValidationResult:
         self.confidence = confidence
         self.claims: list[MonetaryClaim] = []  # backward compat: raw extracted claims
 
-    def __bool__(self):
+    def __bool__(self) -> bool:
         return self.is_valid
 
-    def add_degraded(self, claim: str, mode: DegradedMode):
+    def add_degraded(self, claim: str, mode: DegradedMode) -> None:
         self.degraded_modes.append((claim, mode))
         self.confidence = max(0.0, self.confidence - 0.15)
 
@@ -130,7 +130,7 @@ def extract_monetary_claims(text: str) -> list[MonetaryClaim]:
 
 def validate_numeric_claim(
     claim: MonetaryClaim,
-    facts: list[dict],
+    facts: list[dict[str, Any]],
     amount_field: str = "amount",
     tolerance: Decimal = Decimal("0.05"),
 ) -> ValidationResult:
@@ -197,7 +197,7 @@ def validate_numeric_claim(
 def validate_comparative_claim(
     claim_text: str,
     subject: str,
-    candidates: list[dict],
+    candidates: list[dict[str, Any]],
     value_field: str = "amount",
     rank: int | None = None,
 ) -> ValidationResult:
@@ -248,7 +248,7 @@ def validate_comparative_claim(
 
 def validate_causal_claim(
     claim: CausalClaim,
-    driver_tree_edges: list[dict] | None = None,
+    driver_tree_edges: list[dict[str, Any]] | None = None,
     evidence_classes: int = 0,
     has_alternative: bool = False,
 ) -> ValidationResult:
@@ -366,11 +366,11 @@ def validate_action_claim(
 
 def validate_commentary_claims(
     commentary: str,
-    facts: list[dict],
+    facts: list[dict[str, Any]],
     amount_field: str = "amount",
     tolerance: Decimal = Decimal("0.05"),
-    candidates: list[dict] | None = None,
-    driver_tree_edges: list[dict] | None = None,
+    candidates: list[dict[str, Any]] | None = None,
+    driver_tree_edges: list[dict[str, Any]] | None = None,
     evidence_classes: int = 0,
 ) -> ValidationResult:
     """Validate all claims in commentary text.

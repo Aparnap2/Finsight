@@ -6,12 +6,13 @@ with ModuleNotFoundError until the package is implemented.
 """
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 import pytest
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    pass
 
 
 # =============================================================================
@@ -22,7 +23,7 @@ if TYPE_CHECKING:
 class TestSpreadsheetProviderProtocol:
     """Protocol definition and structural subtyping checks."""
 
-    def test_protocol_defines_required_methods(self):
+    def test_protocol_defines_required_methods(self) -> None:
         """SpreadsheetProvider protocol has read_range, write_range, validate, sync."""
         from finance.integration.spreadsheet_provider import SpreadsheetProvider
 
@@ -33,7 +34,7 @@ class TestSpreadsheetProviderProtocol:
         assert "validate" in members
         assert "sync" in members
 
-    def test_google_sheets_provider_conforms(self):
+    def test_google_sheets_provider_conforms(self) -> None:
         """GoogleSheetsProvider satisfies the SpreadsheetProvider protocol."""
         from finance.integration.spreadsheet_provider import (
             GoogleSheetsProvider,
@@ -42,7 +43,7 @@ class TestSpreadsheetProviderProtocol:
 
         assert isinstance(GoogleSheetsProvider("creds.json"), SpreadsheetProvider)
 
-    def test_csv_provider_conforms(self):
+    def test_csv_provider_conforms(self) -> None:
         """CSVProvider satisfies the SpreadsheetProvider protocol."""
         from finance.integration.spreadsheet_provider import (
             CSVProvider,
@@ -51,7 +52,7 @@ class TestSpreadsheetProviderProtocol:
 
         assert isinstance(CSVProvider("data.csv"), SpreadsheetProvider)
 
-    def test_mock_provider_conforms(self):
+    def test_mock_provider_conforms(self) -> None:
         """MockProvider satisfies the SpreadsheetProvider protocol."""
         from finance.integration.spreadsheet_provider import (
             MockProvider,
@@ -69,7 +70,7 @@ class TestSpreadsheetProviderProtocol:
 class TestMockProvider:
     """In-memory mock provider for isolated unit testing."""
 
-    def test_mock_read_and_write(self):
+    def test_mock_read_and_write(self) -> None:
         """MockProvider stores written data and returns it on read."""
         from finance.integration.spreadsheet_provider import MockProvider
 
@@ -78,7 +79,7 @@ class TestMockProvider:
         result = provider.read_range("sheet_1", "A1:B2")
         assert result == [["a", "b"], ["c", "d"]]
 
-    def test_mock_read_empty_range(self):
+    def test_mock_read_empty_range(self) -> None:
         """MockProvider returns empty list for ranges that have not been written."""
         from finance.integration.spreadsheet_provider import MockProvider
 
@@ -86,7 +87,7 @@ class TestMockProvider:
         result = provider.read_range("unknown_sheet", "Z99:AA100")
         assert result == []
 
-    def test_mock_sync_returns_metadata(self):
+    def test_mock_sync_returns_metadata(self) -> None:
         """MockProvider.sync returns a summary dict with rows_read."""
         from finance.integration.spreadsheet_provider import MockProvider
 
@@ -97,7 +98,7 @@ class TestMockProvider:
         assert "rows_read" in summary
         assert summary["rows_read"] == 3
 
-    def test_mock_validate_returns_valid(self):
+    def test_mock_validate_returns_valid(self) -> None:
         """MockProvider.validate returns a valid result dict."""
         from finance.integration.spreadsheet_provider import MockProvider
 
@@ -106,7 +107,7 @@ class TestMockProvider:
         assert isinstance(result, dict)
         assert result.get("valid") is True
 
-    def test_mock_with_initial_data(self):
+    def test_mock_with_initial_data(self) -> None:
         """MockProvider accepts initial_data via constructor."""
         from finance.integration.spreadsheet_provider import MockProvider
 
@@ -124,7 +125,7 @@ class TestMockProvider:
 class TestCSVProvider:
     """Provider backed by CSV files on disk."""
 
-    def test_csv_read_returns_parsed_rows(self, tmp_path):
+    def test_csv_read_returns_parsed_rows(self, tmp_path: Path) -> None:
         """CSVProvider.read_range reads a CSV file and returns list of list of strings."""
         from finance.integration.spreadsheet_provider import CSVProvider
 
@@ -138,7 +139,7 @@ class TestCSVProvider:
         assert result[1] == ["4010", "100000"]
         assert result[2] == ["6010", "50000"]
 
-    def test_csv_read_missing_file_raises(self):
+    def test_csv_read_missing_file_raises(self) -> None:
         """CSVProvider raises FileNotFoundError when the CSV file does not exist."""
         from finance.integration.spreadsheet_provider import CSVProvider
 
@@ -146,7 +147,7 @@ class TestCSVProvider:
         with pytest.raises(FileNotFoundError):
             provider.read_range("x", "y")
 
-    def test_csv_sync_returns_summary(self, tmp_path):
+    def test_csv_sync_returns_summary(self, tmp_path: Path) -> None:
         """CSVProvider.sync returns a dict with rows_read and source."""
         from finance.integration.spreadsheet_provider import CSVProvider
 
@@ -159,14 +160,14 @@ class TestCSVProvider:
         assert "source" in summary
         assert summary["source"] == "csv"
 
-    def test_csv_constructor_requires_path(self):
+    def test_csv_constructor_requires_path(self) -> None:
         """CSVProvider raises TypeError when instantiated without a file path."""
         from finance.integration.spreadsheet_provider import CSVProvider
 
         with pytest.raises(TypeError):
             CSVProvider()  # type: ignore[call-arg]
 
-    def test_csv_read_returns_strings_only(self, tmp_path):
+    def test_csv_read_returns_strings_only(self, tmp_path: Path) -> None:
         """CSVProvider returns all values as strings (transport layer)."""
         from finance.integration.spreadsheet_provider import CSVProvider
 
@@ -179,7 +180,7 @@ class TestCSVProvider:
         # Confirm they are strings, not floats
         assert isinstance(result[1][0], str)
 
-    def test_csv_validate_returns_dict(self, tmp_path):
+    def test_csv_validate_returns_dict(self, tmp_path: Path) -> None:
         """CSVProvider.validate returns a dict for a valid file."""
         from finance.integration.spreadsheet_provider import CSVProvider
 
@@ -198,7 +199,7 @@ class TestCSVProvider:
 class TestGoogleSheetsProvider:
     """Provider wrapping the Google Sheets API (mocked)."""
 
-    def test_requires_authentication(self):
+    def test_requires_authentication(self) -> None:
         """GoogleSheetsProvider raises RuntimeError before authenticate() is called."""
         from finance.integration.spreadsheet_provider import GoogleSheetsProvider
 
@@ -206,7 +207,7 @@ class TestGoogleSheetsProvider:
         with pytest.raises(RuntimeError, match="authenticate|not authenticated|Authenticate"):
             provider.read_range("sheet_1", "A1:B2")
 
-    def test_read_range_after_auth(self, monkeypatch):
+    def test_read_range_after_auth(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """GoogleSheetsProvider reads data after successful authentication (mocked)."""
         from finance.integration.spreadsheet_provider import GoogleSheetsProvider
 
@@ -225,14 +226,14 @@ class TestGoogleSheetsProvider:
         class _MockResponse:
             status_code = 200
 
-            def json(self):
+            def json(self) -> dict[str, Any]:
                 return {"values": [["a", "b"], ["c", "d"]]}
 
         monkeypatch.setattr(httpx, "get", lambda *a, **kw: _MockResponse())
         result = provider.read_range("sheet_1", "Sheet1!A1:B2")
         assert result == [["a", "b"], ["c", "d"]]
 
-    def test_write_range_sends_data(self, monkeypatch):
+    def test_write_range_sends_data(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """GoogleSheetsProvider.write_range sends data via the API."""
         from finance.integration.spreadsheet_provider import GoogleSheetsProvider
 
@@ -242,19 +243,22 @@ class TestGoogleSheetsProvider:
         class _MockResponse:
             status_code = 200
 
-            def json(self):
+            def json(self) -> dict[str, Any]:
                 return {"updated": True}
 
         import httpx
 
-        monkeypatch.setattr(httpx, "put", lambda *a, json=None, **kw: (
-            sent.append(json["values"]) if json else None, _MockResponse()
-        )[1])
+        def _mock_put(*a: Any, json: Any = None, **kw: Any) -> _MockResponse:
+            if json is not None:
+                sent.append(json["values"])
+            return _MockResponse()
+
+        monkeypatch.setattr(httpx, "put", _mock_put)
 
         provider.write_range("sheet_1", "A1:B2", [["x", "y"]])
         assert sent == [[["x", "y"]]]
 
-    def test_validate_after_auth(self):
+    def test_validate_after_auth(self) -> None:
         """GoogleSheetsProvider.validate works after authentication."""
         from finance.integration.spreadsheet_provider import GoogleSheetsProvider
 
@@ -271,23 +275,23 @@ class TestGoogleSheetsProvider:
 class TestProviderFactory:
     """Factory that creates providers based on configuration type strings."""
 
-    def test_factory_creates_csv_provider(self):
+    def test_factory_creates_csv_provider(self) -> None:
         """factory.create("csv") returns a CSVProvider instance."""
-        from finance.integration.spreadsheet_provider import ProviderFactory, CSVProvider
+        from finance.integration.spreadsheet_provider import CSVProvider, ProviderFactory
 
         factory = ProviderFactory()
         provider = factory.create("csv", path="data.csv")
         assert isinstance(provider, CSVProvider)
 
-    def test_factory_creates_mock_provider(self):
+    def test_factory_creates_mock_provider(self) -> None:
         """factory.create("mock") returns a MockProvider instance."""
-        from finance.integration.spreadsheet_provider import ProviderFactory, MockProvider
+        from finance.integration.spreadsheet_provider import MockProvider, ProviderFactory
 
         factory = ProviderFactory()
         provider = factory.create("mock")
         assert isinstance(provider, MockProvider)
 
-    def test_factory_creates_google_provider(self):
+    def test_factory_creates_google_provider(self) -> None:
         """factory.create("google_sheets") returns a GoogleSheetsProvider instance."""
         from finance.integration.spreadsheet_provider import (
             GoogleSheetsProvider,
@@ -298,7 +302,7 @@ class TestProviderFactory:
         provider = factory.create("google_sheets", credentials_path="creds.json")
         assert isinstance(provider, GoogleSheetsProvider)
 
-    def test_factory_invalid_type_raises(self):
+    def test_factory_invalid_type_raises(self) -> None:
         """factory.create("invalid") raises ValueError."""
         from finance.integration.spreadsheet_provider import ProviderFactory
 
@@ -306,7 +310,7 @@ class TestProviderFactory:
         with pytest.raises(ValueError, match="unknown provider|invalid|Unsupported"):
             factory.create("invalid")
 
-    def test_factory_case_insensitive(self):
+    def test_factory_case_insensitive(self) -> None:
         """Factory handles type strings case-insensitively (e.g. "CSV", "Mock")."""
         from finance.integration.spreadsheet_provider import (
             CSVProvider,
@@ -318,7 +322,7 @@ class TestProviderFactory:
         assert isinstance(factory.create("CSV", path="d.csv"), CSVProvider)
         assert isinstance(factory.create("MOCK"), MockProvider)
 
-    def test_factory_registers_providers(self):
+    def test_factory_registers_providers(self) -> None:
         """Factory exposes a registered_types property or similar."""
         from finance.integration.spreadsheet_provider import ProviderFactory
 
@@ -337,7 +341,7 @@ class TestProviderFactory:
 class TestProviderIntegration:
     """Polymorphic usage — any provider works with the same interface."""
 
-    def test_can_use_provider_polymorphically(self, tmp_path):
+    def test_can_use_provider_polymorphically(self, tmp_path: Path) -> None:
         """A function accepting SpreadsheetProvider works with every provider type."""
         from finance.integration.spreadsheet_provider import (
             CSVProvider,
@@ -362,7 +366,7 @@ class TestProviderIntegration:
         result = process(csv_provider, "x")
         assert result[1] == ["c1", "c2"]
 
-    def test_factory_creates_provider_polymorphically(self):
+    def test_factory_creates_provider_polymorphically(self) -> None:
         """Provider returned by factory satisfies the protocol."""
         from finance.integration.spreadsheet_provider import (
             ProviderFactory,
@@ -371,7 +375,7 @@ class TestProviderIntegration:
 
         factory = ProviderFactory()
         for type_str in ("csv", "mock", "google_sheets"):
-            kwargs = {}
+            kwargs: dict[str, Any] = {}
             if type_str == "csv":
                 kwargs["path"] = "/tmp/placeholder.csv"
             elif type_str == "google_sheets":
@@ -382,7 +386,7 @@ class TestProviderIntegration:
                 f"{type_str} provider does not satisfy SpreadsheetProvider"
             )
 
-    def test_all_providers_implement_validate(self):
+    def test_all_providers_implement_validate(self) -> None:
         """Every provider type has a working validate method."""
         from finance.integration.spreadsheet_provider import (
             CSVProvider,
@@ -406,7 +410,7 @@ class TestProviderIntegration:
         with pytest.raises(RuntimeError):
             gs.validate("s1")
 
-    def test_mock_write_overwrites_existing_data(self):
+    def test_mock_write_overwrites_existing_data(self) -> None:
         """MockProvider overwrites data when writing to an existing range."""
         from finance.integration.spreadsheet_provider import MockProvider
 
@@ -415,16 +419,15 @@ class TestProviderIntegration:
         provider.write_range("s", "R1", [["new"]])
         assert provider.read_range("s", "R1") == [["new"]]
 
-    def test_protocol_is_usable_with_isinstance_check(self):
+    def test_protocol_is_usable_with_isinstance_check(self) -> None:
         """SpreadsheetProtocol works with isinstance structural check via @runtime_checkable."""
+        # If the protocol is decorated with @runtime_checkable, isinstance should work.
+        # We verify the protocol itself is checkable.
+
         from finance.integration.spreadsheet_provider import (
             MockProvider,
             SpreadsheetProvider,
         )
-
-        # If the protocol is decorated with @runtime_checkable, isinstance should work.
-        # We verify the protocol itself is checkable.
-        import typing
 
         is_runtime_checkable = hasattr(SpreadsheetProvider, "__instancecheck__")
         # Whether or not it's runtime checkable, the test documents the design

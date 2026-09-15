@@ -13,10 +13,9 @@ but must NEVER upgrade a claim to VERIFIED. This is enforced at the
 ToolResult contract level via retrieval_scope and source_type.
 """
 
-import hashlib
 from datetime import datetime
 
-from sqlalchemy import Engine, create_engine, func, select
+from sqlalchemy import Engine, create_engine, select
 from sqlalchemy.orm import Session
 
 from shared.config import get_settings
@@ -25,8 +24,8 @@ from shared.models.degraded_mode import DegradedMode
 from shared.utils.tools.tool_result import (
     ToolResult,
     compute_degraded_mode,
-    compute_query_fingerprint,
     compute_quality_score,
+    compute_query_fingerprint,
 )
 
 
@@ -103,8 +102,6 @@ def query_factual(
             })
 
         row_count = len(data)
-        # Estimate coverage based on how many actuals have matching budgets
-        matched = sum(1 for d in data if d["budget_amount"] != 0.0)
         coverage_pct = round(min(1.0, row_count / 20.0), 4) if row_count > 0 else 0.0
         quality_score = compute_quality_score(coverage_pct, row_count, freshness_seconds=None)
         degraded_mode = compute_degraded_mode(coverage_pct, row_count)

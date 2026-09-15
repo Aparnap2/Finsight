@@ -6,6 +6,7 @@ concerns — planning, execution, verification, reflection, and output.
 
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import Any
 
 from pydantic import BaseModel
@@ -68,6 +69,34 @@ class ReflectionExpectation(BaseModel):
     max_gaps: int = 0
 
 
+class ForecastExpectation(BaseModel):
+    """Expected forecast series plus per-metric error tolerances.
+
+    ``actuals`` is the ground-truth observed series (money-safe Decimal);
+    ``predicted`` is the series the analytics/ML layer is expected to emit.
+    Tolerance fields are upper bounds on the corresponding error metric —
+    the regression harness fails when the measured error exceeds them.
+    """
+
+    actuals: list[Decimal] = []
+    predicted: list[Decimal] = []
+    tolerance_mae: Decimal = Decimal("0")
+    tolerance_rmse: Decimal = Decimal("0")
+    tolerance_mape: Decimal = Decimal("0")
+
+
+class DetectionExpectation(BaseModel):
+    """Expected detection output for anomaly / duplicate layers.
+
+    ``expected_ids`` lists the records that MUST be flagged; ``forbidden_ids``
+    lists records that MUST NOT be flagged.
+    """
+
+    expected_ids: list[str] = []
+    forbidden_ids: list[str] = []
+    k: int | None = None
+
+
 class OutputExpectation(BaseModel):
     """Expected pipeline output (variances, KPIs, report content)."""
 
@@ -76,6 +105,9 @@ class OutputExpectation(BaseModel):
     report_sections: dict[str, str] = {}
     required_claims: list[str] = []
     forbidden_claims: list[str] = []
+    forecast: ForecastExpectation | None = None
+    anomalies: DetectionExpectation | None = None
+    duplicates: DetectionExpectation | None = None
 
 
 class ExpectedBehaviour(BaseModel):

@@ -34,7 +34,10 @@ async def test_submit_and_poll_job(sample_csv: str) -> None:
                 "source_type": "csv",
                 "source_uri": sample_csv,
                 "params": {
-                    "query": "SELECT account_id, SUM(amount) as total FROM data GROUP BY account_id",
+                    "query": (
+                        "SELECT account_id, SUM(amount) as total "
+                        "FROM data GROUP BY account_id"
+                    ),
                 },
             },
         )

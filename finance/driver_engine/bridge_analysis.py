@@ -8,18 +8,21 @@ Decomposes revenue and cost variances into:
 All decomposition is deterministic — no LLM involved.
 """
 
-from decimal import Decimal
-from enum import Enum
-from typing import Any
 from dataclasses import dataclass
+from decimal import Decimal
+from enum import StrEnum
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from shared.models.assertions import Assertion
 
 
-class BridgeType(str, Enum):
+class BridgeType(StrEnum):
     REVENUE = "revenue"
     COST = "cost"
 
 
-class BridgeComponent(str, Enum):
+class BridgeComponent(StrEnum):
     # Revenue decomposition
     PRICE = "price"
     VOLUME = "volume"
@@ -41,7 +44,7 @@ class BridgeDecomposition:
     description: str
     confidence: float  # deterministic confidence based on data quality
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "component": self.component.value,
             "amount": str(self.amount),
@@ -74,7 +77,7 @@ class BridgeAnalysis:
             return None
         return max(self.components, key=lambda c: abs(c.amount))
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "account_id": self.account_id,
             "account_name": self.account_name,
@@ -117,7 +120,7 @@ def decompose_revenue_bridge(
 
     total_variance = current_actual - budget
     components: list[BridgeDecomposition] = []
-    degraded = []
+    degraded: list[str] = []
 
     if total_variance == Decimal("0"):
         return BridgeAnalysis(
@@ -133,7 +136,11 @@ def decompose_revenue_bridge(
 
     # FX effect
     fx_effect = Decimal("0")
-    if fx_rate_current is not None and fx_rate_prior is not None and fx_rate_current != fx_rate_prior:
+    if (
+        fx_rate_current is not None
+        and fx_rate_prior is not None
+        and fx_rate_current != fx_rate_prior
+    ):
         fx_effect = (fx_rate_current - fx_rate_prior) * current_actual / fx_rate_current
         fx_effect = fx_effect.quantize(Decimal("0.01"))
         fx_pct = (
@@ -159,7 +166,7 @@ def decompose_revenue_bridge(
         current_price = current_actual / volume_current if volume_current != 0 else Decimal("0")
 
         price_effect = (current_price - budget_price) * volume_current
-        volume_effect = (current_volume := volume_current - volume_prior) * budget_price
+        volume_effect = (volume_current - volume_prior) * budget_price
         mix_effect = non_fx_variance - price_effect - volume_effect
     else:
         # Heuristic split when volume data not available
@@ -235,7 +242,7 @@ def decompose_cost_bridge(
 
     total_variance = current_actual - budget
     components: list[BridgeDecomposition] = []
-    degraded = []
+    degraded: list[str] = []
 
     if total_variance == Decimal("0"):
         return BridgeAnalysis(
@@ -326,7 +333,7 @@ def decompose_bridge(
     prior_actual: Decimal,
     budget: Decimal,
     account_type: str = "revenue",
-    **kwargs,
+    **kwargs: Any,
 ) -> BridgeAnalysis:
     """Route to the correct decomposition based on account type."""
     if account_type.lower() in ("revenue", "sales", "income"):
@@ -378,7 +385,9 @@ def build_bridge_assertions(analysis: BridgeAnalysis) -> list["Assertion"]:
                 text=f"{analysis.account_name} {comp.component.value} effect: ${comp.amount:,.2f}",
                 value=comp.amount,
                 evidence_ids=[f"bridge:{analysis.account_id}:{comp.component.value}"],
-                support_level=SupportLevel.VERIFIED if comp.confidence > 0.7 else SupportLevel.PROBABLE,
+                support_level=(
+                    SupportLevel.VERIFIED if comp.confidence > 0.7 else SupportLevel.PROBABLE
+                ),
                 confidence=comp.confidence,
                 metadata={"component": comp.component.value, "percentage": str(comp.percentage)},
             )

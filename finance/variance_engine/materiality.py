@@ -13,20 +13,19 @@ Account Sensitivity Tiers:
 
 import fnmatch
 from decimal import Decimal
-from enum import Enum
-from typing import Optional
+from enum import StrEnum
 
 from pydantic import BaseModel
 
+from finplatform.config.tenant_schema import TenantConfig
 from shared.models.state import Variance
-
 
 # =============================================================================
 # Sensitivity Tiers
 # =============================================================================
 
 
-class SensitivityTier(str, Enum):
+class SensitivityTier(StrEnum):
     """Sensitivity classification for variance materiality thresholds."""
 
     CRITICAL = "critical"
@@ -49,12 +48,12 @@ class MaterialityRule(BaseModel):
     - Neither: acts as a default rule for the tier
     """
 
-    account_code: Optional[str] = None
-    account_pattern: Optional[str] = None
+    account_code: str | None = None
+    account_pattern: str | None = None
     tier: SensitivityTier
     pct_threshold: Decimal
     abs_threshold: Decimal
-    combined_rule: Optional[str] = "any"  # "any" | "both"
+    combined_rule: str | None = "any"  # "any" | "both"
 
     def matches(self, account_code: str) -> bool:
         """Check whether this rule applies to the given account code."""
@@ -242,7 +241,7 @@ class MaterialityAssessment(BaseModel):
     pct_exceeds: bool
     abs_exceeds: bool
     is_material: bool
-    rule_matched: Optional[MaterialityRule] = None
+    rule_matched: MaterialityRule | None = None
 
 
 # =============================================================================
@@ -257,8 +256,54 @@ class MaterialityEngine:
     Accounts are classified into sensitivity tiers via glob pattern matching.
     """
 
-    def __init__(self, config: Optional[MaterialityConfig] = None):
+    def __init__(
+        self,
+        config: MaterialityConfig | None = None,
+        tenant_config: TenantConfig | None = None,
+    ):
+        """Build the engine from an explicit config, a tenant config, or defaults.
+
+        ``config`` and ``tenant_config`` are mutually exclusive — passing
+        both raises ``ValueError``. When ``tenant_config`` is given, the
+        engine configuration is derived via :meth:`_config_from_tenant`.
+        With neither, the default configuration is used (backward
+        compatible with ``MaterialityEngine()`` and
+        ``MaterialityEngine(config=...)``).
+        """
+        if config is not None and tenant_config is not None:
+            raise ValueError("provide either config or tenant_config, not both")
+        if tenant_config is not None:
+            config = self._config_from_tenant(tenant_config)
         self.config = config if config is not None else MaterialityConfig.default()
+
+    @staticmethod
+    def _config_from_tenant(tenant_config: TenantConfig) -> MaterialityConfig:
+        """Build a materiality config from a tenant's materiality thresholds.
+
+        Starts from :meth:`MaterialityConfig.default` and overrides every
+        rule's ``abs_threshold`` with the tenant's materiality ``amount``
+        and ``pct_threshold`` with the tenant's ``pct`` converted from
+        percentage points to a fraction (e.g. ``5`` → ``0.05``, matching the
+        engine's internal representation where variance pct is compared
+        after scaling by 100). All rules keep the OR semantics
+        (``combined_rule="any"``).
+        """
+        abs_threshold = tenant_config.materiality.amount
+        pct_threshold = tenant_config.materiality.pct / Decimal("100")
+        base = MaterialityConfig.default()
+        tiers: dict[SensitivityTier, list[MaterialityRule]] = {}
+        for tier, rules in base.tiers.items():
+            tiers[tier] = [
+                rule.model_copy(
+                    update={
+                        "abs_threshold": abs_threshold,
+                        "pct_threshold": pct_threshold,
+                        "combined_rule": "any",
+                    }
+                )
+                for rule in rules
+            ]
+        return MaterialityConfig(tiers=tiers)
 
     # ------------------------------------------------------------------
     # Single assessment
@@ -361,9 +406,11 @@ class MaterialityEngine:
         # 2. Glob pattern match
         for tier in priority:
             for rule in self.config.tiers.get(tier, []):
-                if rule.account_pattern is not None:
-                    if fnmatch.fnmatch(account_code, rule.account_pattern):
-                        return tier
+                if (
+                    rule.account_pattern is not None
+                    and fnmatch.fnmatch(account_code, rule.account_pattern)
+                ):
+                    return tier
 
         # 3. Fall back to MEDIUM
         return SensitivityTier.MEDIUM
@@ -389,7 +436,10 @@ class MaterialityEngine:
 
         # 2. Pattern match
         for rule in rules:
-            if rule.account_pattern is not None and fnmatch.fnmatch(account_code, rule.account_pattern):
+            if (
+                rule.account_pattern is not None
+                and fnmatch.fnmatch(account_code, rule.account_pattern)
+            ):
                 return rule
 
         # 3. Default rule (no account_code and no account_pattern)

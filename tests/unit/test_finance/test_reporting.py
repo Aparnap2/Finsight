@@ -7,13 +7,14 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime
 from decimal import Decimal
+from typing import Any
 
-from pydantic import BaseModel
+from finance.domain.board_report import BoardReport
 
 
-def _make_report(**overrides) -> BaseModel:
+def _make_report(**overrides: Any) -> BoardReport:
     """Build a standard BoardReport for testing."""
-    from finance.domain.board_report import BoardReport, ReportSection
+    from finance.domain.board_report import ReportSection
     from finance.domain.evidence import EvidenceConfidence, EvidenceItem, EvidenceSource
     from finance.domain.kpi import KPIValue
     from finance.domain.recommendation import Recommendation, RecommendationType
@@ -92,7 +93,7 @@ def _make_report(**overrides) -> BaseModel:
 class TestBoardReportModel:
     """BoardReport serialization and field validation."""
 
-    def test_board_report_creation(self):
+    def test_board_report_creation(self) -> None:
         """Create a valid BoardReport."""
         report = _make_report()
         assert report.id == "br-2026-q1"
@@ -105,7 +106,7 @@ class TestBoardReportModel:
         assert len(report.recommendations) == 1
         assert len(report.evidence_summary) == 1
 
-    def test_report_section_enum_values(self):
+    def test_report_section_enum_values(self) -> None:
         """ReportSection enum has expected values."""
         from finance.domain.board_report import ReportSection
         assert ReportSection.EXECUTIVE_SUMMARY.value == "executive_summary"
@@ -116,7 +117,7 @@ class TestBoardReportModel:
         assert ReportSection.RECOMMENDATIONS.value == "recommendations"
         assert ReportSection.APPENDIX.value == "appendix"
 
-    def test_report_draft_default(self):
+    def test_report_draft_default(self) -> None:
         """BoardReport defaults to draft."""
         from finance.domain.board_report import BoardReport
         report = BoardReport(
@@ -136,7 +137,7 @@ class TestBoardReportModel:
 class TestJSONExporter:
     """JSONExporter serializes BoardReport to JSON."""
 
-    def test_export_to_json(self):
+    def test_export_to_json(self) -> None:
         """Export a BoardReport to a JSON string."""
         from finance.reporting.json_exporter import JSONExporter
         report = _make_report()
@@ -149,7 +150,7 @@ class TestJSONExporter:
         assert len(data["sections"]) == 6
         assert len(data["kpis"]) == 1
 
-    def test_export_includes_metadata(self):
+    def test_export_includes_metadata(self) -> None:
         """JSON export includes generated_at as ISO string."""
         from finance.reporting.json_exporter import JSONExporter
         report = _make_report()
@@ -158,7 +159,7 @@ class TestJSONExporter:
         assert "generated_at" in data
         assert data["generated_at"] == "2026-04-15T10:00:00+00:00"
 
-    def test_export_with_indent(self):
+    def test_export_with_indent(self) -> None:
         """JSONExporter supports indented output."""
         from finance.reporting.json_exporter import JSONExporter
         report = _make_report()
@@ -174,7 +175,7 @@ class TestJSONExporter:
 class TestMarkdownExporter:
     """MarkdownExporter renders BoardReport as formatted markdown."""
 
-    def test_export_includes_title(self):
+    def test_export_includes_title(self) -> None:
         """Markdown output includes the report title as H1."""
         from finance.reporting.markdown_exporter import MarkdownExporter
         report = _make_report()
@@ -182,7 +183,7 @@ class TestMarkdownExporter:
         md = exporter.export(report)
         assert "# Q1 2026 Board Report — CF001" in md
 
-    def test_export_includes_metadata_block(self):
+    def test_export_includes_metadata_block(self) -> None:
         """Markdown output includes metadata header."""
         from finance.reporting.markdown_exporter import MarkdownExporter
         report = _make_report()
@@ -195,7 +196,7 @@ class TestMarkdownExporter:
         assert "**Generated:**" in md
         assert "2026-04-15" in md
 
-    def test_export_includes_sections(self):
+    def test_export_includes_sections(self) -> None:
         """Each report section is rendered in order."""
         from finance.reporting.markdown_exporter import MarkdownExporter
         report = _make_report()
@@ -208,7 +209,7 @@ class TestMarkdownExporter:
         assert "## Risks" in md
         assert "## Recommendations" in md
 
-    def test_export_includes_kpi_summary_table(self):
+    def test_export_includes_kpi_summary_table(self) -> None:
         """KPI values rendered as a markdown table."""
         from finance.reporting.markdown_exporter import MarkdownExporter
         report = _make_report()
@@ -218,7 +219,7 @@ class TestMarkdownExporter:
         assert "62.0" in md
         assert "|" in md  # table markers
 
-    def test_export_includes_variance_summary_table(self):
+    def test_export_includes_variance_summary_table(self) -> None:
         """Material variances rendered as a markdown table."""
         from finance.reporting.markdown_exporter import MarkdownExporter
         report = _make_report()
@@ -228,7 +229,7 @@ class TestMarkdownExporter:
         assert "12,000.00" in md or "1200000" in md
         assert "12.9%" in md
 
-    def test_export_includes_recommendations(self):
+    def test_export_includes_recommendations(self) -> None:
         """Recommendations rendered as list items."""
         from finance.reporting.markdown_exporter import MarkdownExporter
         report = _make_report()
@@ -237,7 +238,7 @@ class TestMarkdownExporter:
         assert "Expand into new verticals" in md
         assert "healthcare and fintech" in md.lower() or "healthcare" in md.lower()
 
-    def test_export_includes_quality_score(self):
+    def test_export_includes_quality_score(self) -> None:
         """Data quality score is included when present."""
         from finance.reporting.markdown_exporter import MarkdownExporter
         report = _make_report()
@@ -246,7 +247,7 @@ class TestMarkdownExporter:
         assert "0.92" in md
         assert "Quality" in md
 
-    def test_export_empty_sections(self):
+    def test_export_empty_sections(self) -> None:
         """Exporter handles empty sections gracefully."""
         from finance.domain.board_report import BoardReport
         from finance.reporting.markdown_exporter import MarkdownExporter
@@ -270,7 +271,7 @@ class TestMarkdownExporter:
 class TestReportBuilder:
     """ReportBuilder assembles a BoardReport from components."""
 
-    def test_builder_creates_report(self):
+    def test_builder_creates_report(self) -> None:
         """ReportBuilder constructs a complete BoardReport."""
         from finance.domain.board_report import ReportSection
         from finance.reporting.builder import ReportBuilder
@@ -292,7 +293,7 @@ class TestReportBuilder:
         assert report.data_quality_score == Decimal("0.95")
         assert report.is_draft is True
 
-    def test_builder_can_finalize(self):
+    def test_builder_can_finalize(self) -> None:
         """Builder can mark report as finalized (not draft)."""
         from finance.domain.board_report import ReportSection
         from finance.reporting.builder import ReportBuilder
@@ -302,7 +303,7 @@ class TestReportBuilder:
         report = builder.finalize()
         assert report.is_draft is False
 
-    def test_builder_adds_kpi(self):
+    def test_builder_adds_kpi(self) -> None:
         """Builder accepts KPIValue objects."""
         from decimal import Decimal
 
@@ -326,7 +327,7 @@ class TestReportBuilder:
         assert len(report.kpis) == 1
         assert report.kpis[0].kpi_name == "Revenue"
 
-    def test_builder_adds_variance(self):
+    def test_builder_adds_variance(self) -> None:
         """Builder accepts Variance objects."""
         from decimal import Decimal
 

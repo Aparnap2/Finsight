@@ -6,15 +6,18 @@ All three use OpenAI-compatible APIs. Tests mock at the HTTP level.
 from __future__ import annotations
 
 import os
+from collections.abc import Generator
+
+import httpx
 import pytest
 from pydantic import BaseModel
-
+from pytest_httpx import HTTPXMock
 
 # ── Fixtures ─────────────────────────────────────────────────────────────────
 
 
 @pytest.fixture(autouse=True)
-def _set_env():
+def _set_env() -> Generator[None, None, None]:
     """Set env vars for all tests so ModelRouter finds providers."""
     old = {}
     for k in ("GROQ_API_KEY", "GROQ_BASE_URL", "GROQ_CHAT_MODEL",
@@ -42,29 +45,30 @@ def _set_env():
 
 
 class TestModelRouter:
-    def test_router_has_configured_providers(self):
+    def test_router_has_configured_providers(self) -> None:
         from finance.llm.model_router import ModelRouter
         router = ModelRouter()
         providers = router.list_providers()
         assert len(providers) > 0
 
-    def test_router_selects_preferred_provider(self):
+    def test_router_selects_preferred_provider(self) -> None:
         from finance.llm.model_router import ModelRouter
         router = ModelRouter()
         provider = router.select(tasks=["analysis"])
         assert provider is not None
         assert hasattr(provider, "name")
 
-    def test_router_falls_back_on_provider_failure(self):
+    def test_router_falls_back_on_provider_failure(self) -> None:
         from finance.llm.model_router import ModelRouter
         router = ModelRouter()
         provider = router.select(tasks=["analysis"])
+        assert provider is not None
         router.record_failure(provider.name)
         fallback = router.select(tasks=["analysis"])
         assert fallback is not None
         assert fallback.name != provider.name
 
-    def test_router_returns_none_when_all_fail(self):
+    def test_router_returns_none_when_all_fail(self) -> None:
         from finance.llm.model_router import ModelRouter
         router = ModelRouter()
         for _ in range(6):
@@ -75,15 +79,16 @@ class TestModelRouter:
         last = router.select(tasks=["analysis"])
         assert last is None
 
-    def test_router_recovers_after_cooldown(self):
+    def test_router_recovers_after_cooldown(self) -> None:
         from finance.llm.model_router import ModelRouter
         router = ModelRouter(cooldown_minutes=0)
         p1 = router.select(tasks=["analysis"])
+        assert p1 is not None
         router.record_failure(p1.name)
         recovered = router.select(tasks=["analysis"])
         assert recovered is not None
 
-    def test_model_router_config(self):
+    def test_model_router_config(self) -> None:
         from finance.llm.model_router import ProviderConfig
         cfg = ProviderConfig(
             name="test",
@@ -99,7 +104,7 @@ class TestModelRouter:
 
 
 class TestStructuredGeneration:
-    def test_generate_returns_typed_output(self, httpx_mock):
+    def test_generate_returns_typed_output(self, httpx_mock: HTTPXMock) -> None:
         from finance.llm.structured_generation import StructuredGeneration
 
         class TestOutput(BaseModel):
@@ -129,7 +134,7 @@ class TestStructuredGeneration:
         assert result.summary == "Revenue up 10%"
         assert result.confidence == "high"
 
-    def test_generate_retries_on_failure(self, httpx_mock):
+    def test_generate_retries_on_failure(self, httpx_mock: HTTPXMock) -> None:
         from finance.llm.structured_generation import StructuredGeneration
 
         class TestOutput(BaseModel):
@@ -157,9 +162,10 @@ class TestStructuredGeneration:
             response_model=TestOutput,
             max_retries=2,
         )
+        assert isinstance(result, TestOutput)
         assert result.result == "success"
 
-    def test_generate_raises_on_invalid_json(self, httpx_mock):
+    def test_generate_raises_on_invalid_json(self, httpx_mock: HTTPXMock) -> None:
         from finance.llm.structured_generation import StructuredGeneration
 
         class TestOutput(BaseModel):
@@ -182,7 +188,7 @@ class TestStructuredGeneration:
                 max_retries=1,
             )
 
-    def test_generate_exhausts_retries(self, httpx_mock):
+    def test_generate_exhausts_retries(self, httpx_mock: HTTPXMock) -> None:
         from finance.llm.structured_generation import StructuredGeneration
 
         class TestOutput(BaseModel):
@@ -197,7 +203,7 @@ class TestStructuredGeneration:
         )
 
         gen = StructuredGeneration(api_key="test", base_url="https://api.test.com/v1")
-        with pytest.raises(Exception):
+        with pytest.raises(httpx.HTTPStatusError):
             gen.generate(
                 system_prompt="Test.",
                 user_prompt="Test.",
@@ -210,7 +216,7 @@ class TestStructuredGeneration:
 
 
 class TestResponseValidator:
-    def test_validate_valid_output(self):
+    def test_validate_valid_output(self) -> None:
         from finance.llm.response_validator import ResponseValidator
 
         class TestOutput(BaseModel):
@@ -225,7 +231,7 @@ class TestResponseValidator:
         assert result.is_valid is True
         assert len(result.errors) == 0
 
-    def test_validate_missing_field(self):
+    def test_validate_missing_field(self) -> None:
         from finance.llm.response_validator import ResponseValidator
 
         class TestOutput(BaseModel):
@@ -240,7 +246,7 @@ class TestResponseValidator:
         )
         assert result.is_valid is True
 
-    def test_validate_evidence_requirement(self):
+    def test_validate_evidence_requirement(self) -> None:
         from finance.llm.response_validator import ResponseValidator
 
         validator = ResponseValidator()
@@ -252,7 +258,7 @@ class TestResponseValidator:
         assert result.is_valid is False
         assert "evidence" in str(result.errors).lower()
 
-    def test_validate_evidence_passes_with_sources(self):
+    def test_validate_evidence_passes_with_sources(self) -> None:
         from finance.llm.response_validator import ResponseValidator
 
         validator = ResponseValidator()
@@ -268,7 +274,7 @@ class TestResponseValidator:
 
 
 class TestTelemetry:
-    def test_record_completion(self):
+    def test_record_completion(self) -> None:
         from finance.llm.telemetry import Telemetry
         t = Telemetry()
         t.record(
@@ -284,7 +290,7 @@ class TestTelemetry:
         assert stats["total_calls"] == 1
         assert stats["total_tokens"] == 195
 
-    def test_multiple_records(self):
+    def test_multiple_records(self) -> None:
         from finance.llm.telemetry import Telemetry
         t = Telemetry()
         for _ in range(3):
@@ -311,11 +317,18 @@ class TestTelemetry:
         assert stats["total_tokens"] == 420
         assert stats["success_rate"] == 0.75
 
-    def test_per_provider_breakdown(self):
+    def test_per_provider_breakdown(self) -> None:
         from finance.llm.telemetry import Telemetry
+
         t = Telemetry()
-        t.record(provider="groq", model="m1", prompt_name="t", prompt_tokens=100, completion_tokens=20, latency_ms=500, success=True)
-        t.record(provider="poolside", model="m2", prompt_name="t", prompt_tokens=200, completion_tokens=40, latency_ms=1000, success=True)
+        t.record(
+            provider="groq", model="m1", prompt_name="t", prompt_tokens=100,
+            completion_tokens=20, latency_ms=500, success=True,
+        )
+        t.record(
+            provider="poolside", model="m2", prompt_name="t", prompt_tokens=200,
+            completion_tokens=40, latency_ms=1000, success=True,
+        )
         stats = t.summary()
         assert "groq" in stats["by_provider"]
         assert "poolside" in stats["by_provider"]
@@ -327,9 +340,10 @@ class TestTelemetry:
 
 
 class TestLLMClient:
-    def test_client_generate_returns_typed_output(self, httpx_mock):
-        from finance.llm.client import LLMClient
+    def test_client_generate_returns_typed_output(self, httpx_mock: HTTPXMock) -> None:
         from pydantic import BaseModel
+
+        from finance.llm.client import LLMClient
 
         class TestOutput(BaseModel):
             result: str
@@ -352,9 +366,10 @@ class TestLLMClient:
         assert isinstance(result, TestOutput)
         assert result.result == "success"
 
-    def test_client_falls_back_on_provider_error(self, httpx_mock):
-        from finance.llm.client import LLMClient
+    def test_client_falls_back_on_provider_error(self, httpx_mock: HTTPXMock) -> None:
         from pydantic import BaseModel
+
+        from finance.llm.client import LLMClient
 
         class TestOutput(BaseModel):
             result: str
@@ -381,4 +396,5 @@ class TestLLMClient:
             user_prompt="Test.",
             response_model=TestOutput,
         )
+        assert isinstance(result, TestOutput)
         assert result.result == "fallback_worked"

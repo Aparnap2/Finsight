@@ -1,12 +1,14 @@
 from decimal import Decimal
+from typing import Any
 
 from sqlalchemy import Engine, select
 from sqlalchemy.orm import Session
-from shared.models.database import Actual, BudgetLine, GLAccount, TrialBalance
+
+from shared.models.database import Actual, BudgetLine, GLAccount
 from shared.models.state import PipelineState
 
 
-def ingestion_node(state: PipelineState, engine: Engine | None = None) -> dict:
+def ingestion_node(state: PipelineState, engine: Engine | None = None) -> dict[str, Any]:
     period = state["period"]
     entity_id = state["tenant_id"]
 
@@ -37,7 +39,9 @@ def ingestion_node(state: PipelineState, engine: Engine | None = None) -> dict:
     }
 
 
-def _fetch_actuals_from_db(period: str, entity_id: str, engine: Engine) -> list[dict]:
+def _fetch_actuals_from_db(
+    period: str, entity_id: str, engine: Engine
+) -> list[dict[str, Any]]:
     with Session(engine) as session:
         stmt = (
             select(Actual, GLAccount.account_name, GLAccount.department)
@@ -56,7 +60,9 @@ def _fetch_actuals_from_db(period: str, entity_id: str, engine: Engine) -> list[
         ]
 
 
-def _fetch_budget_from_db(period: str, entity_id: str, engine: Engine) -> list[dict]:
+def _fetch_budget_from_db(
+    period: str, entity_id: str, engine: Engine
+) -> list[dict[str, Any]]:
     with Session(engine) as session:
         stmt = (
             select(BudgetLine, GLAccount.account_name, GLAccount.department)
@@ -75,17 +81,19 @@ def _fetch_budget_from_db(period: str, entity_id: str, engine: Engine) -> list[d
         ]
 
 
-def _fetch_actuals_mock(period: str, entity_id: str) -> list[dict]:
+def _fetch_actuals_mock(period: str, entity_id: str) -> list[dict[str, Any]]:
     return [{"account_id": "mock", "amount": 100000}]
 
 
-def _fetch_budget_mock(period: str, entity_id: str) -> list[dict]:
+def _fetch_budget_mock(period: str, entity_id: str) -> list[dict[str, Any]]:
     return [{"account_id": "mock", "amount": 100000}]
 
 
-def _check_reconciliation(actuals: list[dict]) -> bool:
+def _check_reconciliation(actuals: list[dict[str, Any]]) -> bool:
     return True
 
 
-def _detect_anomalies(actuals: list[dict], budget: list[dict]) -> list[str]:
+def _detect_anomalies(
+    actuals: list[dict[str, Any]], budget: list[dict[str, Any]]
+) -> list[str]:
     return []

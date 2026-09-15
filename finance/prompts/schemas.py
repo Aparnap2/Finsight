@@ -7,7 +7,7 @@ Pydantic boundary — only ``decimal.Decimal``, ``int``, or ``str`` are accepted
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Annotated
+from typing import Annotated, Any
 
 from pydantic import BaseModel, BeforeValidator
 
@@ -95,7 +95,7 @@ class BoardReportInput(BaseModel):
     company_name: str
     period_id: str
     executive_summary: str
-    variance_highlights: list
-    kpi_summary: dict
-    recommendations: list
-    risk_assessment: list
+    variance_highlights: list[Any]
+    kpi_summary: dict[str, Any]
+    recommendations: list[Any]
+    risk_assessment: list[Any]

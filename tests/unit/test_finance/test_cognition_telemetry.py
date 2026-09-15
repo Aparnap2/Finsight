@@ -6,9 +6,9 @@ from pathlib import Path
 
 
 class TestReasoningTelemetry:
-    def test_telemetry_captures_trace(self):
-        from finance.cognition.telemetry import ReasoningTelemetry
+    def test_telemetry_captures_trace(self) -> None:
         from finance.cognition.state.models import ReasoningState
+        from finance.cognition.telemetry import ReasoningTelemetry
 
         with tempfile.TemporaryDirectory() as tmp:
             telemetry = ReasoningTelemetry(output_dir=tmp)
@@ -27,9 +27,9 @@ class TestReasoningTelemetry:
             assert data["loop_decision"] == "finalize"
             assert len(data["trace"]) == 1
 
-    def test_telemetry_directory_created(self):
-        from finance.cognition.telemetry import ReasoningTelemetry
+    def test_telemetry_directory_created(self) -> None:
         from finance.cognition.state.models import ReasoningState
+        from finance.cognition.telemetry import ReasoningTelemetry
 
         with tempfile.TemporaryDirectory() as tmp:
             output_dir = Path(tmp) / "traces"
@@ -39,9 +39,9 @@ class TestReasoningTelemetry:
             assert output_dir.exists()
             assert path.parent == output_dir
 
-    def test_telemetry_includes_assertions(self):
-        from finance.cognition.telemetry import ReasoningTelemetry
+    def test_telemetry_includes_assertions(self) -> None:
         from finance.cognition.state.models import ReasoningState
+        from finance.cognition.telemetry import ReasoningTelemetry
         from shared.models.assertions import Assertion, AssertionType
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -62,10 +62,10 @@ class TestReasoningTelemetry:
             assert len(data["assertions"]) == 1
             assert data["assertions"][0]["id"] == "a1"
 
-    def test_telemetry_includes_action_traces(self):
-        from finance.cognition.telemetry import ReasoningTelemetry
-        from finance.cognition.state.models import ReasoningState
+    def test_telemetry_includes_action_traces(self) -> None:
         from finance.cognition.state.action import ActionPlan, ActionStatus
+        from finance.cognition.state.models import ReasoningState
+        from finance.cognition.telemetry import ReasoningTelemetry
 
         with tempfile.TemporaryDirectory() as tmp:
             telemetry = ReasoningTelemetry(output_dir=tmp)
@@ -95,10 +95,10 @@ class TestReasoningTelemetry:
             assert len(data["action_traces"]) == 1
             assert data["action_traces"][0]["tool"] == "variance_engine"
 
-    def test_telemetry_includes_plan_history(self):
-        from finance.cognition.telemetry import ReasoningTelemetry
-        from finance.cognition.state.models import ReasoningState
+    def test_telemetry_includes_plan_history(self) -> None:
         from finance.cognition.state.action import ActionPlan
+        from finance.cognition.state.models import ReasoningState
+        from finance.cognition.telemetry import ReasoningTelemetry
 
         with tempfile.TemporaryDirectory() as tmp:
             telemetry = ReasoningTelemetry(output_dir=tmp)

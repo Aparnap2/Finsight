@@ -1,0 +1,44 @@
+{
+  "ledger_before": {
+    "currency": "USD",
+    "fee": "0.00",
+    "gross": "50000.00",
+    "idempotency_key": "stripe-flagship-001",
+    "net": "50000.00",
+    "occurred_at": "2026-05-01T12:00:00+00:00",
+    "payment_id": "ledger-flagship",
+    "provider": "ledger",
+    "provider_event_id": "evt-ledger-flagship",
+    "refund": "0.00",
+    "status": "SETTLED",
+    "tenant_id": "tenant-acme"
+  },
+  "ledger_settled": {
+    "currency": "USD",
+    "fee": "0.00",
+    "gross": "50000.00",
+    "idempotency_key": "stripe-flagship-001",
+    "net": "35000.00",
+    "occurred_at": "2026-05-03T12:00:00+00:00",
+    "payment_id": "ledger-flagship-settled",
+    "provider": "ledger",
+    "provider_event_id": "evt-ledger-flagship-settled",
+    "refund": "15000.00",
+    "status": "SETTLED",
+    "tenant_id": "tenant-acme"
+  },
+  "processor_net_35000": {
+    "currency": "USD",
+    "fee": "0.00",
+    "gross": "50000.00",
+    "idempotency_key": "stripe-flagship-001",
+    "net": "35000.00",
+    "occurred_at": "2026-05-02T12:00:00+00:00",
+    "payment_id": "pi-flagship-charge",
+    "provider": "stripe",
+    "provider_event_id": "evt-flagship-refund",
+    "refund": "15000.00",
+    "status": "PARTIALLY_REFUNDED",
+    "tenant_id": "tenant-acme"
+  }
+}

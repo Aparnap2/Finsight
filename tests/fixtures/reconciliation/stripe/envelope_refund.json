@@ -1,0 +1,12 @@
+{
+  "created": 1746192000,
+  "data": {
+    "amount_minor": 1500000,
+    "currency": "USD",
+    "payment_id": "pi-flagship-charge"
+  },
+  "event_id": "evt-flagship-refund",
+  "event_type": "refund.created",
+  "idempotency_key": "stripe-flagship-001-refund",
+  "tenant_id": "tenant-acme"
+}

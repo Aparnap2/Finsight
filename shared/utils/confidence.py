@@ -8,8 +8,7 @@ Confidence is computed from verifiable metadata only:
 Each assertion class has a separate scoring function.
 """
 
-from decimal import Decimal
-from shared.models.assertions import Assertion, AssertionType, SupportLevel
+from shared.models.assertions import Assertion, AssertionType
 from shared.models.degraded_mode import DegradedMode
 
 

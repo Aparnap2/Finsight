@@ -4,10 +4,10 @@ TDD: Written before implementation. Must fail first.
 """
 from __future__ import annotations
 
-import pytest
 from decimal import Decimal
-from datetime import date
+from pathlib import Path
 
+import pytest
 
 # ── Phase 2: Google Sheets Adapter ───────────────────────────────────────────
 
@@ -15,28 +15,28 @@ from datetime import date
 class TestSheetsAuth:
     """Authentication and credential management."""
 
-    def test_authenticate_with_service_account(self):
+    def test_authenticate_with_service_account(self) -> None:
         """Service account JSON file produces valid credentials."""
         from finance.ingestion.sheets_adapter import SheetsAdapter
         adapter = SheetsAdapter(credentials_path="/fake/path.json")
         with pytest.raises(FileNotFoundError):
             adapter.authenticate()
 
-    def test_authenticate_raises_on_missing_creds(self):
+    def test_authenticate_raises_on_missing_creds(self) -> None:
         """Adapter raises when credentials_path does not exist."""
         from finance.ingestion.sheets_adapter import SheetsAdapter
         adapter = SheetsAdapter(credentials_path="/nonexistent/creds.json")
         with pytest.raises(FileNotFoundError):
             adapter.authenticate()
 
-    def test_adapter_rejects_empty_spreadsheet_id(self):
+    def test_adapter_rejects_empty_spreadsheet_id(self) -> None:
         """Adapter raises ValueError on empty spreadsheet_id."""
         from finance.ingestion.sheets_adapter import SheetsAdapter
         adapter = SheetsAdapter(credentials_path="/fake/path.json")
         with pytest.raises(ValueError, match="spreadsheet_id"):
             adapter.read_range(spreadsheet_id="", range="Sheet1!A1:B10")
 
-    def test_adapter_rejects_empty_range(self):
+    def test_adapter_rejects_empty_range(self) -> None:
         """Adapter raises ValueError on empty range."""
         from finance.ingestion.sheets_adapter import SheetsAdapter
         adapter = SheetsAdapter(credentials_path="/fake/path.json")
@@ -47,7 +47,7 @@ class TestSheetsAuth:
 class TestSheetsRead:
     """Reading data from Google Sheets."""
 
-    def test_read_range_returns_list_of_lists(self):
+    def test_read_range_returns_list_of_lists(self) -> None:
         """read_range returns a list of rows, each row is a list of values."""
         from finance.ingestion.sheets_adapter import SheetsAdapter
         adapter = SheetsAdapter(credentials_path="/fake/path.json")
@@ -59,7 +59,7 @@ class TestSheetsRead:
 class TestSheetsWrite:
     """Writing data to Google Sheets."""
 
-    def test_write_range_validates_data(self):
+    def test_write_range_validates_data(self) -> None:
         """write_range rejects empty data."""
         from finance.ingestion.sheets_adapter import SheetsAdapter
         adapter = SheetsAdapter(credentials_path="/fake/path.json")
@@ -70,7 +70,7 @@ class TestSheetsWrite:
 class TestSheetsValidate:
     """Validating spreadsheet structure."""
 
-    def test_validate_missing_header(self):
+    def test_validate_missing_header(self) -> None:
         """validate detects missing required headers."""
         from finance.ingestion.sheets_adapter import SheetsAdapter
         adapter = SheetsAdapter(credentials_path="/fake/path.json")
@@ -81,7 +81,7 @@ class TestSheetsValidate:
 class TestCSVFallback:
     """CSV fallback when Google Sheets is unavailable."""
 
-    def test_csv_read_returns_parsed_rows(self, tmp_path):
+    def test_csv_read_returns_parsed_rows(self, tmp_path: Path) -> None:
         """CSV reader converts a CSV file into list of dicts."""
         from finance.ingestion.sheets_adapter import read_csv
         csv_file = tmp_path / "test.csv"
@@ -91,13 +91,13 @@ class TestCSVFallback:
         assert result[0]["account"] == "4010"
         assert result[0]["amount"] == "100000"
 
-    def test_csv_read_missing_file(self):
+    def test_csv_read_missing_file(self) -> None:
         """CSV reader raises FileNotFoundError for missing file."""
         from finance.ingestion.sheets_adapter import read_csv
         with pytest.raises(FileNotFoundError):
             read_csv("/nonexistent/file.csv")
 
-    def test_csv_read_empty_file(self, tmp_path):
+    def test_csv_read_empty_file(self, tmp_path: Path) -> None:
         """CSV reader handles empty file gracefully."""
         from finance.ingestion.sheets_adapter import read_csv
         csv_file = tmp_path / "empty.csv"
@@ -105,7 +105,7 @@ class TestCSVFallback:
         result = read_csv(str(csv_file))
         assert result == []
 
-    def test_csv_fallback_on_sheets_error(self):
+    def test_csv_fallback_on_sheets_error(self) -> None:
         """Adapter falls back to CSV when sheets is unreachable."""
         from finance.ingestion.sheets_adapter import SheetsAdapter
         adapter = SheetsAdapter(
@@ -119,7 +119,7 @@ class TestCSVFallback:
 class TestSheetsSync:
     """Incremental sync functionality."""
 
-    def test_sync_requires_spreadsheet_id(self):
+    def test_sync_requires_spreadsheet_id(self) -> None:
         """sync raises on missing spreadsheet_id."""
         from finance.ingestion.sheets_adapter import SheetsAdapter
         adapter = SheetsAdapter(credentials_path="/fake/path.json")
@@ -133,7 +133,7 @@ class TestSheetsSync:
 class TestContextBuilder:
     """Context Builder creates structured Finance Context Packs."""
 
-    def test_build_context_returns_valid_structure(self):
+    def test_build_context_returns_valid_structure(self) -> None:
         """build_context returns a FinanceContextPack with all required sections."""
         from finance.context.context_builder import ContextBuilder
         builder = ContextBuilder()
@@ -147,7 +147,7 @@ class TestContextBuilder:
         assert context.material_variances is not None
         assert context.evidence_items is not None
 
-    def test_context_pack_has_expected_sections(self):
+    def test_context_pack_has_expected_sections(self) -> None:
         """FinanceContextPack has all 11 required sections."""
         from finance.context.models import FinanceContextPack
         pack = FinanceContextPack(
@@ -167,7 +167,7 @@ class TestContextBuilder:
         assert pack.company_name == "Test Corp"
         assert pack.currency == "USD"
 
-    def test_empty_kpis_list_is_valid(self):
+    def test_empty_kpis_list_is_valid(self) -> None:
         """Context allows empty KPI list (graceful degradation)."""
         from finance.context.models import FinanceContextPack
         pack = FinanceContextPack(
@@ -193,7 +193,7 @@ class TestContextBuilder:
 class TestEvidenceEngine:
     """Evidence Engine validates and scores evidence-backed claims."""
 
-    def test_evidence_item_requires_source(self):
+    def test_evidence_item_requires_source(self) -> None:
         """EvidenceItem requires a source reference."""
         from finance.evidence.models import EvidenceItem
         item = EvidenceItem(
@@ -206,14 +206,14 @@ class TestEvidenceEngine:
         assert item.claim == "Revenue increased 10%"
         assert item.confidence == "high"
 
-    def test_evidence_engine_collects_for_variance(self):
+    def test_evidence_engine_collects_for_variance(self) -> None:
         """EvidenceEngine.collect returns evidence for a given variance."""
         from finance.evidence.engine import EvidenceEngine
         engine = EvidenceEngine()
         evidence = engine.collect(account_id="4010", period_id="2026-07")
         assert len(evidence) >= 0
 
-    def test_evidence_coverage_score(self):
+    def test_evidence_coverage_score(self) -> None:
         """EvidenceEngine.coverage_score returns a Decimal between 0 and 100."""
         from finance.evidence.engine import EvidenceEngine
         engine = EvidenceEngine()

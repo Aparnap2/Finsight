@@ -1,0 +1,32 @@
+# Materiality thresholds reference data.
+# Defaults used when a tenant does not override materiality in
+# tenant.yaml. Amounts are in the tenant's base currency and must be
+# treated as decimal, never float.
+
+defaults:
+  variance_amount_threshold: 5000.00
+  variance_pct_threshold: 5.0
+  forecast_accuracy_floor: 0.95
+  rounding_tolerance: 0.01
+
+tiers:
+  - name: small
+    max_amount: 10000
+    max_pct: 5.0
+    action: auto_approve
+  - name: medium
+    max_amount: 50000
+    max_pct: 10.0
+    action: require_review
+  - name: large
+    max_amount: 250000
+    max_pct: 25.0
+    action: require_approval
+  - name: material
+    max_amount: null
+    max_pct: null
+    action: escalate_to_cfo
+
+policy_refs:
+  - mat-001
+  - var-001

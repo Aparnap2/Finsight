@@ -1,11 +1,11 @@
 """Financial Period domain models."""
 from datetime import date
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
 
-class PeriodStatus(str, Enum):
+class PeriodStatus(StrEnum):
     OPEN = "open"
     CLOSING = "closing"
     VALIDATING = "validating"
@@ -15,7 +15,7 @@ class PeriodStatus(str, Enum):
     LOCKED = "locked"
 
 
-class PeriodType(str, Enum):
+class PeriodType(StrEnum):
     MONTHLY = "monthly"
     QUARTERLY = "quarterly"
     YEARLY = "yearly"

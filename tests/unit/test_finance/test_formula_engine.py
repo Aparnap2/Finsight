@@ -5,12 +5,12 @@ No LLM calls. Pure Python, fully tested.
 """
 
 from decimal import Decimal
+
 import pytest
 
-from finance.formula_engine.formula_registry import Formula, FormulaRegistry
 from finance.formula_engine.dependency_resolver import DependencyResolver
-from finance.formula_engine.evaluator import FormulaEvaluator, EvaluationContext, EvaluationError
-
+from finance.formula_engine.evaluator import FormulaEvaluator
+from finance.formula_engine.formula_registry import Formula, FormulaRegistry
 
 # =============================================================================
 # Formula Definitions
@@ -173,7 +173,7 @@ def build_default_registry() -> FormulaRegistry:
 class TestFormulaRegistry:
     """Tests for Formula and FormulaRegistry."""
 
-    def test_formula_registry_register_and_get(self):
+    def test_formula_registry_register_and_get(self) -> None:
         """Register a formula and retrieve it."""
         registry = FormulaRegistry()
         formula = Formula(
@@ -190,7 +190,7 @@ class TestFormulaRegistry:
         assert retrieved.name == "gross_margin"
         assert retrieved.category == "margin"
 
-    def test_formula_evaluate_gross_margin(self):
+    def test_formula_evaluate_gross_margin(self) -> None:
         """gross_margin(revenue=1000, cogs=600) → 0.4"""
         registry = build_default_registry()
         result = registry.evaluate("gross_margin", {
@@ -199,7 +199,7 @@ class TestFormulaRegistry:
         })
         assert result == Decimal("0.4")
 
-    def test_formula_evaluate_operating_margin(self):
+    def test_formula_evaluate_operating_margin(self) -> None:
         """operating_margin(operating_income=200, revenue=1000) → 0.2"""
         registry = build_default_registry()
         result = registry.evaluate("operating_margin", {
@@ -208,7 +208,7 @@ class TestFormulaRegistry:
         })
         assert result == Decimal("0.2")
 
-    def test_formula_evaluate_revenue_growth(self):
+    def test_formula_evaluate_revenue_growth(self) -> None:
         """revenue_growth(1200, 1000) → 0.2"""
         registry = build_default_registry()
         result = registry.evaluate("revenue_growth", {
@@ -217,7 +217,7 @@ class TestFormulaRegistry:
         })
         assert result == Decimal("0.2")
 
-    def test_formula_evaluate_burn_rate(self):
+    def test_formula_evaluate_burn_rate(self) -> None:
         """burn_rate(500000, 6) → 83333.33"""
         registry = build_default_registry()
         result = registry.evaluate("burn_rate", {
@@ -226,7 +226,7 @@ class TestFormulaRegistry:
         })
         assert result == Decimal("83333.33")
 
-    def test_formula_evaluate_runway(self):
+    def test_formula_evaluate_runway(self) -> None:
         """runway(2000000, 83333.33) → 24.0"""
         registry = build_default_registry()
         result = registry.evaluate("runway", {
@@ -235,7 +235,7 @@ class TestFormulaRegistry:
         })
         assert result == Decimal("24.0")
 
-    def test_formula_list_by_category(self):
+    def test_formula_list_by_category(self) -> None:
         """Category filtering works."""
         registry = build_default_registry()
         margin_formulas = registry.list_by_category("margin")
@@ -248,7 +248,7 @@ class TestFormulaRegistry:
         assert "ebitda_margin" in names
         assert "net_margin" in names
 
-    def test_all_formulas_have_unique_names(self):
+    def test_all_formulas_have_unique_names(self) -> None:
         """No duplicate registrations."""
         registry = build_default_registry()
         # Registering same name again should raise
@@ -270,7 +270,7 @@ class TestFormulaRegistry:
 class TestDependencyResolver:
     """Tests for DependencyResolver."""
 
-    def test_dependency_resolver_orders_correctly(self):
+    def test_dependency_resolver_orders_correctly(self) -> None:
         """Margin formulas depend on raw inputs; runway depends on burn_rate.
 
         The resolver should return burn_rate before runway.
@@ -285,7 +285,7 @@ class TestDependencyResolver:
         # burn_rate must come before runway since runway depends on burn_rate
         assert order.index("burn_rate") < order.index("runway")
 
-    def test_dependency_resolver_detects_cycles(self):
+    def test_dependency_resolver_detects_cycles(self) -> None:
         """A→B→C→A raises or is detected."""
         registry = FormulaRegistry()
 
@@ -321,7 +321,7 @@ class TestDependencyResolver:
         with pytest.raises(ValueError, match="circular|cycle|dependency"):
             resolver.resolve(registry, set())
 
-    def test_depends_on_returns_correct_dependencies(self):
+    def test_depends_on_returns_correct_dependencies(self) -> None:
         """depends_on returns list of formulas a given formula depends on."""
         registry = build_default_registry()
         resolver = DependencyResolver()
@@ -357,7 +357,7 @@ class TestFormulaEvaluator:
         "rd_expense": Decimal("100000"),
     }
 
-    def test_evaluator_evaluate_all(self):
+    def test_evaluator_evaluate_all(self) -> None:
         """Seed inputs + all formulas evaluated in order.
 
         Verifies that cross-formula dependencies resolve correctly
@@ -393,7 +393,7 @@ class TestFormulaEvaluator:
         assert context.values["sgna_pct"] == Decimal("0.15")
         assert context.values["rd_pct"] == Decimal("0.1")
 
-    def test_evaluator_partial_evaluation(self):
+    def test_evaluator_partial_evaluation(self) -> None:
         """Subset of formulas evaluated."""
         registry = build_default_registry()
         resolver = DependencyResolver()
@@ -410,7 +410,7 @@ class TestFormulaEvaluator:
         assert "runway" not in context.evaluated
         assert len(context.errors) == 0
 
-    def test_evaluator_error_handling(self):
+    def test_evaluator_error_handling(self) -> None:
         """Missing input gives clear error."""
         registry = build_default_registry()
         resolver = DependencyResolver()
@@ -434,10 +434,10 @@ class TestFormulaEvaluator:
 class TestDecimalPrecision:
     """All results are Decimal with proper precision."""
 
-    def test_decimal_precision(self):
+    def test_decimal_precision(self) -> None:
         """All formula results are Decimal instances."""
         registry = build_default_registry()
-        for _, formula in registry._registry.items():
+        for _name, _formula in registry._registry.items():
             # Each formula fn returns Decimal
             pass  # Verified implicitly by type annotations
 

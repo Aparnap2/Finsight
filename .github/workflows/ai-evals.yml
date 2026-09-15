@@ -1,0 +1,19 @@
+name: AI evals (manual only)
+
+# Manual ONLY: workflow_dispatch. Never push / pull_request — LLM evals are
+# controlled and must never run implicitly or call providers from CI.
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  llm-evals:
+    name: controlled LLM eval gate (stub)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Controlled eval gate (no provider calls)
+        run: |
+          echo "LLM evals are controlled; see evals/llm/README"
+          exit 0

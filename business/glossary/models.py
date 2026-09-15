@@ -50,7 +50,7 @@ class GlossaryCategory(StrEnum):
 # ---------------------------------------------------------------------------
 
 
-class GlossaryEntry(BaseModel):  # type: ignore[misc]  # pydantic v2 w/o mypy plugin
+class GlossaryEntry(BaseModel):
     """A single term in the Business Glossary.
 
     Each entry captures the canonical definition, formula, data classification,

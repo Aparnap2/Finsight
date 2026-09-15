@@ -4,10 +4,11 @@ Written before implementation. Must fail first.
 """
 from __future__ import annotations
 
-import pytest
 from datetime import datetime
 from decimal import Decimal
 
+import pytest
+from pydantic import ValidationError
 
 # ── Prompt Schemas ───────────────────────────────────────────────────────────
 
@@ -15,7 +16,7 @@ from decimal import Decimal
 class TestPromptSchemas:
     """Prompt I/O schemas define typed contracts for every prompt type."""
 
-    def test_variance_input_schema(self):
+    def test_variance_input_schema(self) -> None:
         """VarianceAnalysisInput requires account_id, period, variance_pct."""
         from finance.prompts.schemas import VarianceAnalysisInput
         inp = VarianceAnalysisInput(
@@ -33,7 +34,7 @@ class TestPromptSchemas:
         assert inp.account_id == "4010"
         assert inp.variance_pct == Decimal("4.0")
 
-    def test_variance_output_schema(self):
+    def test_variance_output_schema(self) -> None:
         """VarianceAnalysisOutput has explanation, drivers, confidence."""
         from finance.prompts.schemas import VarianceAnalysisOutput
         out = VarianceAnalysisOutput(
@@ -46,7 +47,7 @@ class TestPromptSchemas:
         assert out.confidence == "high"
         assert len(out.evidence_ids) == 2
 
-    def test_executive_summary_input_schema(self):
+    def test_executive_summary_input_schema(self) -> None:
         """ExecutiveSummaryInput takes aggregated KPIs and variances."""
         from finance.prompts.schemas import ExecutiveSummaryInput
         inp = ExecutiveSummaryInput(
@@ -60,7 +61,7 @@ class TestPromptSchemas:
         )
         assert inp.net_income == Decimal("150000")
 
-    def test_executive_summary_output_schema(self):
+    def test_executive_summary_output_schema(self) -> None:
         """ExecutiveSummaryOutput has narrative sections."""
         from finance.prompts.schemas import ExecutiveSummaryOutput
         out = ExecutiveSummaryOutput(
@@ -71,7 +72,7 @@ class TestPromptSchemas:
         )
         assert "Strong quarter" in out.executive_summary
 
-    def test_board_report_input_schema(self):
+    def test_board_report_input_schema(self) -> None:
         """BoardReportInput takes full context pack data."""
         from finance.prompts.schemas import BoardReportInput
         inp = BoardReportInput(
@@ -85,10 +86,10 @@ class TestPromptSchemas:
         )
         assert inp.company_name == "Test Corp"
 
-    def test_schema_rejects_float_for_amounts(self):
+    def test_schema_rejects_float_for_amounts(self) -> None:
         """Prompt input schemas reject float for monetary fields."""
         from finance.prompts.schemas import VarianceAnalysisInput
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             VarianceAnalysisInput(
                 account_id="4010",
                 account_name="Revenue",
@@ -108,7 +109,7 @@ class TestPromptSchemas:
 class TestPromptRegistry:
     """PromptRegistry manages all prompt templates by name and version."""
 
-    def test_register_prompt(self):
+    def test_register_prompt(self) -> None:
         """Register a prompt template by name."""
         from finance.prompts.registry import PromptRegistry
         registry = PromptRegistry()
@@ -119,7 +120,7 @@ class TestPromptRegistry:
         )
         assert registry.has("variance_analysis")
 
-    def test_register_duplicate_name_raises(self):
+    def test_register_duplicate_name_raises(self) -> None:
         """Registering same name twice raises ValueError."""
         from finance.prompts.registry import PromptRegistry
         registry = PromptRegistry()
@@ -127,7 +128,7 @@ class TestPromptRegistry:
         with pytest.raises(ValueError, match="already registered"):
             registry.register("test", "1.0.0", "duplicate")
 
-    def test_get_prompt(self):
+    def test_get_prompt(self) -> None:
         """Get a registered prompt template by name."""
         from finance.prompts.registry import PromptRegistry
         registry = PromptRegistry()
@@ -135,14 +136,14 @@ class TestPromptRegistry:
         tmpl = registry.get("variance")
         assert tmpl.template == "Explain variance for {account}."
 
-    def test_get_missing_prompt_raises(self):
+    def test_get_missing_prompt_raises(self) -> None:
         """Getting unregistered prompt raises KeyError."""
         from finance.prompts.registry import PromptRegistry
         registry = PromptRegistry()
         with pytest.raises(KeyError, match="nonexistent"):
             registry.get("nonexistent")
 
-    def test_list_prompts(self):
+    def test_list_prompts(self) -> None:
         """List all registered prompt names."""
         from finance.prompts.registry import PromptRegistry
         registry = PromptRegistry()
@@ -152,7 +153,7 @@ class TestPromptRegistry:
         assert "a" in names
         assert "b" in names
 
-    def test_prompt_version_tracking(self):
+    def test_prompt_version_tracking(self) -> None:
         """Prompt metadata includes version, created_at, description."""
         from finance.prompts.registry import PromptRegistry
         registry = PromptRegistry()
@@ -174,7 +175,7 @@ class TestPromptRegistry:
 class TestPromptRenderer:
     """PromptRenderer injects variables into templates."""
 
-    def test_render_simple_template(self):
+    def test_render_simple_template(self) -> None:
         """Render replaces {variables} with provided values."""
         from finance.prompts.renderer import PromptRenderer
         renderer = PromptRenderer()
@@ -184,7 +185,7 @@ class TestPromptRenderer:
         )
         assert result == "Analyze variance for 4010 in 2026-07."
 
-    def test_render_missing_variable_raises(self):
+    def test_render_missing_variable_raises(self) -> None:
         """Render raises on missing template variable."""
         from finance.prompts.renderer import PromptRenderer
         renderer = PromptRenderer()
@@ -194,7 +195,7 @@ class TestPromptRenderer:
                 variables={"account": "4010"},  # missing 'period'
             )
 
-    def test_render_with_context_injection(self):
+    def test_render_with_context_injection(self) -> None:
         """Render injects context pack data as template variables."""
         from finance.prompts.renderer import PromptRenderer
         renderer = PromptRenderer()
@@ -217,7 +218,7 @@ class TestPromptRenderer:
 class TestExecutionContext:
     """ExecutionContext captures metadata about a prompt execution."""
 
-    def test_execution_context_creation(self):
+    def test_execution_context_creation(self) -> None:
         """ExecutionContext stores prompt metadata."""
         from finance.prompts.execution_context import ExecutionContext
         ctx = ExecutionContext(
@@ -231,7 +232,7 @@ class TestExecutionContext:
         assert ctx.prompt_name == "variance_analysis"
         assert ctx.provider == "groq"
 
-    def test_execution_context_completion(self):
+    def test_execution_context_completion(self) -> None:
         """ExecutionContext records completion time and token usage."""
         from finance.prompts.execution_context import ExecutionContext
         ctx = ExecutionContext(
@@ -257,50 +258,50 @@ class TestExecutionContext:
 class TestPromptTemplates:
     """Pre-registered prompt templates load correctly."""
 
-    def test_variance_template_exists(self):
+    def test_variance_template_exists(self) -> None:
         """variance.py template is registered."""
-        from finance.prompts.registry import PromptRegistry
         import finance.prompts.templates
+        from finance.prompts.registry import PromptRegistry
         registry = PromptRegistry()
         finance.prompts.templates.register_all(registry)
         assert registry.has("variance_analysis")
 
-    def test_executive_summary_template_exists(self):
+    def test_executive_summary_template_exists(self) -> None:
         """executive_summary.py template is registered."""
-        from finance.prompts.registry import PromptRegistry
         import finance.prompts.templates
+        from finance.prompts.registry import PromptRegistry
         registry = PromptRegistry()
         finance.prompts.templates.register_all(registry)
         assert registry.has("executive_summary")
 
-    def test_driver_template_exists(self):
+    def test_driver_template_exists(self) -> None:
         """driver.py template is registered."""
-        from finance.prompts.registry import PromptRegistry
         import finance.prompts.templates
+        from finance.prompts.registry import PromptRegistry
         registry = PromptRegistry()
         finance.prompts.templates.register_all(registry)
         assert registry.has("driver_investigation")
 
-    def test_recommendation_template_exists(self):
+    def test_recommendation_template_exists(self) -> None:
         """recommendation.py template is registered."""
-        from finance.prompts.registry import PromptRegistry
         import finance.prompts.templates
+        from finance.prompts.registry import PromptRegistry
         registry = PromptRegistry()
         finance.prompts.templates.register_all(registry)
         assert registry.has("recommendation")
 
-    def test_board_report_template_exists(self):
+    def test_board_report_template_exists(self) -> None:
         """board_report.py template is registered."""
-        from finance.prompts.registry import PromptRegistry
         import finance.prompts.templates
+        from finance.prompts.registry import PromptRegistry
         registry = PromptRegistry()
         finance.prompts.templates.register_all(registry)
         assert registry.has("board_report")
 
-    def test_risk_template_exists(self):
+    def test_risk_template_exists(self) -> None:
         """risk.py template is registered."""
-        from finance.prompts.registry import PromptRegistry
         import finance.prompts.templates
+        from finance.prompts.registry import PromptRegistry
         registry = PromptRegistry()
         finance.prompts.templates.register_all(registry)
         assert registry.has("risk_assessment")
@@ -312,12 +313,12 @@ class TestPromptTemplates:
 class TestPromptExecution:
     """End-to-end: schema → template → render → output."""
 
-    def test_variance_prompt_full_cycle(self):
+    def test_variance_prompt_full_cycle(self) -> None:
         """Full prompt execution pipeline: input → render → output schema."""
-        from finance.prompts.schemas import VarianceAnalysisInput, VarianceAnalysisOutput
+        import finance.prompts.templates
         from finance.prompts.registry import PromptRegistry
         from finance.prompts.renderer import PromptRenderer
-        import finance.prompts.templates
+        from finance.prompts.schemas import VarianceAnalysisInput, VarianceAnalysisOutput
 
         registry = PromptRegistry()
         finance.prompts.templates.register_all(registry)

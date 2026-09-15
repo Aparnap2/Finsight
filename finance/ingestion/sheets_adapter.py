@@ -8,6 +8,7 @@ from __future__ import annotations
 import csv
 import os
 from pathlib import Path
+from typing import Any
 
 
 class SheetsAdapter:
@@ -34,27 +35,31 @@ class SheetsAdapter:
             )
         self._authenticated = True
 
-    def read_range(self, spreadsheet_id: str, range: str) -> list[list[str]]:
+    # NOTE: `range` is a public keyword argument (tests call range=...); matching protocol.py.
+    def read_range(self, spreadsheet_id: str, range: str) -> list[list[str]]:  # noqa: A002
         if not spreadsheet_id:
             raise ValueError("spreadsheet_id must not be empty")
         if not range:
             raise ValueError("range must not be empty")
         if not self._authenticated:
             if self.csv_fallback_path:
-                return read_csv(self.csv_fallback_path)
+                rows = read_csv(self.csv_fallback_path)
+                return [list(row.values()) for row in rows]
             raise RuntimeError("Adapter not authenticated. Call authenticate() first.")
         return []
 
-    def write_range(self, spreadsheet_id: str, range: str, values: list[list[str]]) -> None:
+    def write_range(
+        self, spreadsheet_id: str, range: str, values: list[list[str]]  # noqa: A002
+    ) -> None:
         if not values:
             raise ValueError("data must not be empty")
 
-    def validate(self, spreadsheet_id: str) -> dict:
+    def validate(self, spreadsheet_id: str) -> dict[str, Any]:
         if not self._authenticated:
             raise RuntimeError("Adapter not authenticated. Call authenticate() first.")
         return {"valid": True, "missing_headers": []}
 
-    def sync(self, spreadsheet_id: str) -> dict:
+    def sync(self, spreadsheet_id: str) -> dict[str, Any]:
         if not spreadsheet_id:
             raise ValueError("spreadsheet_id must not be empty")
         if not self._authenticated:

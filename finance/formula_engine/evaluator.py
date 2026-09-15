@@ -11,8 +11,8 @@ from decimal import Decimal
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from finance.formula_engine.formula_registry import FormulaRegistry
     from finance.formula_engine.dependency_resolver import DependencyResolver
+    from finance.formula_engine.formula_registry import FormulaRegistry
 
 
 # ── Data classes ──────────────────────────────────────────────────────────────

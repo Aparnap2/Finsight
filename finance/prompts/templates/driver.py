@@ -18,4 +18,5 @@ TEMPLATE = """You are an FP&A analyst investigating the root causes of a financi
 4. Recommend further investigation if needed.
 
 ## Output Format
-Provide a structured driver analysis with driver names, descriptions, impact assessments, and investigation recommendations."""
+Provide a structured driver analysis with driver names, descriptions, impact \
+assessments, and investigation recommendations."""

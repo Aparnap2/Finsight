@@ -1,0 +1,31 @@
+{
+  "metadata": {
+    "id": "regression_forecast_naive",
+    "name": "Naive Forecast Regression",
+    "category": "regression",
+    "subcategory": "forecast",
+    "description": "Golden regression dataset for the naive forecast model. The reference model repeats the last observed actual for the horizon; MAE/RMSE/MAPE must stay within tolerance.",
+    "tags": ["regression", "forecast", "deterministic"],
+    "difficulty": "basic"
+  },
+  "input": {
+    "query": "Forecast revenue for the next two periods",
+    "context": {
+      "history": [100, 110, 121],
+      "forecast_horizon": 2
+    },
+    "spreadsheet_data": {},
+    "variances": []
+  },
+  "expected": {
+    "output": {
+      "forecast": {
+        "actuals": [100, 110, 121],
+        "predicted": [121, 121],
+        "tolerance_mae": 0.01,
+        "tolerance_rmse": 0.01,
+        "tolerance_mape": 0.001
+      }
+    }
+  }
+}

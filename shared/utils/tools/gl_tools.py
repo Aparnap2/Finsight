@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import Engine, create_engine, func, select, text
+from sqlalchemy import Engine, create_engine, func, select
 from sqlalchemy.orm import Session
 
 from shared.config import get_settings
@@ -10,8 +10,8 @@ from shared.models.database import Actual, GLAccount, TrialBalance
 from shared.utils.tools.tool_result import (
     ToolResult,
     compute_degraded_mode,
-    compute_query_fingerprint,
     compute_quality_score,
+    compute_query_fingerprint,
 )
 
 
@@ -196,10 +196,6 @@ def query_trial_balance(
             for r in rows
         ]
         row_count = len(data)
-
-        # Totals for quick reconcilation checks
-        total_debits = sum(r["debit"] for r in data)
-        total_credits = sum(r["credit"] for r in data)
 
         # ---- coverage ----
         tb_acct_count = (

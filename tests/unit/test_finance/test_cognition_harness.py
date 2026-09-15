@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 class TestReasoningHarness:
-    def test_harness_single_pass(self):
+    def test_harness_single_pass(self) -> None:
         from finance.cognition.harness import ReasoningHarness
         from finance.cognition.state.models import ReasoningState
 
@@ -16,7 +16,7 @@ class TestReasoningHarness:
         assert result.success
         assert len(result.state.trace) >= 5
 
-    def test_harness_trace_contains_all_nodes(self):
+    def test_harness_trace_contains_all_nodes(self) -> None:
         from finance.cognition.harness import ReasoningHarness
         from finance.cognition.state.models import ReasoningState
 
@@ -28,7 +28,7 @@ class TestReasoningHarness:
         assert "verifier" in nodes
         assert "reflection" in nodes
 
-    def test_harness_supports_replanning(self):
+    def test_harness_supports_replanning(self) -> None:
         from finance.cognition.harness import ReasoningHarness
         from finance.cognition.state.models import ReasoningState
 
@@ -37,7 +37,7 @@ class TestReasoningHarness:
         assert result.state.iteration_count >= 1
         assert len(result.state.plan_history) >= 0  # may or may not have re-planned
 
-    def test_harness_respects_max_iterations(self):
+    def test_harness_respects_max_iterations(self) -> None:
         from finance.cognition.harness import ReasoningHarness
         from finance.cognition.state.models import ReasoningState
 
@@ -45,20 +45,20 @@ class TestReasoningHarness:
         result = ReasoningHarness().run(state)
         assert result.state.iteration_count <= 1
 
-    def test_harness_captures_telemetry(self):
+    def test_harness_captures_telemetry(self) -> None:
         from finance.cognition.harness import ReasoningHarness
         from finance.cognition.state.models import ReasoningState
 
         with tempfile.TemporaryDirectory() as tmp:
             harness = ReasoningHarness(telemetry_dir=tmp)
             state = ReasoningState(query="test telemetry")
-            result = harness.run(state)
+            harness.run(state)
             traces = list(Path(tmp).glob("*.json"))
             assert len(traces) >= 1
             data = json.loads(traces[0].read_text())
             assert data["query"] == "test telemetry"
 
-    def test_harness_with_custom_registry(self):
+    def test_harness_with_custom_registry(self) -> None:
         from finance.cognition.harness import ReasoningHarness
         from finance.cognition.registry import NodeRegistry
         from finance.cognition.state.models import ReasoningState
@@ -71,7 +71,7 @@ class TestReasoningHarness:
         nodes = [t.node_name for t in result.state.trace]
         assert nodes == ["planner", "reflection"]
 
-    def test_harness_records_run_id(self):
+    def test_harness_records_run_id(self) -> None:
         from finance.cognition.harness import ReasoningHarness
         from finance.cognition.state.models import ReasoningState
 
@@ -81,7 +81,7 @@ class TestReasoningHarness:
         assert result.run_id is not None
         assert len(result.run_id) > 0
 
-    def test_harness_stops_on_finalize(self):
+    def test_harness_stops_on_finalize(self) -> None:
         from finance.cognition.harness import ReasoningHarness
         from finance.cognition.state.models import ReasoningState
 

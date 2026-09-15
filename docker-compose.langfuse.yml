@@ -1,0 +1,54 @@
+# Standalone Langfuse stack for local development.
+# Usage:  docker compose -f docker-compose.langfuse.yml up -d
+# UI:     http://localhost:3000  (admin@langfuse.dev / changeme)
+#
+# This stack is SEPARATE from the main finsight compose — it runs its own
+# Postgres on port 5433 to avoid clashing with finsight's 5432.
+# Secrets are hardcoded dev-only values; never use in production.
+
+services:
+  langfuse:
+    image: langfuse/langfuse:3.173
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://langfuse:langfuse@langfuse-pg:5432/langfuse
+      NEXTAUTH_SECRET: "dev-only-nextauth-secret-do-not-use-in-prod"
+      NEXTAUTH_URL: http://localhost:3000
+      SALT: "dev-only-salt-do-not-use-in-prod"
+    depends_on:
+      langfuse-pg:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000/api/public/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  langfuse-pg:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: langfuse
+      POSTGRES_USER: langfuse
+      POSTGRES_PASSWORD: langfuse
+    ports:
+      - "5433:5432"
+    volumes:
+      - langfuse_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U langfuse"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+volumes:
+  langfuse_pgdata:

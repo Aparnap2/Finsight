@@ -2,10 +2,15 @@
 
 Updated for Phase 4 to consume ``HarnessResult`` directly instead of a
 raw dictionary, and to compute runtime + business metrics separately.
+Extended for Phase G/H with a headless golden-regression CLI entry
+(:func:`main`) that can be wired into CI.
 """
 
 from __future__ import annotations
 
+import argparse
+import json
+import sys
 from typing import Any
 
 from pydantic import BaseModel
@@ -13,6 +18,15 @@ from pydantic import BaseModel
 from finance.cognition.harness import HarnessResult
 from finance.cognition.state.action import Action, ActionPlan
 from finance.evaluation.dataset import GoldenDataset
+from finance.evaluation.golden import (
+    GoldenRegressionHarness,
+    GoldenRegressionReport,
+    ReferenceAnalyticsEngine,
+    ReferenceAnomalyDetector,
+    ReferenceDuplicateDetector,
+    ReferenceForecastModel,
+)
+from finance.evaluation.loader import GoldenDatasetLoader
 from finance.evaluation.metrics import (
     ActionSuccessRate,
     AverageLatency,
@@ -192,3 +206,96 @@ class EvaluationRunner:
             )
             reports.append(self.run(ds, stub_result))
         return reports
+
+
+# ── Headless golden-regression CLI (CI-friendly) ─────────────────────────────
+
+
+def run_golden_regression(
+    dataset_ids: list[str] | None = None,
+    fail_on_error: bool = True,
+    use_reference_engines: bool = True,
+) -> list[GoldenRegressionReport]:
+    """Run the golden regression harness over loaded datasets.
+
+    By default the deterministic reference engines are used so the harness
+    can run headlessly in CI without the parallel-built analytics/ML layers.
+    Returns the per-dataset reports; raises :class:`GoldenRegressionError`
+    on the first failure when *fail_on_error* is True.
+    """
+    harness = _build_golden_harness(use_reference_engines, fail_on_error)
+    datasets = _select_golden_datasets(dataset_ids)
+    return harness.run_all(datasets)
+
+
+def _build_golden_harness(
+    use_reference_engines: bool, fail_on_error: bool
+) -> GoldenRegressionHarness:
+    """Construct the harness with reference engines wired for CI."""
+    if not use_reference_engines:
+        return GoldenRegressionHarness(fail_on_error=fail_on_error)
+    return GoldenRegressionHarness(
+        analytics=ReferenceAnalyticsEngine(),
+        forecast_model=ReferenceForecastModel(),
+        anomaly_detector=ReferenceAnomalyDetector(),
+        duplicate_detector=ReferenceDuplicateDetector(),
+        fail_on_error=fail_on_error,
+    )
+
+
+def _select_golden_datasets(dataset_ids: list[str] | None) -> list[GoldenDataset]:
+    """Load all golden datasets and optionally filter by id."""
+    loader = GoldenDatasetLoader()
+    datasets = loader.load_all()
+    if dataset_ids:
+        ids = set(dataset_ids)
+        datasets = [ds for ds in datasets if ds.metadata.id in ids]
+    return datasets
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Headless entry point for CI: ``python -m finance.evaluation.runner``.
+
+    Prints a JSON summary of golden-regression results and returns exit
+    code 0 when everything passes, 1 when a regression is detected.
+    """
+    parser = argparse.ArgumentParser(
+        prog="python -m finance.evaluation.runner",
+        description="Run the FinSight golden regression harness headlessly.",
+    )
+    parser.add_argument(
+        "--dataset-id",
+        action="append",
+        default=None,
+        help="Only run this dataset id (repeatable). Default: all.",
+    )
+    parser.add_argument(
+        "--no-fail",
+        action="store_true",
+        help="Report failures without raising / exiting non-zero.",
+    )
+    args = parser.parse_args(argv)
+
+    try:
+        reports = run_golden_regression(
+            dataset_ids=args.dataset_id,
+            fail_on_error=not args.no_fail,
+        )
+    except Exception as exc:  # GoldenRegressionError or loader failures
+        payload = {"status": "error", "error": str(exc)}
+        print(json.dumps(payload, indent=2, default=str))
+        return 1
+
+    summary = {
+        "status": "ok",
+        "total": len(reports),
+        "passed": sum(1 for r in reports if r.passed),
+        "failed": sum(1 for r in reports if not r.passed),
+        "reports": [r.to_dict() for r in reports],
+    }
+    print(json.dumps(summary, indent=2, default=str))
+    return 0 if summary["failed"] == 0 else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

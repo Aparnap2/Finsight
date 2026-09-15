@@ -1,11 +1,17 @@
-from shared.models.state import PipelineState, Variance, RootCauseFinding, EvidenceItem
+"""Root cause agent — investigates material variances via LLM or fallback."""
+
+import contextlib
+from typing import Any
+
+from shared.models.state import EvidenceItem, PipelineState, RootCauseFinding, Variance
 from shared.utils.llm_client import LLMClient
 
 
 def _build_prompt(variance: Variance) -> str:
     return (
         "You are a senior financial analyst investigating budget variances.\n"
-        "Analyze the variance below and respond in EXACTLY this format — no markdown, no extra text:\n\n"
+        "Analyze the variance below and respond in EXACTLY this format — no markdown, "
+        "no extra text:\n\n"
         "SUMMARY: <one sentence root cause>\n"
         "EVIDENCE: <comma-separated data points that support your conclusion>\n"
         "CONFIDENCE: <number 0.0-1.0>\n"
@@ -21,7 +27,7 @@ def _build_prompt(variance: Variance) -> str:
     )
 
 
-def _parse_llm_response(text: str) -> dict:
+def _parse_llm_response(text: str) -> dict[str, Any]:
     import re
     result = {"summary": "", "evidence": [], "confidence_score": 0.5, "recommended_action": ""}
 
@@ -31,10 +37,8 @@ def _parse_llm_response(text: str) -> dict:
 
     m = re.search(r'CONFIDENCE:\s*([\d.]+)', text, re.IGNORECASE)
     if m:
-        try:
+        with contextlib.suppress(ValueError):
             result["confidence_score"] = float(m.group(1))
-        except ValueError:
-            pass
 
     m = re.search(r'ACTION:\s*(.+)', text, re.IGNORECASE)
     if m:
@@ -74,7 +78,10 @@ def investigate_root_causes(
         else:
             finding = RootCauseFinding(
                 variance_id=v.account_id,
-                summary=f"Investigation pending for {v.account_name} variance of {float(v.variance_amount):,.0f}",
+                summary=(
+                    f"Investigation pending for {v.account_name} variance of "
+                    f"{float(v.variance_amount):,.0f}"
+                ),
                 evidence=[],
                 confidence_score=0.5,
                 recommended_action="Review with department head",
@@ -83,7 +90,9 @@ def investigate_root_causes(
     return findings
 
 
-def root_cause_node(state: PipelineState, llm_client: LLMClient | None = None) -> dict:
+def root_cause_node(
+    state: PipelineState, llm_client: LLMClient | None = None
+) -> dict[str, Any]:
     if llm_client is None:
         llm_client = LLMClient()
     material_variances = [v for v in state.get("variances", []) if v.is_material]

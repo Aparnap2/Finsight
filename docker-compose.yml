@@ -1,6 +1,7 @@
 services:
   postgres:
-    image: postgres:15-alpine
+    # PostgreSQL 17 + pgvector for RLS, identity, and vector features
+    image: postgres:17-alpine
     environment:
       POSTGRES_DB: finsight
       POSTGRES_USER: finsight

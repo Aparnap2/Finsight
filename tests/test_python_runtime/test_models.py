@@ -10,11 +10,11 @@ class TestJobStatus:
     """JobStatus enum values and properties."""
 
     def test_enum_values(self) -> None:
-        assert JobStatus.QUEUED == "queued"
-        assert JobStatus.RUNNING == "running"
-        assert JobStatus.SUCCESS == "success"
-        assert JobStatus.FAILED == "failed"
-        assert JobStatus.CANCELLED == "cancelled"
+        assert JobStatus.QUEUED.value == "queued"
+        assert JobStatus.RUNNING.value == "running"
+        assert JobStatus.SUCCESS.value == "success"
+        assert JobStatus.FAILED.value == "failed"
+        assert JobStatus.CANCELLED.value == "cancelled"
 
     def test_enum_membership(self) -> None:
         assert "queued" in set(item.value for item in JobStatus)
@@ -39,6 +39,7 @@ class TestComputeError:
             message="File not found",
             details={"path": "/data/file.csv", "error": "No such file"},
         )
+        assert err.details is not None
         assert err.details["path"] == "/data/file.csv"
 
     def test_serialization(self) -> None:

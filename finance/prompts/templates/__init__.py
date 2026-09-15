@@ -15,11 +15,11 @@ Usage::
 from __future__ import annotations
 
 from finance.prompts.registry import PromptRegistry
-
 from finance.prompts.templates import (
     board_report,
     driver,
     executive_summary,
+    reasoning_commentary,
     recommendation,
     risk,
     variance,
@@ -32,6 +32,7 @@ _MODULES = [
     recommendation,
     board_report,
     risk,
+    reasoning_commentary,
 ]
 
 

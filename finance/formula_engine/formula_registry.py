@@ -7,8 +7,8 @@ No LLM calls. Pure Python.
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Callable
 from decimal import Decimal
-from typing import Callable
 
 
 class Formula:

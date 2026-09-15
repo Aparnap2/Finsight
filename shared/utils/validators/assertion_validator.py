@@ -128,7 +128,8 @@ def _validate_action(assertion: Assertion) -> AssertionValidationResult:
     if assertion.max_allowed_action not in ALLOWED_ACTION_TEMPLATES:
         errors.append(
             f"Action assertion must map to an allowed template. "
-            f"Got '{assertion.max_allowed_action}', expected one of {sorted(ALLOWED_ACTION_TEMPLATES)}"
+            f"Got '{assertion.max_allowed_action}', expected one of "
+            f"{sorted(ALLOWED_ACTION_TEMPLATES)}"
         )
 
     if not assertion.text:

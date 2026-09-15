@@ -14,16 +14,16 @@ Checks:
 - QUALITY_SCORE_CHECK: quality_score < 0.5 → low quality data
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
-from shared.utils.tools.tool_result import ToolResult
 from shared.models.degraded_mode import DegradedMode
 from shared.models.state import PipelineState
+from shared.utils.tools.tool_result import ToolResult
 
 MAX_STALE_SECONDS = 86400 * 90  # 90 days
 
-DATETIME_UTC_NOW = datetime.now(timezone.utc)
+DATETIME_UTC_NOW = datetime.now(UTC)
 
 
 class DataQualityCheck:
@@ -41,7 +41,7 @@ class DataQualityCheck:
         self.severity = severity  # "critical", "warning", "info"
         self.detail = detail
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "check": self.name,
             "passed": self.passed,
@@ -73,7 +73,7 @@ class DataQualityReport:
     def critical_issues(self) -> list[DataQualityCheck]:
         return [c for c in self.checks if c.severity == "critical" and not c.passed]
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "overall_score": self.overall_score,
             "passed": self.passed,

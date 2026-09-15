@@ -1,5 +1,5 @@
 """PeriodProgression — state advancement and lifecycle management."""
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from finance.validation.calendar import FiscalCalendar
 from finance.validation.models import FiscalPeriod, PeriodStatus
@@ -10,7 +10,7 @@ class PeriodProgression:
         self, current_period: FiscalPeriod, calendar: FiscalCalendar
     ) -> FiscalPeriod:
         current_period.is_closed = True
-        current_period.closed_at = datetime.now(timezone.utc).isoformat()
+        current_period.closed_at = datetime.now(UTC).isoformat()
         current_period.status = PeriodStatus.LOCKED
 
         next_period_id = None
@@ -40,7 +40,7 @@ class PeriodProgression:
         period.is_closed = False
         period.status = PeriodStatus.OPEN
         period.closed_at = None
-        entry = f"REOPENED: {datetime.now(timezone.utc).isoformat()} | {audit_reason}"
+        entry = f"REOPENED: {datetime.now(UTC).isoformat()} | {audit_reason}"
         period.audit_trail.append(entry)
         return period
 

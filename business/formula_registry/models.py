@@ -44,7 +44,7 @@ class FormulaCategory(StrEnum):
 # ---------------------------------------------------------------------------
 
 
-class FormulaDefinition(BaseModel):  # type: ignore[misc]
+class FormulaDefinition(BaseModel):
     """Metadata for a single derived financial metric.
 
     This is a **frozen** model — once constructed it is immutable. Every
@@ -109,7 +109,7 @@ class FormulaDefinition(BaseModel):  # type: ignore[misc]
         description="Subject to Sarbanes-Oxley controls",
     )
 
-    @model_validator(mode="after")  # type: ignore[untyped-decorator]
+    @model_validator(mode="after")
     def _validate_dates(self) -> FormulaDefinition:
         """Ensure valid_from precedes valid_until when both are set."""
         if self.valid_until is not None and self.valid_from > self.valid_until:

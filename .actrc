@@ -1,0 +1,4 @@
+# Pin act to the medium-size runner image instead of the full 20GB+ GHES image.
+# Our workflows install Python via actions/setup-python, so the micro/medium
+# image is sufficient. See https://github.com/nektos/act/blob/master/IMAGES.md
+-P ubuntu-latest=catthehacker/ubuntu:act-latest

@@ -1,14 +1,24 @@
 """FP&A Capability Registry — the canonical capability hierarchy.
 
-Populates the full FP&A domain capability map with **35+ capabilities**
+Populates the full FP&A domain capability map with **38 capabilities**
 across 7 top-level domains plus cross-cutting governance capabilities.
 
 Every capability links to the engines, agents, and domain events that
 support it, along with a maturity rating that reflects the current
-implementation state.
+implementation state. The registry feeds routing and the service
+catalog: :func:`implemented_capabilities` returns the capabilities that
+are safe to expose, and :func:`maturity_report` summarises lifecycle
+state across the map.
 """
 
-from business.capabilities.models import Capability, CapabilityTree
+from typing import Any
+
+from business.capabilities.models import (
+    Capability,
+    CapabilityMaturity,
+    CapabilityStatus,
+    CapabilityTree,
+)
 
 # ── Capability Definitions ───────────────────────────────────────
 
@@ -582,3 +592,48 @@ CAPABILITIES: list[Capability] = [
 CAPABILITIES_BY_ID: dict[str, Capability] = {cap.capability_id: cap for cap in CAPABILITIES}
 
 CAPABILITY_TREE: CapabilityTree = CapabilityTree(capabilities=CAPABILITIES)
+
+_MATURITY_REPORT: CapabilityMaturity = CapabilityMaturity(capabilities=CAPABILITIES)
+
+
+def maturity_report() -> dict[str, Any]:
+    """Summarise capability maturity across the map.
+
+    Returns:
+        Dict with maturity counts/percentages (``summary()``) plus
+        per-lifecycle-state counts (``lifecycle_summary()``) and the
+        total count of implemented capabilities.
+    """
+    summary = _MATURITY_REPORT.summary()
+    lifecycle = _MATURITY_REPORT.lifecycle_summary()
+    return {
+        **summary,
+        "lifecycle": lifecycle,
+        "implemented_count": len(_MATURITY_REPORT.implemented()),
+    }
+
+
+def implemented_capabilities() -> list[str]:
+    """Return capability ids safe to expose in the service catalog.
+
+    A capability is implemented when its lifecycle status is
+    ``implemented`` or ``production``.
+
+    Returns:
+        Sorted list of capability ids.
+    """
+    return sorted(
+        cap.capability_id for cap in _MATURITY_REPORT.implemented()
+    )
+
+
+def capabilities_by_status(status: CapabilityStatus) -> list[Capability]:
+    """Return capabilities currently in the given lifecycle state.
+
+    Args:
+        status: The lifecycle status to filter on.
+
+    Returns:
+        List of capabilities in that state.
+    """
+    return CAPABILITY_TREE.by_status(status)

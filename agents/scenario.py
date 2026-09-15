@@ -1,3 +1,5 @@
+from typing import Any
+
 from shared.models.state import PipelineState, RootCauseFinding, Scenario
 
 
@@ -16,7 +18,7 @@ def generate_scenarios(root_causes: list[RootCauseFinding]) -> list[Scenario]:
     return scenarios
 
 
-def scenario_node(state: PipelineState) -> dict:
+def scenario_node(state: PipelineState) -> dict[str, Any]:
     root_causes = state.get("root_causes", [])
     scenarios = generate_scenarios(root_causes)
     return {"scenarios": scenarios, "current_step": "scenario_complete"}

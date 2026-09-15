@@ -13,14 +13,14 @@ Autonomy Levels:
 - CFO_APPROVAL: confidence < 0.4, critical degraded modes, or high-impact actions
 """
 
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
-from shared.models.assertions import Assertion, AssertionType, SupportLevel
+from shared.models.assertions import Assertion, AssertionType
 from shared.models.degraded_mode import DegradedMode
 
 
-class AutonomyLevel(str, Enum):
+class AutonomyLevel(StrEnum):
     FULLY_AUTONOMOUS = "fully_autonomous"
     ANALYST_IN_THE_LOOP = "analyst_in_the_loop"
     MANAGER_APPROVAL = "manager_approval"
@@ -46,7 +46,7 @@ class PolicyDecision:
         self.blocked_actions = blocked_actions or []
         self.confidence = confidence
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "autonomy_level": self.autonomy_level.value,
             "routing_target": self.routing_target,
@@ -176,7 +176,7 @@ def evaluate_policy(
 
 
 def evaluate_from_pipeline_result(
-    pipeline_result: "AssertionPipelineResult",  # noqa: F821
+    pipeline_result: Any,
     degraded_modes: list[str] | None = None,
 ) -> PolicyDecision:
     """Evaluate policy using an AssertionPipelineResult directly."""

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from decimal import Decimal
+from typing import Any
 
 import pytest
 from pydantic import ValidationError
@@ -83,18 +84,19 @@ class TestDomainEventBase:
             consumer=["ConsumerA"],
         )
         with pytest.raises(ValidationError):
-            event.event_id = "changed"
+            setattr(event, "event_id", "changed")  # noqa: B010 — runtime frozen validation
 
     def test_base_event_extra_forbidden(self) -> None:
         """Extra fields are not allowed."""
+        kwargs: dict[str, Any] = {
+            "event_id": "evt-005",
+            "event_type": "test.event",
+            "producer": "TestSystem",
+            "consumer": ["ConsumerA"],
+        }
+        kwargs["unknown_field"] = "value"
         with pytest.raises(ValidationError):
-            DomainEvent(
-                event_id="evt-005",
-                event_type="test.event",
-                producer="TestSystem",
-                consumer=["ConsumerA"],
-                unknown_field="value",
-            )
+            DomainEvent(**kwargs)
 
     def test_correlation_and_causation_ids(self) -> None:
         """Correlation and causation IDs support event chaining."""

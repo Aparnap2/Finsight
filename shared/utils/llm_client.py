@@ -1,18 +1,20 @@
-import os
+from typing import Any
+
+from openai import OpenAI
+
 from shared.config import get_settings
 
 
 class LLMClient:
-    """Routes LLM calls through OpenAI SDK with Poolside (primary), Groq (fallback), OpenRouter (fallback)."""
+    """Routes LLM calls through OpenAI SDK with Poolside, Groq, and OpenRouter."""
 
     def __init__(self, model: str | None = None):
         self.settings = get_settings()
         self.model = model or self.settings.default_llm_model
-        self._client = None
+        self._client: OpenAI | None = None
         self._provider = "poolside"
 
-    def _get_client(self):
-        from openai import OpenAI
+    def _get_client(self) -> OpenAI:
         if self._client is not None:
             return self._client
 
@@ -46,16 +48,18 @@ class LLMClient:
         self, prompt: str, max_tokens: int = 512, temperature: float = 0.3
     ) -> str:
         client = self._get_client()
-        kwargs = dict(
-            model=self.model,
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=max_tokens,
-            temperature=temperature,
-        )
+        request_kwargs: dict[str, Any] = {
+            "model": self.model,
+            "messages": [{"role": "user", "content": prompt}],
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+        }
         if self._provider == "poolside":
-            kwargs["extra_body"] = {"chat_template_kwargs": {"enable_thinking": False}}
+            request_kwargs["extra_body"] = {
+                "chat_template_kwargs": {"enable_thinking": False}
+            }
 
-        response = client.chat.completions.create(**kwargs)
+        response = client.chat.completions.create(**request_kwargs)
         return response.choices[0].message.content or ""
 
     @property

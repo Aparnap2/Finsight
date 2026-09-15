@@ -1,0 +1,27 @@
+# Approval limits reference data.
+# Default approval authority by role. Per-tenant overrides live in
+# tenant.yaml. Amounts are in the tenant's base currency (decimal).
+
+defaults:
+  analyst:
+    approve_up_to: 0
+    can_edit: true
+  manager:
+    approve_up_to: 5000
+    can_edit: true
+  director:
+    approve_up_to: 25000
+    can_edit: true
+  cfo:
+    approve_up_to: 100000
+    can_edit: true
+
+roles:
+  analyst: Financial Analyst
+  manager: FP&A Manager
+  director: Finance Director
+  cfo: Chief Financial Officer
+
+policy_refs:
+  - app-001
+  - sox-001

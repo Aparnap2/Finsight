@@ -134,9 +134,9 @@ class TestExecutorNode:
 
         from finance.cognition.nodes import ExecutorNode
         from finance.cognition.state.action import ActionPlan
+        from finance.formula_engine.dependency_resolver import DependencyResolver
         from finance.formula_engine.evaluator import FormulaEvaluator
         from finance.formula_engine.formula_registry import Formula, FormulaRegistry
-        from finance.formula_engine.dependency_resolver import DependencyResolver
 
         registry = FormulaRegistry()
         registry.register(Formula(
@@ -186,9 +186,9 @@ class TestExecutorNode:
 
     def test_executor_with_injected_engines(self) -> None:
         from finance.cognition.nodes import ExecutorNode
+        from finance.cognition.state.action import ActionPlan
         from finance.evidence.engine import EvidenceEngine
         from finance.validation.harness import ValidationSuite
-        from finance.cognition.state.action import ActionPlan
 
         node = ExecutorNode(
             evidence_engine=EvidenceEngine(),
@@ -395,7 +395,9 @@ class TestReflectionNode:
 
         plan = ActionPlan()
         plan.add(objective="determine_revenue_variance")
-        state = make_state(context={"overall_confidence": 0.5, "evidence_items": [{"claim": "test"}]})
+        state = make_state(
+            context={"overall_confidence": 0.5, "evidence_items": [{"claim": "test"}]}
+        )
         state.action_plan = plan
         result = ReflectionNode().execute(state)
         gaps = result.state_updates.get("gaps", [])

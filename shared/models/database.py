@@ -1,6 +1,17 @@
 from datetime import UTC, datetime
 
-from sqlalchemy import JSON, Boolean, Column, DateTime, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    Column,
+    DateTime,
+    ForeignKey,
+    Integer,
+    Numeric,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.schema import FetchedValue
 
@@ -349,4 +360,38 @@ class RootCauseFindingDB(Base):
     account_id = Column(String, nullable=False)
     finding_json = Column(JSON)
     confidence = Column(Numeric(5, 4))
+    created_at = Column(DateTime, default=_utcnow)
+
+
+# ---------------------------------------------------------------------------
+# P2 — Stripe webhook ingestion boundary
+# ---------------------------------------------------------------------------
+
+
+class WebhookEvent(Base):
+    """Immutable raw provider webhook envelope.
+
+    P2 ingestion contract: the exact provider payload is stored verbatim in
+    ``raw`` (never mutated after insert) before any business processing runs.
+    Deduplication is enforced by the ``(provider, event_id)`` unique
+    constraint; ``fingerprint`` carries the P1 stable hash for cross-checks.
+    ``tenant_id`` is always explicit — unresolvable envelopes are quarantined
+    under the ``UNROUTABLE`` sentinel, never a default tenant.
+    """
+
+    __tablename__ = "webhook_events"
+    __table_args__ = (
+        UniqueConstraint("provider", "event_id", name="uq_webhook_events_provider_event"),
+    )
+    id = Column(String, primary_key=True)
+    tenant_id = Column(String, nullable=False, index=True)
+    provider = Column(String, nullable=False)
+    event_id = Column(String, nullable=False)
+    event_type = Column(String, nullable=False)
+    status = Column(String, nullable=False, default="RECEIVED")
+    fingerprint = Column(String, index=True)
+    amount = Column(Numeric(15, 2))
+    currency = Column(String(3))
+    raw = Column(JSON, nullable=False)
+    received_at = Column(DateTime, default=_utcnow)
     created_at = Column(DateTime, default=_utcnow)

@@ -8,6 +8,7 @@ retention periods, validation rules, and compliance requirements.
 from datetime import date
 
 from business.policies.models import BusinessPolicy, PolicyRegistry
+from finplatform.config.tenant_schema import TenantConfig
 
 # ---------------------------------------------------------------------------
 # Helper: common effective date
@@ -33,7 +34,7 @@ POLICY_REGISTRY = PolicyRegistry(
                 " flagged as potentially material."
             ),
             scope="variance",
-            condition="abs(variance_amount) > 50000",
+            condition="abs(variance_amount) > {amount_threshold}",
             action=(
                 "Flag variance as exceeding absolute threshold;"
                 " include in materiality review queue."
@@ -52,7 +53,7 @@ POLICY_REGISTRY = PolicyRegistry(
                 "A variance exceeding the percentage threshold is flagged as potentially material."
             ),
             scope="variance",
-            condition="abs(variance_pct) > 10.0",
+            condition="abs(variance_pct) > {pct_threshold}",
             action=(
                 "Flag variance as exceeding percentage threshold;"
                 " include in materiality review queue."
@@ -72,7 +73,10 @@ POLICY_REGISTRY = PolicyRegistry(
                 " thresholds is classified as material."
             ),
             scope="variance",
-            condition="abs(variance_amount) > 50000 and abs(variance_pct) > 10.0",
+            condition=(
+                "abs(variance_amount) > {amount_threshold} and"
+                " abs(variance_pct) > {pct_threshold}"
+            ),
             action=(
                 "Classify variance as material; escalate to commentary engine for explanation."
             ),
@@ -91,7 +95,7 @@ POLICY_REGISTRY = PolicyRegistry(
                 " threshold due to board sensitivity."
             ),
             scope="variance",
-            condition="account_type == 'revenue' and abs(variance_pct) > 5.0",
+            condition="account_type == 'revenue' and abs(variance_pct) > {pct_threshold}",
             action=(
                 "Flag revenue variance as material at lower threshold;"
                 " trigger board report inclusion."
@@ -110,7 +114,7 @@ POLICY_REGISTRY = PolicyRegistry(
                 "A small variance persisting for 3+ consecutive periods is trend-material."
             ),
             scope="variance",
-            condition="consecutive_periods >= 3 and abs(variance_amount) > 10000",
+            condition="consecutive_periods >= 3 and abs(variance_amount) > {amount_threshold}",
             action=("Flag as trend-material; include in trend analysis commentary."),
             severity="info",
             owner="FP&A Team",
@@ -436,3 +440,17 @@ POLICY_REGISTRY = PolicyRegistry(
 POLICIES_BY_SCOPE: dict[str, list[BusinessPolicy]] = {}
 for policy in POLICY_REGISTRY.policies.values():
     POLICIES_BY_SCOPE.setdefault(policy.scope, []).append(policy)
+
+
+def resolve_policy_condition(policy: BusinessPolicy, tenant_config: TenantConfig) -> str:
+    """Resolve a policy condition template with tenant materiality thresholds.
+
+    Substitutes ``{amount_threshold}`` and ``{pct_threshold}`` placeholders
+    with the tenant's materiality values formatted as plain Decimals.
+    Conditions without placeholders are returned unchanged.
+    """
+    materiality = tenant_config.materiality
+    return policy.condition.format(
+        amount_threshold=materiality.amount,
+        pct_threshold=materiality.pct,
+    )

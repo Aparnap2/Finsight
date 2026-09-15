@@ -4,7 +4,9 @@ The Context Pack is a structured, validated bundle sent to the LLM.
 Never send raw spreadsheet data.
 """
 from __future__ import annotations
-from decimal import Decimal
+
+from typing import Any
+
 from pydantic import BaseModel
 
 
@@ -20,11 +22,11 @@ class FinanceContextPack(BaseModel):
     period_id: str
     company_name: str
     currency: str = "USD"
-    kpis: list[dict] = []
-    material_variances: list[dict] = []
-    evidence_items: list[dict] = []
-    budget_summary: dict = {}
-    actual_summary: dict = {}
-    forecast_summary: dict = {}
+    kpis: list[dict[str, Any]] = []
+    material_variances: list[dict[str, Any]] = []
+    evidence_items: list[dict[str, Any]] = []
+    budget_summary: dict[str, Any] = {}
+    actual_summary: dict[str, Any] = {}
+    forecast_summary: dict[str, Any] = {}
     risks: list[str] = []
     business_context: str = ""

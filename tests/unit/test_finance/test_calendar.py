@@ -4,17 +4,14 @@ TDD: Tests written first (Red), then implemented (Green).
 """
 from datetime import date, datetime
 
-import pytest
-
+from finance.validation.calendar import FiscalCalendar
 from finance.validation.models import (
     FiscalPeriod,
     PeriodStatus,
     PeriodType,
 )
-from finance.validation.calendar import FiscalCalendar
-from finance.validation.validator import PeriodValidationResult, PeriodValidator
 from finance.validation.progression import PeriodProgression
-
+from finance.validation.validator import PeriodValidator
 
 # =============================================================================
 # Period Model & Calendar Tests
@@ -24,7 +21,7 @@ from finance.validation.progression import PeriodProgression
 class TestFiscalCalendar:
     """FiscalCalendar period generation and lookup."""
 
-    def test_generate_monthly_periods(self):
+    def test_generate_monthly_periods(self) -> None:
         """Generate all 12 months for 2026."""
         cal = FiscalCalendar()
         periods = cal.generate_periods(2026, PeriodType.MONTHLY)
@@ -51,7 +48,7 @@ class TestFiscalCalendar:
         assert dec.start_date == date(2026, 12, 1)
         assert dec.end_date == date(2026, 12, 31)
 
-    def test_get_period_for_date(self):
+    def test_get_period_for_date(self) -> None:
         """Jan 15 → January period."""
         cal = FiscalCalendar()
         cal.generate_periods(2026, PeriodType.MONTHLY)
@@ -61,7 +58,7 @@ class TestFiscalCalendar:
         assert period.start_date == date(2026, 1, 1)
         assert period.end_date == date(2026, 1, 31)
 
-    def test_get_prior_period(self):
+    def test_get_prior_period(self) -> None:
         """February → January."""
         cal = FiscalCalendar()
         cal.generate_periods(2026, PeriodType.MONTHLY)
@@ -70,7 +67,7 @@ class TestFiscalCalendar:
         assert prior.id == "2026-01"
         assert prior.fiscal_period == 1
 
-    def test_get_periods_for_year(self):
+    def test_get_periods_for_year(self) -> None:
         """All 12 periods returned."""
         cal = FiscalCalendar()
         cal.generate_periods(2026, PeriodType.MONTHLY)
@@ -78,7 +75,7 @@ class TestFiscalCalendar:
         assert len(periods) == 12
         assert all(p.fiscal_year == 2026 for p in periods)
 
-    def test_prior_year_period(self):
+    def test_prior_year_period(self) -> None:
         """Feb 2026 → Feb 2025."""
         cal = FiscalCalendar()
         cal.generate_periods(2026, PeriodType.MONTHLY)
@@ -86,7 +83,7 @@ class TestFiscalCalendar:
         feb_2026 = cal.get_period("2026-02")
         assert feb_2026.prior_year_period_id == "2025-02"
 
-    def test_fiscal_calendar_july_start(self):
+    def test_fiscal_calendar_july_start(self) -> None:
         """Fiscal year starting in July."""
         cal = FiscalCalendar(fiscal_year_start_month=7)
         periods = cal.generate_periods(2026, PeriodType.MONTHLY)
@@ -119,7 +116,7 @@ class TestFiscalCalendar:
         assert p12.end_date == date(2026, 6, 30)
         assert p12.id == "2026-12"
 
-    def test_fiscal_calendar_quarterly(self):
+    def test_fiscal_calendar_quarterly(self) -> None:
         """Quarterly period generation."""
         cal = FiscalCalendar()
         periods = cal.generate_periods(2026, PeriodType.QUARTERLY)
@@ -151,7 +148,7 @@ class TestFiscalCalendar:
         assert periods[2].prior_period_id == "2026-Q2"
         assert periods[3].prior_period_id == "2026-Q3"
 
-    def test_get_range(self):
+    def test_get_range(self) -> None:
         """Range between two periods."""
         cal = FiscalCalendar()
         cal.generate_periods(2026, PeriodType.MONTHLY)
@@ -159,7 +156,7 @@ class TestFiscalCalendar:
         assert len(result) == 3
         assert [p.id for p in result] == ["2026-01", "2026-02", "2026-03"]
 
-    def test_get_range_reverse_order(self):
+    def test_get_range_reverse_order(self) -> None:
         """Range works even if start > end (returns empty list)."""
         cal = FiscalCalendar()
         cal.generate_periods(2026, PeriodType.MONTHLY)
@@ -167,7 +164,7 @@ class TestFiscalCalendar:
         # Should be empty or raise; we choose empty for robustness
         assert result == []
 
-    def test_period_status_transitions(self):
+    def test_period_status_transitions(self) -> None:
         """OPEN→CLOSING→VALIDATING→COMPLETED."""
         p = FiscalPeriod(
             id="2026-01",
@@ -199,7 +196,7 @@ class TestFiscalCalendar:
         p.status = PeriodStatus.LOCKED
         assert p.status == PeriodStatus.LOCKED
 
-    def test_decimal_not_needed(self):
+    def test_decimal_not_needed(self) -> None:
         """Calendar uses dates and ints, no Decimal issues."""
         cal = FiscalCalendar()
         periods = cal.generate_periods(2026, PeriodType.MONTHLY)
@@ -221,7 +218,7 @@ class TestFiscalCalendar:
 class TestPeriodValidator:
     """PeriodValidator validation logic."""
 
-    def test_validate_valid_period(self):
+    def test_validate_valid_period(self) -> None:
         """No errors for valid period."""
         cal = FiscalCalendar()
         cal.generate_periods(2026, PeriodType.MONTHLY)
@@ -232,7 +229,7 @@ class TestPeriodValidator:
         assert len(result.errors) == 0
         assert result.period_id == "2026-01"
 
-    def test_validate_overlapping_periods(self):
+    def test_validate_overlapping_periods(self) -> None:
         """Detect overlap."""
         cal = FiscalCalendar()
         cal.generate_periods(2026, PeriodType.MONTHLY)
@@ -257,7 +254,7 @@ class TestPeriodValidator:
         # Should list which periods overlap
         assert len(result.overlapping_periods) > 0
 
-    def test_validate_missing_periods(self):
+    def test_validate_missing_periods(self) -> None:
         """Detect gaps."""
         cal = FiscalCalendar()
         cal.generate_periods(2026, PeriodType.MONTHLY)
@@ -280,7 +277,7 @@ class TestPeriodValidator:
 class TestPeriodProgression:
     """PeriodProgression state advancement."""
 
-    def test_period_progression_advance(self):
+    def test_period_progression_advance(self) -> None:
         """Close current period and return next period."""
         cal = FiscalCalendar()
         periods = cal.generate_periods(2026, PeriodType.MONTHLY)
@@ -298,7 +295,7 @@ class TestPeriodProgression:
         assert jan.closed_at is not None
         assert jan.status == PeriodStatus.LOCKED
 
-    def test_period_progression_ytd(self):
+    def test_period_progression_ytd(self) -> None:
         """Year-to-date periods."""
         cal = FiscalCalendar()
         cal.generate_periods(2026, PeriodType.MONTHLY)
@@ -313,7 +310,7 @@ class TestPeriodProgression:
         # Verify order
         assert [p.fiscal_period for p in ytd] == [1, 2, 3, 4, 5, 6]
 
-    def test_advance_preserves_audit_trail(self):
+    def test_advance_preserves_audit_trail(self) -> None:
         """Advance sets closed_at ISO timestamp."""
         cal = FiscalCalendar()
         periods = cal.generate_periods(2026, PeriodType.MONTHLY)
@@ -329,7 +326,7 @@ class TestPeriodProgression:
         parsed = datetime.fromisoformat(jan.closed_at)
         assert parsed is not None  # no parse error
 
-    def test_reopen_logs_audit(self):
+    def test_reopen_logs_audit(self) -> None:
         """Reopening requires audit entry."""
         cal = FiscalCalendar()
         periods = cal.generate_periods(2026, PeriodType.MONTHLY)

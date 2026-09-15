@@ -1,0 +1,20 @@
+company:
+  name: Acme Corporation
+  legal_name: Acme Corporation, Inc.
+currency: USD
+fiscal_year_start_month: 1
+materiality:
+  amount: 5000
+  pct: 5
+approval_limits:
+  manager: 10000
+  director: 50000
+  cfo: 250000
+sox_enabled: true
+connectors:
+  - csv
+  - google_sheets
+features:
+  forecasting: true
+  rag: true
+  ml: true

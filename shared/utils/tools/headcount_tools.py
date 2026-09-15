@@ -8,8 +8,8 @@ from shared.models.database import HeadcountData
 from shared.utils.tools.tool_result import (
     ToolResult,
     compute_degraded_mode,
-    compute_query_fingerprint,
     compute_quality_score,
+    compute_query_fingerprint,
 )
 
 
@@ -68,12 +68,6 @@ def query_headcount(
             for r in rows
         ]
         row_count = len(data)
-
-        # Aggregate totals
-        total_headcount = sum(r["headcount"] for r in data)
-        total_compensation = sum(r["total_compensation"] for r in data)
-        total_new_hires = sum(r["new_hires"] for r in data)
-        total_departures = sum(r["departures"] for r in data)
 
         # ---- coverage: depts found / total depts in headcount_data ----
         depts_found = (

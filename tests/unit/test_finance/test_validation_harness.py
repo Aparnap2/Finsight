@@ -5,10 +5,7 @@ Wraps existing validators (PeriodValidator, DataQuality checks) into the harness
 """
 from __future__ import annotations
 
-import pytest
-from datetime import date
-from pydantic import BaseModel
-
+from typing import Any
 
 # ── ValidationResult ─────────────────────────────────────────────────────────
 
@@ -16,7 +13,7 @@ from pydantic import BaseModel
 class TestValidationResult:
     """ValidationResult is the common result model for all validators."""
 
-    def test_result_creation(self):
+    def test_result_creation(self) -> None:
         """Create a ValidationResult with basic fields."""
         from finance.validation.harness import ValidationResult
         r = ValidationResult(
@@ -28,7 +25,7 @@ class TestValidationResult:
         assert r.is_valid is True
         assert len(r.messages) == 1
 
-    def test_result_with_severity(self):
+    def test_result_with_severity(self) -> None:
         """ValidationResult supports severity levels: error, warning, info."""
         from finance.validation.harness import ValidationResult
         r = ValidationResult(
@@ -39,14 +36,14 @@ class TestValidationResult:
         )
         assert r.severity == "warning"
 
-    def test_result_defaults(self):
+    def test_result_defaults(self) -> None:
         """ValidationResult has sensible defaults."""
         from finance.validation.harness import ValidationResult
         r = ValidationResult(validator_name="check", is_valid=True)
         assert r.severity == "error"
         assert r.messages == []
 
-    def test_result_with_metadata(self):
+    def test_result_with_metadata(self) -> None:
         """ValidationResult accepts optional metadata dict."""
         from finance.validation.harness import ValidationResult
         r = ValidationResult(
@@ -63,17 +60,17 @@ class TestValidationResult:
 class TestValidatorProtocol:
     """All validators implement a common interface."""
 
-    def test_validator_protocol_exists(self):
+    def test_validator_protocol_exists(self) -> None:
         """Validator is a Protocol class with a validate() method."""
         from finance.validation.harness import Validator
         assert hasattr(Validator, "validate")
 
-    def test_concrete_validator_conforms(self):
+    def test_concrete_validator_conforms(self) -> None:
         """A concrete validator can be created that satisfies the protocol."""
         from finance.validation.harness import ValidationResult, Validator
 
         class MyValidator:
-            def validate(self, **kwargs) -> ValidationResult:
+            def validate(self, **kwargs: Any) -> ValidationResult:
                 return ValidationResult(
                     validator_name="my", is_valid=True, messages=["OK"]
                 )
@@ -82,16 +79,16 @@ class TestValidatorProtocol:
         result = v.validate()
         assert result.is_valid is True
 
-    def test_validator_can_be_parametrized(self):
+    def test_validator_can_be_parametrized(self) -> None:
         """Validators accept configuration at construction time."""
         from finance.validation.harness import ValidationResult, Validator
 
         class ThresholdValidator:
-            def __init__(self, name: str, threshold: float):
+            def __init__(self, name: str, threshold: float) -> None:
                 self.name = name
                 self.threshold = threshold
 
-            def validate(self, **kwargs) -> ValidationResult:
+            def validate(self, **kwargs: Any) -> ValidationResult:
                 value = kwargs.get("value", 0)
                 return ValidationResult(
                     validator_name=self.name,
@@ -114,16 +111,16 @@ class TestValidatorProtocol:
 class TestValidationSuite:
     """ValidationSuite runs multiple validators and aggregates results."""
 
-    def test_suite_runs_all_validators(self):
+    def test_suite_runs_all_validators(self) -> None:
         """Suite runs all registered validators and returns all results."""
-        from finance.validation.harness import ValidationResult, Validator, ValidationSuite
+        from finance.validation.harness import ValidationResult, ValidationSuite
 
         class AlwaysPass:
-            def validate(self, **kwargs) -> ValidationResult:
+            def validate(self, **kwargs: Any) -> ValidationResult:
                 return ValidationResult(validator_name="pass", is_valid=True)
 
         class AlwaysFail:
-            def validate(self, **kwargs) -> ValidationResult:
+            def validate(self, **kwargs: Any) -> ValidationResult:
                 return ValidationResult(validator_name="fail", is_valid=False, messages=["Failed"])
 
         suite = ValidationSuite(validators=[AlwaysPass(), AlwaysFail()])
@@ -131,26 +128,26 @@ class TestValidationSuite:
         assert len(report.results) == 2
         assert report.passed is False
 
-    def test_suite_passes_when_all_pass(self):
+    def test_suite_passes_when_all_pass(self) -> None:
         """Suite.passed is True when all validators pass."""
-        from finance.validation.harness import ValidationResult, Validator, ValidationSuite
+        from finance.validation.harness import ValidationResult, ValidationSuite
 
         class AlwaysPass:
-            def validate(self, **kwargs) -> ValidationResult:
+            def validate(self, **kwargs: Any) -> ValidationResult:
                 return ValidationResult(validator_name="p", is_valid=True)
 
         suite = ValidationSuite(validators=[AlwaysPass(), AlwaysPass()])
         assert suite.run().passed is True
 
-    def test_suite_includes_report_metadata(self):
+    def test_suite_includes_report_metadata(self) -> None:
         """ValidationReport includes total, passed, failed counts."""
-        from finance.validation.harness import ValidationResult, Validator, ValidationSuite
+        from finance.validation.harness import ValidationResult, ValidationSuite
 
         class Flip:
-            def __init__(self, name: str, valid: bool):
+            def __init__(self, name: str, valid: bool) -> None:
                 self.name = name
                 self.valid = valid
-            def validate(self, **kwargs) -> ValidationResult:
+            def validate(self, **kwargs: Any) -> ValidationResult:
                 return ValidationResult(validator_name=self.name, is_valid=self.valid)
 
         suite = ValidationSuite(validators=[
@@ -162,7 +159,7 @@ class TestValidationSuite:
         assert report.failed_count == 1
         assert report.passed is False
 
-    def test_suite_empty(self):
+    def test_suite_empty(self) -> None:
         """Empty suite is trivially passing."""
         from finance.validation.harness import ValidationSuite
         suite = ValidationSuite()
@@ -177,11 +174,11 @@ class TestValidationSuite:
 class TestValidatorAdapter:
     """Adapter wraps existing validators into the common Validator protocol."""
 
-    def test_wraps_period_validator(self):
+    def test_wraps_period_validator(self) -> None:
         """ValidatorAdapter wraps PeriodValidator.validate_period."""
-        from finance.validation.harness import Validator, ValidatorAdapter, ValidationSuite
         from finance.validation.calendar import FiscalCalendar
-        from finance.validation.models import FiscalPeriod, PeriodType, PeriodStatus
+        from finance.validation.harness import ValidatorAdapter
+        from finance.validation.models import PeriodType
         from finance.validation.validator import PeriodValidator
 
         cal = FiscalCalendar()
@@ -197,10 +194,10 @@ class TestValidatorAdapter:
         assert result.validator_name == "period_validator"
         # Should be a ValidationResult
 
-    def test_wraps_data_quality_checks(self):
+    def test_wraps_data_quality_checks(self) -> None:
         """ValidatorAdapter wraps data quality check functions."""
-        from finance.validation.harness import Validator, ValidatorAdapter, ValidationSuite
         from finance.validation.data_quality import check_freshness
+        from finance.validation.harness import ValidatorAdapter
         from shared.utils.tools.tool_result import ToolResult
 
         result = ToolResult(
@@ -227,14 +224,16 @@ class TestValidatorAdapter:
         vr = adapter.validate()
         assert vr.validator_name == "freshness"
 
-    def test_suite_with_mixed_validators(self):
+    def test_suite_with_mixed_validators(self) -> None:
         """Suite can run both native and adapted validators together."""
         from finance.validation.harness import (
-            ValidationResult, Validator, ValidatorAdapter, ValidationSuite,
+            ValidationResult,
+            ValidationSuite,
+            ValidatorAdapter,
         )
 
         class NativePass:
-            def validate(self, **kwargs) -> ValidationResult:
+            def validate(self, **kwargs: Any) -> ValidationResult:
                 return ValidationResult(validator_name="native", is_valid=True)
 
         adapter = ValidatorAdapter(
@@ -254,7 +253,7 @@ class TestValidatorAdapter:
 class TestDataQualityValidator:
     """DataQualityValidator runs the 6 standard checks in harness form."""
 
-    def test_dq_validator_runs_all_checks(self):
+    def test_dq_validator_runs_all_checks(self) -> None:
         """DataQualityValidator runs all 6 checks and returns aggregated result."""
         from finance.validation.harness import DataQualityValidator
         from shared.utils.tools.tool_result import ToolResult
@@ -281,7 +280,7 @@ class TestDataQualityValidator:
         assert vr.validator_name == "data_quality"
         assert vr.is_valid is True
 
-    def test_dq_validator_detects_issues(self):
+    def test_dq_validator_detects_issues(self) -> None:
         """DataQualityValidator flags failing checks."""
         from finance.validation.harness import DataQualityValidator
         from shared.utils.tools.tool_result import ToolResult
@@ -316,12 +315,12 @@ class TestDataQualityValidator:
 class TestValidationReport:
     """ValidationReport can be serialized and deserialized."""
 
-    def test_report_to_dict(self):
+    def test_report_to_dict(self) -> None:
         """ValidationReport.to_dict() returns a JSON-serializable dict."""
         from finance.validation.harness import ValidationResult, ValidationSuite
 
         class Pass:
-            def validate(self, **kwargs) -> ValidationResult:
+            def validate(self, **kwargs: Any) -> ValidationResult:
                 return ValidationResult(validator_name="p", is_valid=True, messages=["OK"])
 
         suite = ValidationSuite(validators=[Pass()])
@@ -332,12 +331,12 @@ class TestValidationReport:
         assert len(d["results"]) == 1
         assert d["results"][0]["validator_name"] == "p"
 
-    def test_report_to_dict_with_failures(self):
+    def test_report_to_dict_with_failures(self) -> None:
         """to_dict captures failure details."""
         from finance.validation.harness import ValidationResult, ValidationSuite
 
         class Fail:
-            def validate(self, **kwargs) -> ValidationResult:
+            def validate(self, **kwargs: Any) -> ValidationResult:
                 return ValidationResult(
                     validator_name="f", is_valid=False, messages=["Failed"],
                     severity="critical", metadata={"key": "val"},

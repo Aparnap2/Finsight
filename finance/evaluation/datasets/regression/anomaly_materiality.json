@@ -1,0 +1,32 @@
+{
+  "metadata": {
+    "id": "regression_anomaly_materiality",
+    "name": "Materiality Anomaly Regression",
+    "category": "regression",
+    "subcategory": "anomaly",
+    "description": "Golden regression dataset for the anomaly detector. Accounts whose variance exceeds the materiality threshold must be flagged; precision@K must be 1.0.",
+    "tags": ["regression", "anomaly", "deterministic"],
+    "difficulty": "basic"
+  },
+  "input": {
+    "query": "Detect anomalous accounts for Q1 2026",
+    "context": {
+      "accounts": [
+        {"id": "4010", "name": "Product Revenue", "actual": 1250000, "budget": 1000000},
+        {"id": "4020", "name": "Service Revenue", "actual": 750000, "budget": 700000},
+        {"id": "5010", "name": "Payroll", "actual": 400000, "budget": 395000}
+      ]
+    },
+    "spreadsheet_data": {},
+    "variances": []
+  },
+  "expected": {
+    "output": {
+      "anomalies": {
+        "expected_ids": ["4010"],
+        "forbidden_ids": ["4020", "5010"],
+        "k": 3
+      }
+    }
+  }
+}

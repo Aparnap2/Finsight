@@ -18,7 +18,7 @@ from business.glossary.models import DataClassification, GlossaryRegistry
 # ---------------------------------------------------------------------------
 
 
-class ColumnMetadata(BaseModel):  # type: ignore[misc]  # pydantic v2 w/o mypy plugin
+class ColumnMetadata(BaseModel):
     """Business metadata for a single database column.
 
     Each column entry captures the business-facing definition, data type,
@@ -78,7 +78,7 @@ class ColumnMetadata(BaseModel):  # type: ignore[misc]  # pydantic v2 w/o mypy p
 # ---------------------------------------------------------------------------
 
 
-class TableMetadata(BaseModel):  # type: ignore[misc]  # pydantic v2 w/o mypy plugin
+class TableMetadata(BaseModel):
     """Business metadata for a database table.
 
     Describes the table's business purpose, its columns, key structure,

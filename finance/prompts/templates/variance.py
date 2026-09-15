@@ -25,4 +25,5 @@ TEMPLATE = """You are an FP&A analyst responsible for explaining financial varia
 5. Reference any relevant evidence or KPI data.
 
 ## Output Format
-Provide a structured analysis with explanation, root causes, impact assessment, confidence level, and supporting evidence."""
+Provide a structured analysis with explanation, root causes, impact assessment, \
+confidence level, and supporting evidence."""

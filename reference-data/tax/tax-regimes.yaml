@@ -1,0 +1,67 @@
+# Tax codes and regimes reference data.
+# Simple corporate income tax / VAT regimes. Demo tenants reference a
+# regime id in tenant.yaml; the *rate* is a default that per-tenant
+# overrides may adjust.
+
+regimes:
+  us-federal-corp:
+    id: us-federal-corp
+    name: US Federal Corporate Income Tax
+    category: income_tax
+    jurisdiction: US
+    default_rate: 0.21
+    description: Flat 21% federal corporate rate (post-TCJA).
+
+  uk-corporation-tax:
+    id: uk-corporation-tax
+    name: UK Corporation Tax
+    category: income_tax
+    jurisdiction: GB
+    default_rate: 0.25
+    description: 25% main rate for profits above the threshold.
+
+  de-corporate-tax:
+    id: de-corporate-tax
+    name: German Corporate Tax
+    category: income_tax
+    jurisdiction: DE
+    default_rate: 0.30
+    description: Combined corporate income tax plus solidarity surcharge.
+
+  us-sales-tax-default:
+    id: us-sales-tax-default
+    name: US Sales Tax (Default)
+    category: sales_tax
+    jurisdiction: US
+    default_rate: 0.00
+    description: Sales tax is jurisdiction-specific; default zero.
+
+  uk-vat-standard:
+    id: uk-vat-standard
+    name: UK VAT Standard Rate
+    category: value_added_tax
+    jurisdiction: GB
+    default_rate: 0.20
+    description: Standard VAT rate.
+
+  de-vat-standard:
+    id: de-vat-standard
+    name: German VAT Standard Rate
+    category: value_added_tax
+    jurisdiction: DE
+    default_rate: 0.19
+    description: Standard VAT rate.
+
+  in-gst-standard:
+    id: in-gst-standard
+    name: Indian GST Standard Rate
+    category: value_added_tax
+    jurisdiction: IN
+    default_rate: 0.18
+    description: Standard GST rate.
+
+categories:
+  income_tax: Corporate income tax
+  sales_tax: Retail sales tax
+  value_added_tax: Value added tax
+  withholding: Withholding tax

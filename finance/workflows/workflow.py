@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import contextlib
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any
 
 
 @dataclass
@@ -24,9 +26,9 @@ class WorkflowStep:
     def __init__(
         self,
         name: str,
-        fn: Callable,
+        fn: Callable[..., Any],
         retry_count: int = 0,
-        skip_condition: Callable | None = None,
+        skip_condition: Callable[..., Any] | None = None,
     ):
         self.name = name
         self.fn = fn
@@ -94,11 +96,6 @@ class FinanceAnalysisWorkflow:
 
     def run(self, **kwargs: Any) -> WorkflowResult:
         sheets_adapter = kwargs.pop("sheets_adapter", self._sheets_adapter)
-        pipeline_vars = {
-            "company_id": kwargs.get("company_id"),
-            "period_id": kwargs.get("period_id"),
-            "spreadsheet_id": kwargs.get("spreadsheet_id"),
-        }
 
         builtin_steps: list[WorkflowStep] = [
             WorkflowStep(
@@ -107,7 +104,9 @@ class FinanceAnalysisWorkflow:
             ),
             WorkflowStep(
                 name="build_context",
-                fn=lambda **kw: self._context_builder.build_context(company_id=kw.get("company_id"), period_id=kw.get("period_id")),
+                fn=lambda **kw: self._context_builder.build_context(
+                    company_id=kw.get("company_id"), period_id=kw.get("period_id")
+                ),
             ),
             WorkflowStep(
                 name="analyze_variances",
@@ -164,14 +163,12 @@ class FinanceAnalysisWorkflow:
         adapter.sync(spreadsheet_id=spreadsheet_id)
 
     def _do_generate_commentary(self, company_id: str | None) -> None:
-        try:
+        with contextlib.suppress(Exception):
             self._llm_client.generate(
                 system_prompt="Analyze the financial data.",
                 user_prompt=f"Analyze company {company_id}.",
                 response_model=None,
             )
-        except Exception:
-            pass
 
     def _do_build_report(self, company_id: str | None, period_id: str | None) -> None:
         self._report_builder.build()
