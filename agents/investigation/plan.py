@@ -15,9 +15,12 @@ typed with strict element checking.
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+logger = logging.getLogger(__name__)
 
 CapabilityName = Literal[
     "get_stripe_payment",
@@ -77,6 +80,35 @@ class CapabilityCall(BaseModel):
     capability: CapabilityName
     args: dict[str, str] = Field(default_factory=dict)
     order_index: int = Field(ge=0)
+
+    @field_validator("args", mode="before")
+    @classmethod
+    def _coerce_args(cls, value: Any) -> dict[str, str]:
+        """Coerce common LLM quirks into ``dict[str, str]`` before strict validation.
+
+        Runs in ``mode="before"`` so strict Pydantic validation still
+        enforces ``dict[str, str]`` — we just normalize common patterns first:
+        - bare string → ``{"_positional": <value>}``
+        - list/tuple → ``{"_positional": <comma-joined>}``
+        - None → ``{}``
+        - dict with non-string values → values coerced to ``str``
+        """
+        if isinstance(value, str):
+            logger.info("Coercing bare-string args to positional dict: %r", value)
+            return {"_positional": value}
+        if isinstance(value, (list, tuple)):
+            joined = ",".join(str(item) for item in value)
+            logger.info("Coercing %s args to positional dict: %r", type(value).__name__, joined)
+            return {"_positional": joined}
+        if value is None:
+            logger.info("Coercing None args to empty dict")
+            return {}
+        if isinstance(value, dict):
+            coerced: dict[str, str] = {}
+            for k, v in value.items():
+                coerced[k] = str(v) if not isinstance(v, str) else v
+            return coerced
+        return value  # type: ignore[no-any-return]
 
     @field_validator("args")
     @classmethod

@@ -545,16 +545,16 @@ def test_subset_of_capabilities_selected(no_sockets: None) -> None:
     assert len(plan.capability_calls) == 2
 
 
-def test_non_string_args_value_rejected(no_sockets: None) -> None:
-    """Arrange args with int value; Act; Assert PlanRejectedError."""
+def test_non_string_args_value_coerced_to_string(no_sockets: None) -> None:
+    """Arrange args with int value; Act; Assert coerced to string, plan accepted."""
     del no_sockets
     payload = _valid_payload()
     payload["capability_calls"] = [
         {"capability": "get_stripe_payment", "args": {"payment_id": 123}, "order_index": 0},
     ]
     planner, _ = _fake_planner(payload)
-    with pytest.raises(PlannerError):
-        planner.plan(_make_request())
+    plan = planner.plan(_make_request())
+    assert plan.capability_calls[0].args == {"payment_id": "123"}
 
 
 def test_order_index_mismatch_rejected_by_pydantic(no_sockets: None) -> None:
@@ -809,7 +809,7 @@ def test_verifier_garbage_never_raises() -> None:
 
     verifier = Verifier()
     for garbage in [None, 123, "plan", [], {}, object()]:
-        verdict = verifier.verify(garbage, frozenset({"ev-001"}), 0)
+        verdict = verifier.verify(garbage, frozenset({"ev-001"}), 0)  # type: ignore[arg-type]
         assert isinstance(verdict, Verdict)
 
 
@@ -910,7 +910,7 @@ def test_executor_cross_tenant_rejected() -> None:
 
 
 def _raw_plan_from_calls(
-    calls: list[tuple[str, dict[str, str], int]],
+    calls: list[tuple[Any, dict[str, str], int]],
 ) -> InvestigationPlan:
     """Build a plan via model_construct bypassing validation (adversarial)."""
     from agents.investigation.plan import CapabilityCall
@@ -924,3 +924,108 @@ def _raw_plan_from_calls(
         evidence_required=("ev-001",),
         escalation=False,
     )
+
+
+# ---------------------------------------------------------------------------
+# CapabilityCall.args coercion — LLM-quirk boundary hardening
+# ---------------------------------------------------------------------------
+
+
+class TestCapabilityCallArgsCoercion:
+    """Defense-in-depth: coerce common LLM quirks before strict validation."""
+
+    def test_bare_string_coerced_to_positional(self) -> None:
+        """Args as bare string ``"pay_123"`` → ``{"_positional": "pay_123"}``."""
+        from agents.investigation.plan import CapabilityCall
+
+        cc = CapabilityCall.model_validate(
+            {"capability": "get_stripe_payment", "args": "pay_123", "order_index": 0},
+            strict=True,
+        )
+        assert cc.args == {"_positional": "pay_123"}
+
+    def test_list_coerced_to_comma_joined_positional(self) -> None:
+        """Args as list → ``{"_positional": "ev_001,ev_002"}`` (comma-joined)."""
+        from agents.investigation.plan import CapabilityCall
+
+        cc = CapabilityCall.model_validate(
+            {
+                "capability": "search_gmail",
+                "args": ["ev_001", "ev_002"],
+                "order_index": 0,
+            },
+            strict=True,
+        )
+        assert cc.args == {"_positional": "ev_001,ev_002"}
+
+    def test_dict_with_int_values_coerced_to_strings(self) -> None:
+        """Args dict with int values → values coerced to str."""
+        from agents.investigation.plan import CapabilityCall
+
+        cc = CapabilityCall.model_validate(
+            {
+                "capability": "get_stripe_payment",
+                "args": {"payment_id": 123},
+                "order_index": 0,
+            },
+            strict=True,
+        )
+        assert cc.args == {"payment_id": "123"}
+
+    def test_none_coerced_to_empty_dict(self) -> None:
+        """Args as None → ``{}``."""
+        from agents.investigation.plan import CapabilityCall
+
+        cc = CapabilityCall.model_validate(
+            {"capability": "get_stripe_payment", "args": None, "order_index": 0},
+            strict=True,
+        )
+        assert cc.args == {}
+
+    def test_valid_dict_passes_through_unchanged(self) -> None:
+        """Args as dict with string keys/values → passes through unchanged."""
+        from agents.investigation.plan import CapabilityCall
+
+        cc = CapabilityCall.model_validate(
+            {
+                "capability": "get_stripe_payment",
+                "args": {"payment_id": "pay_123"},
+                "order_index": 0,
+            },
+            strict=True,
+        )
+        assert cc.args == {"payment_id": "pay_123"}
+
+    def test_bare_string_args_passes_validate_structured_output(self) -> None:
+        """Full InvestigationPlan with bare-string args passes the LLM boundary."""
+        from shared.llm.provider import validate_structured_output
+
+        payload = {
+            "hypothesis_text": "Possible refund posting lag between processor and ledger.",
+            "capability_calls": [
+                {"capability": "get_stripe_payment", "args": "pay_123", "order_index": 0},
+            ],
+            "evidence_required": ["ev-ledger-001"],
+            "escalation": False,
+        }
+        plan = validate_structured_output(payload, InvestigationPlan)
+        assert plan.capability_calls[0].args == {"_positional": "pay_123"}
+
+    def test_list_args_passes_validate_structured_output(self) -> None:
+        """Full InvestigationPlan with list args passes the LLM boundary."""
+        from shared.llm.provider import validate_structured_output
+
+        payload = {
+            "hypothesis_text": "Possible refund posting lag between processor and ledger.",
+            "capability_calls": [
+                {
+                    "capability": "search_gmail",
+                    "args": ["ev_001", "ev_002"],
+                    "order_index": 0,
+                },
+            ],
+            "evidence_required": ["ev_001"],
+            "escalation": False,
+        }
+        plan = validate_structured_output(payload, InvestigationPlan)
+        assert plan.capability_calls[0].args == {"_positional": "ev_001,ev_002"}

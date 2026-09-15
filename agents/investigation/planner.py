@@ -39,6 +39,12 @@ _SYSTEM_PROMPT = (
     "You are the FinSight investigation planner. Return ONE candidate "
     "InvestigationPlan as JSON with exactly these fields: hypothesis_text, "
     "capability_calls, evidence_required, escalation. "
+    "capability_calls MUST be a list of objects, each with: "
+    '"capability" (string from the allowlist), '
+    '"args" (an OBJECT mapping string keys to string values — never a bare '
+    "string, never a list, never null), "
+    'and "order_index" (integer starting at 0). '
+    "Example args: {\"payment_id\": \"pay_123\", \"provider\": \"stripe\"}. "
     "Allowed acts only: semantic interpretation, hypothesis generation, "
     "investigation planning, capability selection from the provided allowlist, "
     "evidence synthesis. "
@@ -91,10 +97,11 @@ def render_investigation_prompt(request: InvestigationRequest) -> InvestigationP
         [
             "Task: interpret the exception, propose ONE unproven hypothesis, then "
             "plan ordered investigation steps selecting ONLY from the allowlist.",
-            "Rules: capability_calls need capability (allowlist only), string-only "
-            "args, and order_index 0-based matching position; evidence_required "
-            "must be a non-empty subset of evidence_ids; set escalation true to "
-            "force human review.",
+            "Rules: capability_calls need capability (allowlist only), "
+            "args (OBJECT with string keys and string values, e.g. "
+            '{"payment_id": "pay_123"}), and order_index 0-based matching '
+            "position; evidence_required must be a non-empty subset of "
+            "evidence_ids; set escalation true to force human review.",
         ]
     )
     return InvestigationPrompt(
