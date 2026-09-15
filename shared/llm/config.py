@@ -22,6 +22,7 @@ Provider-specific fallbacks (when LLM_* is unset):
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 # Provider-specific defaults ------------------------------------------------
@@ -161,7 +162,7 @@ def resolve_config(
     )
 
 
-def _infer_provider_from_key(env: dict[str, str]) -> str | None:
+def _infer_provider_from_key(env: Mapping[str, str]) -> str | None:
     """Infer provider from which API key env var is set."""
     if env.get("GROQ_API_KEY", ""):
         return "groq"
