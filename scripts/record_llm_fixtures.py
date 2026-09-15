@@ -76,7 +76,8 @@ SCENARIOS = [
             "Evidence IDs: ev_stripe_fee_001, ev_expected_fee_002\n"
             "Capability allowlist: get_stripe_payment, get_stripe_refunds, "
             "get_qb_transaction, get_expected_state, search_gmail\n\n"
-            "Stripe fee: 152.50. Expected: max(1.00, 0.5% of 30500) = 152.50. Close but off by 0.01."
+            "Stripe fee: 152.50. Expected: max(1.00, 0.5% of 30500) = 152.50. "
+            "Close but off by 0.01."
         ),
     },
     {
@@ -107,11 +108,17 @@ def main() -> None:
         resp = client.chat.completions.create(
             model=model,
             messages=[
-                {"role": "system", "content": "Financial investigation planner. Return valid JSON."},
+                {
+                    "role": "system",
+                    "content": "Financial investigation planner. Return valid JSON.",
+                },
                 {"role": "user", "content": scenario["user"]},
             ],
             temperature=0,
-            response_format={"type": "json_schema", "json_schema": {"name": "Plan", "schema": SCHEMA, "strict": True}},
+            response_format={
+                "type": "json_schema",
+                "json_schema": {"name": "Plan", "schema": SCHEMA, "strict": True},
+            },
         )
         latency = (time.monotonic() - t0) * 1000
         content = resp.choices[0].message.content

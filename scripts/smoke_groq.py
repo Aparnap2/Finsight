@@ -57,6 +57,7 @@ def main() -> None:
     print("\n1. Health check")
     try:
         import urllib.request
+
         req = urllib.request.Request(
             "https://api.groq.com/openai/v1/models",
             headers={"Authorization": f"Bearer {api_key}"},
@@ -117,15 +118,24 @@ def main() -> None:
         resp = client.chat.completions.create(
             model="openai/gpt-oss-20b",
             messages=[
-                {"role": "system", "content": "Financial investigation planner. Return valid JSON."},
-                {"role": "user", "content": (
-                    "Exception: PARTIAL_REFUND_ACCOUNTING_LAG\n"
-                    "Evidence: ev_charge_001, ev_ledger_002\n"
-                    "Allowlist: get_stripe_payment, get_stripe_refunds, get_qb_transaction"
-                )},
+                {
+                    "role": "system",
+                    "content": "Financial investigation planner. Return valid JSON.",
+                },
+                {
+                    "role": "user",
+                    "content": (
+                        "Exception: PARTIAL_REFUND_ACCOUNTING_LAG\n"
+                        "Evidence: ev_charge_001, ev_ledger_002\n"
+                        "Allowlist: get_stripe_payment, get_stripe_refunds, get_qb_transaction"
+                    ),
+                },
             ],
             temperature=0,
-            response_format={"type": "json_schema", "json_schema": {"name": "Plan", "schema": schema, "strict": True}},
+            response_format={
+                "type": "json_schema",
+                "json_schema": {"name": "Plan", "schema": schema, "strict": True},
+            },
         )
         latency = (time.monotonic() - t0) * 1000
         content = resp.choices[0].message.content

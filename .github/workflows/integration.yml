@@ -39,6 +39,18 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
+      - name: Act-only venv workaround
+        # `act` sets ACT=true and bind-mounts the repo; uv creating .venv on
+        # the shared mount hangs on file locks. The act container is already
+        # ephemeral, so system Python is safe there. Real GitHub runners
+        # (ACT unset) keep the isolated .venv. Applies to every later `uv`
+        # step via $GITHUB_ENV.
+        run: |
+          if [ "${ACT:-}" = "true" ]; then
+            echo "UV_SYSTEM_PYTHON=1" >> "$GITHUB_ENV"
+            echo "Local act run: using system Python (skip .venv)"
+          fi
+
       - name: Set up Python 3.12
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:

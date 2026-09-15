@@ -141,7 +141,9 @@ class OpenAICompatibleProvider:
         except Exception as exc:
             latency_ms = (time.monotonic() - start) * 1000.0
             return ProviderHealth(
-                ok=False, latency_ms=latency_ms, reason=f"completion probe failed: {type(exc).__name__}"
+                ok=False,
+                latency_ms=latency_ms,
+                reason=f"completion probe failed: {type(exc).__name__}",
             )
 
     def generate_structured[T: BaseModel](
