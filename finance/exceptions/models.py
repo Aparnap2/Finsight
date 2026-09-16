@@ -31,6 +31,10 @@ class ExceptionRow(Base):
     __tablename__ = "exceptions"
     __table_args__ = (
         UniqueConstraint("reconciliation_result_id", name="uq_exceptions_recon_result_once"),
+        # Composite covering index for tenant-scoped lookups (P5-03 #2 tenant→case)
+        # and RLS `tenant_id = current_setting('app.tenant_id')` scans.
+        # Keep single-column `tenant_id` index for wide scans.
+        UniqueConstraint("tenant_id", "exception_id", name="uq_exceptions_tenant_exception_once"),
     )
 
     exception_id: Mapped[str] = mapped_column(String, primary_key=True)

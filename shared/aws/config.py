@@ -11,6 +11,12 @@ the environment; when unset, the host default is used. When running inside
 Docker, set ``AWS_ENDPOINT_URL=http://ministack:4566`` (see
 ``docker-compose.ministack.yml``).
 
+Tenant isolation note (P5-03 #5, #9): buckets are per-deployment
+(``finsight-evidence-test`` etc., not per-tenant). Isolation is via key prefix
+``{tenant_id}/...`` enforced in ``finance/object_store`` before any network
+call — this module only provides the endpoint/bucket config, never tenant
+selection. Cross-tenant attempts raise ``TenantIsolationError`` uniformly.
+
 This module has no dependency on ``boto3`` and is safe to import in unit tests
 without Docker or network.
 """

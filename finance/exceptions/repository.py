@@ -128,9 +128,30 @@ class ExceptionRepository:
                 ) from exc
 
     def get(self, exception_id: str) -> ExceptionAggregate | None:
-        """Read the current snapshot, exposing ``state_version`` for retry."""
+        """Read the current snapshot, exposing ``state_version`` for retry.
+
+        Tenant-blind; for tenant-scoped reads use :meth:`get_for_tenant`.
+        """
         with Session(self._engine) as session:
             row = session.get(ExceptionRow, exception_id)
+            return _row_to_aggregate(row) if row is not None else None
+
+    def get_for_tenant(self, tenant_id: str, exception_id: str) -> ExceptionAggregate | None:
+        """Tenant-scoped read — fails closed if tenant does not own the case.
+
+        Returns ``None`` with uniform ``None`` for both missing and
+        wrong-tenant (no existential leak, no timing oracle beyond query).
+        """
+        tid = tenant_id.strip()
+        eid = exception_id.strip()
+        if not tid or not eid:
+            return None
+        with Session(self._engine) as session:
+            row = (
+                session.query(ExceptionRow)
+                .filter(ExceptionRow.exception_id == eid, ExceptionRow.tenant_id == tid)
+                .one_or_none()
+            )
             return _row_to_aggregate(row) if row is not None else None
 
     def apply(
@@ -184,6 +205,7 @@ class ExceptionRepository:
                 update(ExceptionRow)
                 .where(
                     ExceptionRow.exception_id == snapshot.exception_id,
+                    ExceptionRow.tenant_id == snapshot.tenant_id,
                     ExceptionRow.state_version == snapshot.state_version,
                     ExceptionRow.state == snapshot.state.value,
                 )

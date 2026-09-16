@@ -173,7 +173,11 @@ class Verifier:
         Args:
             plan: Candidate :class:`InvestigationPlan` (authorizes nothing).
             available_evidence_ids: Verified-only evidence ids the plan may
-                cite (deterministic-code-owned; exact-match membership).
+                cite — this set is tenant-scoped and deterministic-code-owned
+                (InvestigationContext.evidence_ids for the authenticated tenant;
+                cross-tenant ids are never in this set). Exact-match membership;
+                unknown ids yield uniform ``grounding_violation:unknown_evidence_id``
+                without leaking whether the B resource exists.
             attempt: Zero-based re-plan attempt index for the budget gate.
 
         Returns:
@@ -314,7 +318,13 @@ class Verifier:
 
     @staticmethod
     def _check_grounding(plan: InvestigationPlan, available: set[str]) -> tuple[str, ...]:
-        """Require every evidence_required id to be in the available set."""
+        """Require every evidence_required id to be in the tenant-scoped available set.
+
+        The available set is the authenticated tenant's verified-only evidence ids
+        (InvestigationContext.evidence_ids). Unknown ids — including cross-tenant
+        ids — yield uniform ``grounding_violation:unknown_evidence_id`` without
+        revealing whether the B resource exists.
+        """
         return tuple(
             f"grounding_violation:unknown_evidence_id:{evidence_id}"
             for evidence_id in plan.evidence_required

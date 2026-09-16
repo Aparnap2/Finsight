@@ -68,6 +68,10 @@ class ModelMetadata:
 class ProviderCallLog:
     """Per-call audit record: model + cost metadata only, never secrets.
 
+    Tenant-safe and credential-safe: no tenant_id, no api_key, no PII is
+    stored here — only provider/model, success, latency, and char counts.
+    The journal is safe to log and to surface in traces.
+
     Attributes:
         provider: Provider name.
         model: Model identifier used for the call.
