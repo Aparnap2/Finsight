@@ -22,11 +22,17 @@ from shared.tracing.protocol import TraceContext as TraceContext
 from shared.tracing.protocol import TracerProtocol as TracerProtocol
 from shared.tracing.redaction import sanitize_input as sanitize_input
 
+try:
+    from shared.tracing.phoenix_tracer import PhoenixTracer as PhoenixTracer  # noqa: F401
+except ImportError:
+    PhoenixTracer = None  # type: ignore[assignment,misc]
+
 __all__ = [
     "ObservabilityTrace",
     "TraceContext",
     "TracerProtocol",
     "NoOpTracer",
+    "PhoenixTracer",
     "create_tracer",
     "derive_correlation_id",
     "from_fingerprint",
