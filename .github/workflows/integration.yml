@@ -102,3 +102,115 @@ jobs:
           name: integration-logs
           path: pytest-integration.log
           if-no-files-found: warn
+
+  ministack:
+    name: ministack S3 contract (LocalStack)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Skipped when change does not touch object-store or ministack — still runs on
+    # main and on PRs that touch the contract to prove failure-matrix.
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: finsight
+          POSTGRES_USER: finsight
+          POSTGRES_PASSWORD: finsight
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U finsight"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+      localstack:
+        image: localstack/localstack:3.8
+        env:
+          SERVICES: s3
+          AWS_DEFAULT_REGION: us-east-1
+          AWS_ACCESS_KEY_ID: test
+          AWS_SECRET_ACCESS_KEY: test
+          PERSISTENCE: 0
+        ports:
+          - 4566:4566
+        options: >-
+          --health-cmd "curl -f http://localhost:4566/_localstack/health || exit 1"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      AWS_ENDPOINT_URL: http://localhost:4566
+      AWS_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      FINSIGHT_TEST_DSN: postgresql+psycopg://finsight:finsight@localhost:5432/finsight
+      PYTHONPATH: ${{ github.workspace }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Act-only venv workaround
+        run: |
+          if [ "${ACT:-}" = "true" ]; then
+            echo "UV_SYSTEM_PYTHON=1" >> "$GITHUB_ENV"
+          fi
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Sync dependencies (including ministack)
+        run: uv sync --all-extras --group ministack --frozen
+
+      - name: Wait for LocalStack
+        run: |
+          python - <<'EOF'
+          import socket, time
+          for _ in range(40):
+              try:
+                  with socket.create_connection(("localhost", 4566), timeout=2):
+                      print("localstack reachable")
+                      break
+              except OSError:
+                  time.sleep(2)
+          else:
+              raise SystemExit("localstack not reachable after 80s")
+          for _ in range(30):
+              try:
+                  with socket.create_connection(("localhost", 5432), timeout=2):
+                      print("postgres reachable")
+                      break
+              except OSError:
+                  time.sleep(2)
+          else:
+              raise SystemExit("postgres not reachable")
+          EOF
+
+      - name: Init MiniStack buckets
+        run: uv run python scripts/ministack_init.py
+
+      - name: Run S3 contract suite (Fake already in unit, here MiniStack)
+        run: |
+          set -o pipefail
+          uv run pytest -m ministack -q -rs 2>&1 | tee pytest-ministack.log
+          echo "--- ministack log tail ---"
+          tail -n 30 pytest-ministack.log || true
+
+      - name: Report ministack counts
+        if: always()
+        run: |
+          echo '=== ministack summary ==='
+          tail -n 20 pytest-ministack.log || true
+          grep -E '^SKIPPED' pytest-ministack.log | tail -n 20 || true
+
+      - name: Upload ministack logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ministack-logs
+          path: pytest-ministack.log
+          if-no-files-found: warn

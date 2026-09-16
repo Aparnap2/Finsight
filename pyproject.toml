@@ -71,10 +71,15 @@ markers = [
     "live_llm: live-provider validation (Groq quota; requires FINSIGHT_ALLOW_LIVE_LLM=1; excluded by default)",
     "evals: LLM evaluation tests — manual/controlled, never in dev loop",
     "integration: tests that require a real reachable Postgres (skipped otherwise)",
+    "ministack: tests that require MiniStack/LocalStack S3 (requires docker compose -f docker-compose.ministack.yml; excluded by default)",
 ]
 
 [dependency-groups]
 dev = [
     "pytest-asyncio>=0.26.0",
     "pytest-httpx>=0.35.0",
+]
+ministack = [
+    "boto3>=1.35.0",
+    "botocore>=1.35.0",
 ]

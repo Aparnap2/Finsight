@@ -1,9 +1,10 @@
 # FinSight local CI entrypoints.
 # Fast unit path mirrors .github/workflows/ci.yml; the gated integration path
 # mirrors .github/workflows/integration.yml via docker-compose.test.yml.
-# No MiniStack services are referenced here (no queue seam exists).
+# MiniStack S3 contract is per docs/architecture/MINISTACK_SEAM_AUDIT.md:
+# single justified seam (S3), test-only, never in fast CI.
 
-.PHONY: test test-integration evals ci-local
+.PHONY: test test-integration evals ci-local ministack-up ministack-init ministack-test ministack-down
 
 # $(wildcard ...) keeps local runs green before a suite directory exists;
 # CI workflows reference the literal directories and fail fast instead.
@@ -30,3 +31,17 @@ ci-local:
 	else \
 		uv run ruff check . && uv run ruff format --check . && uv run mypy . && uv run pytest $(UNIT_DIRS) -q; \
 	fi
+
+ministack-up:
+	docker compose -f docker-compose.ministack.yml up -d --wait
+
+ministack-init:
+	uv run python scripts/ministack_init.py
+
+ministack-test:
+	uv run pytest -m ministack -q -rs
+
+ministack-down:
+	docker compose -f docker-compose.ministack.yml down -v
+
+test-ministack: ministack-up ministack-init ministack-test ministack-down

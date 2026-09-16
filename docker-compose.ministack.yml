@@ -1,0 +1,71 @@
+# MiniStack contract-test compose — postgres:17-alpine + LocalStack S3 only.
+# Scope: contract testing for the single justified AWS seam (S3 object store).
+# No redis/qdrant/redpanda/temporal — those live in docker-compose.yml.
+# No SQS/SNS/EventBridge/DynamoDB — NOT REQUIRED per docs/architecture/MINISTACK_SEAM_AUDIT.md.
+#
+# Usage:
+#   docker compose -f docker-compose.ministack.yml up -d
+#   uv run python scripts/ministack_init.py
+#   uv run pytest -m ministack -q
+#   docker compose -f docker-compose.ministack.yml down -v
+#
+# Inside the compose network, MiniStack is reachable as http://ministack:4566
+# (see shared/aws/config.py:container_endpoint). From the host, use
+# http://localhost:4566 (host_endpoint).
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: finsight
+      POSTGRES_USER: finsight
+      POSTGRES_PASSWORD: finsight
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U finsight"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  ministack:
+    # Pinned — do not silently upgrade to :latest
+    image: localstack/localstack:3.8
+    ports:
+      - "4566:4566"
+    environment:
+      - SERVICES=s3
+      - AWS_DEFAULT_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - PERSISTENCE=0
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:4566/_localstack/health 2>/dev/null | grep -q '\"s3\"' || curl -f http://localhost:4566/_localstack/health >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 15s
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  # Optional: run the ministack-marked suite inside the network (container endpoint)
+  test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ./tests:/app/tests:ro
+    environment:
+      - AWS_ENDPOINT_URL=http://ministack:4566
+      - AWS_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - FINSIGHT_TEST_DSN=postgresql+psycopg://finsight:finsight@postgres:5432/finsight
+      - PYTHONPATH=/app
+    command: uv run pytest -m ministack -q -rs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ministack:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 512M
