@@ -70,6 +70,11 @@ from agents.investigation.plan import (
 from agents.verification.verdict import Verdict
 
 try:
+    from finance.evidence.grounding import evaluate_ladder
+except ImportError:  # pragma: no cover
+    evaluate_ladder = None  # type: ignore[no-redef]
+
+try:
     from shared.tracing.noop import NoOpTracer
     from shared.tracing.protocol import TraceContext, TracerProtocol
     from shared.tracing.redaction import sanitize_input, sanitize_output
@@ -200,6 +205,9 @@ class Verifier:
         available_evidence_ids: Collection[str],
         attempt: int = 0,
         trace_ctx: TraceContext | None = None,
+        evidence_registry: dict[str, object] | None = None,
+        tenant_id: str = "meridian",
+        content_bytes: dict[str, bytes] | None = None,
     ) -> Verdict:
         """Gate one candidate plan through the six ordered stages (pure).
 
@@ -220,6 +228,16 @@ class Verifier:
                 unknown ids yield uniform ``grounding_violation:unknown_evidence_id``
                 without leaking whether the B resource exists.
             attempt: Zero-based re-plan attempt index for the budget gate.
+            trace_ctx: Optional observability context (sanitized spans only).
+            evidence_registry: Optional mapping of evidence id to validated
+                :class:`~finance.evidence.models.EvidenceItem`. When supplied,
+                stage 3 additionally enforces the P5-04 provenance ladder
+                (tenant ownership, hash, tz-aware time, provenance fields).
+                When None, stage 3 falls back to existence-only check.
+            tenant_id: Tenant that must own every cited item (default
+                ``meridian``). Only consulted when ``evidence_registry`` is given.
+            content_bytes: Optional raw bytes per evidence id for hash
+                re-verification. Only consulted with ``evidence_registry``.
 
         Returns:
             A frozen :class:`Verdict` carrying status, reason codes, and
@@ -242,7 +260,13 @@ class Verifier:
         if not reasons:
             reasons = self._check_allowlist(plan)
         if not reasons:
-            reasons = self._check_grounding(plan, available)
+            reasons = self._check_grounding(
+                plan,
+                available,
+                evidence_registry=evidence_registry,  # type: ignore[arg-type]
+                tenant_id=tenant_id,
+                content_bytes=content_bytes,
+            )
         if not reasons:
             reasons = self._check_claim_classification(plan)
         if not reasons:
@@ -280,7 +304,9 @@ class Verifier:
                             "attempt": attempt,
                         }
                     ),
-                    sanitize_output({"status": verdict.status, "reasons": list(verdict.reasons)[:8]}),
+                    sanitize_output(
+                        {"status": verdict.status, "reasons": list(verdict.reasons)[:8]}
+                    ),
                     passed=(verdict.status == "ACCEPTED"),
                     reasons=list(verdict.reasons),
                     metadata={"attempt": attempt, "status": verdict.status},
@@ -387,19 +413,44 @@ class Verifier:
         return tuple(reasons)
 
     @staticmethod
-    def _check_grounding(plan: InvestigationPlan, available: set[str]) -> tuple[str, ...]:
+    def _check_grounding(
+        plan: InvestigationPlan,
+        available: set[str],
+        evidence_registry: dict[str, object] | None = None,
+        tenant_id: str = "meridian",
+        content_bytes: dict[str, bytes] | None = None,
+    ) -> tuple[str, ...]:
         """Require every evidence_required id to be in the tenant-scoped available set.
 
         The available set is the authenticated tenant's verified-only evidence ids
         (InvestigationContext.evidence_ids). Unknown ids — including cross-tenant
         ids — yield uniform ``grounding_violation:unknown_evidence_id`` without
         revealing whether the B resource exists.
+
+        When ``evidence_registry`` is supplied, additionally enforces the P5-04
+        provenance ladder via :func:`finance.evidence.grounding.evaluate_ladder`
+        (tenant ownership, hash, tz-aware time, provenance fields, supported
+        claim). Ladder violations append after existence violations.
         """
-        return tuple(
+        reasons = tuple(
             f"grounding_violation:unknown_evidence_id:{evidence_id}"
             for evidence_id in plan.evidence_required
             if evidence_id not in available
         )
+        if evidence_registry is not None and evaluate_ladder is not None:
+            ladder_reasons = evaluate_ladder(
+                evidence_ids=tuple(plan.evidence_required),
+                evidence_registry=evidence_registry,  # type: ignore[arg-type]
+                expected_tenant=tenant_id,
+                content_bytes=content_bytes,
+            )
+            # Merge without duplicates, preserving order (existence first)
+            merged: list[str] = list(reasons)
+            for code in ladder_reasons:
+                if code not in merged:
+                    merged.append(code)
+            return tuple(merged)
+        return reasons
 
     @classmethod
     def _check_claim_classification(cls, plan: InvestigationPlan) -> tuple[str, ...]:
