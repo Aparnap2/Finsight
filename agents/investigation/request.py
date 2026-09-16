@@ -27,6 +27,26 @@ MIN_ROUND_BUDGET = 1
 MAX_ROUND_BUDGET = 10
 DEFAULT_ROUND_BUDGET = 3
 
+# P5-02 per-exception-type capability scope (allowlist subset per case).
+# Tenant isolation: scope is checked after allowlist subset check; unknown
+# exception_type (not in map) has no extra scope restriction beyond the frozen
+# allowlist. Keys are the canonical P1 codes (I-REFUND-LAG, I-FEE-DRIFT, I-DUPLICATE).
+# I-REFUND-LAG is the flagship and allows the full frozen set (backward compat
+# for existing tests); fee/duplicate are scoped.
+_ALLOWED_SCOPE: dict[str, frozenset[str]] = {
+    "I-REFUND-LAG": frozenset(
+        {
+            "get_stripe_payment",
+            "get_stripe_refunds",
+            "get_qb_transaction",
+            "get_expected_state",
+            "search_gmail",
+        }
+    ),
+    "I-FEE-DRIFT": frozenset({"get_stripe_payment", "get_qb_transaction", "get_expected_state"}),
+    "I-DUPLICATE": frozenset({"get_qb_transaction", "get_expected_state", "search_gmail"}),
+}
+
 
 class InvestigationRequest(BaseModel):
     """Deterministic planner input assembled before any LLM call."""
@@ -35,6 +55,8 @@ class InvestigationRequest(BaseModel):
 
     exception_id: str = Field(min_length=1, max_length=MAX_ID_CHARS)
     exception_type: str = Field(min_length=1, max_length=MAX_ID_CHARS)
+    tenant_id: str = Field(min_length=1, max_length=MAX_ID_CHARS)
+    actor: str = Field(min_length=1, max_length=MAX_ID_CHARS)
     evidence_ids: tuple[str, ...] = Field(min_length=1, max_length=MAX_EVIDENCE_IDS)
     context_window: str = Field(default="", max_length=MAX_CONTEXT_CHARS)
     context_truncated: bool = False
@@ -65,13 +87,13 @@ class InvestigationRequest(BaseModel):
                 normalized[field_name] = tuple(normalized[field_name])
         return normalized
 
-    @field_validator("exception_id", "exception_type")
+    @field_validator("exception_id", "exception_type", "tenant_id", "actor")
     @classmethod
     def _check_non_blank(cls, value: str) -> str:
-        """Reject blank identifiers."""
+        """Reject blank identifiers (tenant/actor included, trusted server-side)."""
         if not value.strip():
             raise ValueError("Identifier must be a non-blank string.")
-        return value
+        return value.strip()
 
     @field_validator("evidence_ids")
     @classmethod
@@ -103,3 +125,17 @@ class InvestigationRequest(BaseModel):
                 raise ValueError(f"Duplicate allowlist entry {capability!r}.")
             seen.add(capability)
         return value
+
+    @model_validator(mode="after")
+    def _check_scope(self) -> InvestigationRequest:
+        """Enforce per-exception-type scope: allowlist must be subset of allowed scope."""
+        allowed = _ALLOWED_SCOPE.get(self.exception_type)
+        if allowed is None:
+            return self
+        for cap in self.capability_allowlist:
+            if cap not in allowed:
+                raise ValueError(
+                    f"Capability {cap!r} is outside scope for {self.exception_type!r} "
+                    f"(allowed: {sorted(allowed)})"
+                )
+        return self

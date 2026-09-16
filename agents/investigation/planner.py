@@ -84,6 +84,8 @@ def render_investigation_prompt(request: InvestigationRequest) -> InvestigationP
     evidence = ", ".join(request.evidence_ids)
     allowlist = ", ".join(request.capability_allowlist)
     lines = [
+        f"tenant_id: {request.tenant_id}",
+        f"actor: {request.actor}",
         f"exception_id: {request.exception_id}",
         f"exception_type: {request.exception_type}",
         f"evidence_ids (verified-only, opaque references): {evidence}",

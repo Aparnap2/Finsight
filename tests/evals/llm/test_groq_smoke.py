@@ -57,6 +57,8 @@ def partial_refund_request():
     return InvestigationRequest(
         exception_id="smoke-partial-refund-001",
         exception_type="PARTIAL_REFUND_ACCOUNTING_LAG",
+        tenant_id="tenant-001",
+        actor="user-001",
         evidence_ids=("ev_stripe_charge_001", "ev_qb_ledger_002"),
         context_window="Charge: 50000 INR. Refund: 15000 INR. Expected: 35000. Ledger shows 50000.",
         capability_allowlist=(
@@ -78,6 +80,8 @@ def duplicate_entry_request():
     return InvestigationRequest(
         exception_id="smoke-duplicate-001",
         exception_type="DUPLICATE_LEDGER_ENTRY",
+        tenant_id="tenant-001",
+        actor="user-001",
         evidence_ids=("ev_qb_txn_a", "ev_qb_txn_b", "ev_stripe_ch_001"),
         context_window=(
             "Two QB entries reference Stripe charge ch_001. One matches exactly. Other is 2x."
