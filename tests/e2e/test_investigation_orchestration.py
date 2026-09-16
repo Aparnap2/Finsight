@@ -71,6 +71,8 @@ def _make_request(
     return InvestigationRequest(
         exception_id=exception_id,
         exception_type=ExceptionCode.PARTIAL_REFUND_ACCOUNTING_LAG.value,
+        tenant_id="tenant-001",
+        actor="user-001",
         evidence_ids=evidence_ids,
         context_window="refund lag probe",
         round_budget=3,

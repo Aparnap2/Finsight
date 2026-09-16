@@ -46,6 +46,8 @@ def _make_request() -> InvestigationRequest:
     return InvestigationRequest(
         exception_id="exc-loop-001",
         exception_type="I-REFUND-LAG",
+        tenant_id="tenant-001",
+        actor="user-001",
         evidence_ids=("ev-ledger-001", "ev-processor-002"),
         context_window="refund posting lag probe",
         round_budget=3,

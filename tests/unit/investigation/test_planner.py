@@ -75,6 +75,8 @@ def _make_request(
         return InvestigationRequest(
             exception_id="exc-planner-001",
             exception_type="I-REFUND-LAG",
+            tenant_id="tenant-001",
+            actor="user-001",
             evidence_ids=evidence_ids,
             context_window="refund posting lag probe",
             round_budget=3,
@@ -82,6 +84,8 @@ def _make_request(
     return InvestigationRequest(
         exception_id="exc-planner-001",
         exception_type="I-REFUND-LAG",
+        tenant_id="tenant-001",
+        actor="user-001",
         evidence_ids=evidence_ids,
         context_window="refund posting lag probe",
         capability_allowlist=allowlist,
@@ -731,6 +735,8 @@ def test_empty_context_window_accepted(no_sockets: None) -> None:
     request = InvestigationRequest(
         exception_id="exc-ctx-001",
         exception_type="I-REFUND-LAG",
+        tenant_id="tenant-001",
+        actor="user-001",
         evidence_ids=("ev-ledger-001",),
         context_window="",
         round_budget=3,
@@ -746,6 +752,8 @@ def test_max_context_window_accepted(no_sockets: None) -> None:
     request = InvestigationRequest(
         exception_id="exc-ctx-002",
         exception_type="I-REFUND-LAG",
+        tenant_id="tenant-001",
+        actor="user-001",
         evidence_ids=("ev-ledger-001",),
         context_window="x" * 4000,
         round_budget=3,
@@ -761,6 +769,8 @@ def test_context_truncation_flag_set(no_sockets: None) -> None:
     request = InvestigationRequest(
         exception_id="exc-ctx-003",
         exception_type="I-REFUND-LAG",
+        tenant_id="tenant-001",
+        actor="user-001",
         evidence_ids=("ev-ledger-001",),
         context_window="x" * 5000,
         round_budget=3,
@@ -777,6 +787,8 @@ def test_short_context_accepted(no_sockets: None) -> None:
     request = InvestigationRequest(
         exception_id="exc-ctx-004",
         exception_type="I-REFUND-LAG",
+        tenant_id="tenant-001",
+        actor="user-001",
         evidence_ids=("ev-ledger-001",),
         context_window="short ctx",
         round_budget=3,
