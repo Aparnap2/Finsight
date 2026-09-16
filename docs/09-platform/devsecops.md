@@ -477,13 +477,13 @@ IDENTIFY → CONTAIN → INVESTIGATE → REMEDIATE → DOCUMENT
 
 ### Three pillars
 
-#### 1. Tenant Isolation
+#### 1. Company Isolation (tenant mechanism, Meridian domain meaning)
 
-- **Enforcement point**: Database row level — `tenant_id` column on every multi-tenant table (18 tables in `shared/models/database.py`)
-- **Propagation**: API endpoint receives `tenant_id` → threads into `PipelineState` → passed to every agent node → used in all queries
-- **Validation boundary**: API routes validate that the authenticated user's tenant matches the requested `tenant_id` (enforcement point at route handler)
+- **Enforcement point**: Database row level — `tenant_id` column as implementation mechanism for company/environment isolation (`company_id=meridian` + `environment` dev/staging/prod). FinSight is single-company (Meridian Commerce Pvt Ltd), NOT multi-tenant SaaS.
+- **Propagation**: API endpoint receives `tenant_id` (company scope) → threads into `PipelineState` → passed to every agent node → used in all queries
+- **Validation boundary**: API routes validate that the authenticated user's company scope matches the requested `tenant_id` (enforcement point at route handler)
 - **Vector isolation**: Qdrant queries include `tenant_id` metadata filter at query time
-- **Current gap**: No middleware-layer filter injection yet — queries explicitly reference `tenant_id` in WHERE clauses. A future enhancement will add SQLAlchemy event listeners to auto-inject tenant filters.
+- **Current gap**: No middleware-layer filter injection yet — queries explicitly reference `tenant_id` in WHERE clauses. A future enhancement will add SQLAlchemy event listeners to auto-inject company filters.
 
 #### 2. Secrets Protection
 
