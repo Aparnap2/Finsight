@@ -17,6 +17,16 @@ from shared.safety.execution_guard import (
     GuardRequest,
 )
 from shared.safety.idempotency import IdempotencyStore
+from shared.safety.secrets import (
+    REDACTED,
+    REDACTED_EMAIL,
+    REDACTED_SECRET,
+    contains_secret_literal,
+    hash_pii,
+    redact_mapping,
+    redact_value,
+    scrub_text,
+)
 
 __all__ = [
     "ExecutionCommand",
@@ -25,4 +35,12 @@ __all__ = [
     "GuardDecision",
     "GuardRequest",
     "IdempotencyStore",
+    "REDACTED",
+    "REDACTED_EMAIL",
+    "REDACTED_SECRET",
+    "contains_secret_literal",
+    "hash_pii",
+    "redact_mapping",
+    "redact_value",
+    "scrub_text",
 ]

@@ -249,15 +249,22 @@ def _audit(
     event_data: dict[str, Any],
     period: str,
 ) -> None:
-    """Append one audit row; never masks the webhook response on failure."""
+    """Append one audit row; never masks the webhook response on failure.
+
+    P5-06: ``event_data`` is redacted via :func:`shared.safety.secrets
+    .redact_mapping` before persistence — secret-keyed values collapse
+    to ``[REDACTED]`` so API keys and tokens never reach the audit log.
+    """
     try:
+        from shared.safety.secrets import redact_mapping
+
         session.add(
             AuditLog(
                 id=f"wh_audit_{uuid4().hex[:16]}",
                 tenant_id=tenant_id,
                 period=period,
                 event_type=event_type,
-                event_data=dict(event_data),
+                event_data=redact_mapping(dict(event_data)),
             )
         )
         session.commit()
