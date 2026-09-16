@@ -1,5 +1,8 @@
 """Deterministic capability executor (P4.3).
 
+# ruff: noqa: SIM105
+
+
 :class:`CapabilityExecutor` executes a pre-validated :class:`InvestigationPlan`
 in deterministic code after verifier approval. It re-checks the plan shape
 (allowlist membership, string-only bounded args, call count bound, dense
@@ -49,6 +52,21 @@ from shared.utils.tools.tool_result import (
     ToolResult,
     compute_query_fingerprint,
 )
+
+try:
+    from shared.tracing.noop import NoOpTracer
+    from shared.tracing.protocol import TraceContext, TracerProtocol
+    from shared.tracing.redaction import sanitize_args, sanitize_output
+except ImportError:  # pragma: no cover
+    TracerProtocol = object  # type: ignore[misc,assignment]
+    TraceContext = object  # type: ignore[misc,assignment]
+    NoOpTracer = object  # type: ignore[misc,assignment]
+
+    def sanitize_args(x, **kw):  # type: ignore[no-redef]
+        return x
+
+    def sanitize_output(x):  # type: ignore[no-redef]
+        return x
 
 logger = logging.getLogger(__name__)
 
@@ -133,6 +151,7 @@ class CapabilityExecutor:
         *,
         max_calls: int = MAX_EXECUTOR_CALLS,
         timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
+        tracer: TracerProtocol | None = None,
     ) -> None:
         """Bind the read-only bundle and enforce executor budgets.
 
@@ -141,6 +160,8 @@ class CapabilityExecutor:
             max_calls: Per-run call ceiling (must be 1..8, never above the
                 frozen ``MAX_CAPABILITY_CALLS``).
             timeout_seconds: Per-call timeout budget (positive, finite).
+            tracer: Optional ``TracerProtocol`` for observability
+                (defaults to ``NoOpTracer``; no network when unset).
 
         Raises:
             ExecutorRejectedError: On fatal misconfiguration (bad budgets).
@@ -163,6 +184,15 @@ class CapabilityExecutor:
         self._registry = CapabilityRegistry(bundle)
         self._max_calls = max_calls
         self._timeout_seconds = float(timeout_seconds)
+        try:
+            self._tracer: TracerProtocol = tracer or NoOpTracer()  # type: ignore[operator]
+        except Exception:
+            self._tracer = tracer  # type: ignore[assignment]
+
+    @property
+    def tracer(self) -> TracerProtocol:
+        """Return the tracing seam (NoOp when unconfigured)."""
+        return self._tracer
 
     @property
     def registry(self) -> CapabilityRegistry:
@@ -179,13 +209,20 @@ class CapabilityExecutor:
         """Return the per-call timeout budget in seconds."""
         return self._timeout_seconds
 
-    def execute(self, plan: InvestigationPlan, tenant_id: str) -> tuple[CapabilityOutcome, ...]:
+    def execute(
+        self,
+        plan: InvestigationPlan,
+        tenant_id: str,
+        trace_ctx: TraceContext | None = None,
+    ) -> tuple[CapabilityOutcome, ...]:
         """Execute a pre-validated plan deterministically; evidence only.
 
         Args:
             plan: Candidate plan whose shape is re-checked here (allowlist,
                 string-only bounded args, call count, dense ordering).
             tenant_id: Tenant scope every lookup executes under.
+            trace_ctx: Optional ``TraceContext`` for observability
+                (sanitized tool/result spans; no Gmail bodies).
 
         Returns:
             One :class:`CapabilityOutcome` per planned call, in
@@ -226,10 +263,50 @@ class CapabilityExecutor:
                         ),
                     )
                 )
+                if trace_ctx is not None:
+                    try:
+                        self._tracer.tool(
+                            trace_ctx,
+                            f"capability:{call.capability}",
+                            sanitize_args(dict(call.args), capability=call.capability),
+                            {"deduped": True, "order_index": call.order_index},
+                            {"tenant_id": tenant_id, "deduped": True},
+                        )
+                    except Exception:
+                        pass
                 continue
+            # Observability: sanitized capability call span
+            if trace_ctx is not None:
+                try:
+                    self._tracer.tool(
+                        trace_ctx,
+                        f"capability:{call.capability}",
+                        sanitize_args(dict(call.args), capability=call.capability),
+                        {"order_index": call.order_index},
+                        {"tenant_id": tenant_id},
+                    )
+                except Exception:
+                    pass
             outcome = self._execute_once(
                 call.capability, dict(call.args), tenant_id, call.order_index
             )
+            if trace_ctx is not None:
+                try:
+                    self._tracer.tool(
+                        trace_ctx,
+                        f"capability_result:{call.capability}",
+                        {"capability": call.capability, "order_index": call.order_index},
+                        sanitize_output(
+                            {
+                                "success": outcome.success,
+                                "row_count": outcome.result.row_count,
+                                "error_code": outcome.error_code or "",
+                            }
+                        ),
+                        {"tenant_id": tenant_id, "success": outcome.success},
+                    )
+                except Exception:
+                    pass
             cache[fingerprint] = outcome.result
             first_index[fingerprint] = call.order_index
             outcomes.append(outcome)

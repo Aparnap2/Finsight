@@ -1,5 +1,8 @@
 """Controlled P4.5 orchestrator (P4.5).
 
+# ruff: noqa: SIM105
+
+
 Runs the frozen loop: request -> planner -> verifier -> (replan or)
 capability executor -> deterministic proposal candidate. Bounded replans
 escalate to HITL; provider failures escalate; no financial mutation,
@@ -26,6 +29,23 @@ from shared.llm.errors import CredentialMissingError, ProviderError, ProviderUna
 
 logger = logging.getLogger(__name__)
 
+try:
+    from shared.tracing.correlation import derive_correlation_id, validate_correlation_id
+    from shared.tracing.noop import NoOpTracer
+    from shared.tracing.observability import ObservabilityTrace
+    from shared.tracing.protocol import TraceContext, TracerProtocol
+except ImportError:  # pragma: no cover
+    TracerProtocol = object  # type: ignore[misc,assignment]
+    TraceContext = object  # type: ignore[misc,assignment]
+    NoOpTracer = object  # type: ignore[misc,assignment]
+    ObservabilityTrace = object  # type: ignore[misc,assignment]
+
+    def derive_correlation_id(**kw):  # type: ignore[no-redef]
+        return kw.get("exception_id") or "corr"
+
+    def validate_correlation_id(v):  # type: ignore[no-redef]
+        return v
+
 
 class InvestigateOrchestrator:
     """Orchestrate one investigation request through the frozen P4 gates."""
@@ -38,6 +58,7 @@ class InvestigateOrchestrator:
         proposal_builder: Callable[..., Proposal] | None = None,
         *,
         max_replans: int | None = None,
+        tracer: TracerProtocol | None = None,
     ) -> None:
         """Bind seams.
 
@@ -49,6 +70,8 @@ class InvestigateOrchestrator:
                 ACCEPTED (receives no invented amounts; None means no proposal
                 synthesis, leaving ``proposal_candidate`` as None).
             max_replans: Override re-plan budget; defaults to verifier's.
+            tracer: Optional ``TracerProtocol`` for observability
+                (defaults to ``NoOpTracer``; no network when unset).
 
         Raises:
             TypeError: On bad types.
@@ -60,15 +83,46 @@ class InvestigateOrchestrator:
         if not isinstance(verifier, Verifier):
             raise TypeError("verifier must be a Verifier.")
         self._llm = llm
-        self._planner = Planner(llm)
+        # Wire tracer through planner/executor/verifier when possible
+        try:
+            self._tracer: TracerProtocol = tracer or NoOpTracer()  # type: ignore[operator]
+        except Exception:
+            self._tracer = tracer  # type: ignore[assignment]
+        # Planner owns its tracer; if we have a tracer, inject it
+        try:
+            if tracer is not None and hasattr(Planner, "tracer"):
+                self._planner = Planner(llm, tracer=self._tracer)  # type: ignore[arg-type]
+            else:
+                self._planner = Planner(llm)
+                # Best-effort: set tracer attr if Planner supports it
+                if hasattr(self._planner, "_tracer"):
+                    self._planner._tracer = self._tracer  # type: ignore[attr-defined]
+        except Exception:
+            self._planner = Planner(llm)
         self._executor = capability_executor
+        # Best-effort inject tracer into executor/verifier
+        try:
+            if hasattr(self._executor, "_tracer"):
+                self._executor._tracer = self._tracer  # type: ignore[attr-defined]
+        except Exception:
+            pass
         self._verifier = verifier
+        try:
+            if hasattr(self._verifier, "_tracer"):
+                self._verifier._tracer = self._tracer  # type: ignore[attr-defined]
+        except Exception:
+            pass
         self._proposal_builder = proposal_builder
         self._max_replans = verifier.max_replans if max_replans is None else max_replans
         if not isinstance(self._max_replans, int) or isinstance(self._max_replans, bool):
             raise TypeError("max_replans must be an int.")
         if self._max_replans < 0:
             raise ValueError("max_replans must be >= 0.")
+
+    @property
+    def tracer(self) -> TracerProtocol:
+        """Return the tracing seam (NoOp when unconfigured)."""
+        return self._tracer
 
     def run(
         self,
@@ -77,14 +131,25 @@ class InvestigateOrchestrator:
         *,
         exception_snapshot: Any | None = None,
         canonical_records: Any | None = None,
+        correlation_id: str | None = None,
+        s3_key: str | None = None,
+        fingerprint: str | None = None,
+        idempotency_key: str | None = None,
     ) -> OrchestrationResult:
-        """Run one bounded investigation.
+        """Run one bounded investigation with observability.
 
         Args:
             request: Validated request.
             tenant_id: Tenant scope for capability execution.
             exception_snapshot: Optional verified snapshot for proposal build.
             canonical_records: Optional records for proposal amount recomputation.
+            correlation_id: Optional unified correlation_id; when None it is
+                derived from ``s3_key``/``fingerprint``/``idempotency_key``/
+                ``request.exception_id`` in that precedence.
+            s3_key: Optional S3 key for correlation derivation
+                (``{tenant}/{case}/...``).
+            fingerprint: Optional webhook fingerprint (sha256 hex).
+            idempotency_key: Optional execution idempotency key.
 
         Returns:
             Frozen :class:`OrchestrationResult`.
@@ -93,6 +158,48 @@ class InvestigateOrchestrator:
             raise TypeError("request must be an InvestigationRequest.")
         if not isinstance(tenant_id, str) or not tenant_id.strip():
             raise ValueError("tenant_id must be non-blank.")
+        # ---- Observability: derive correlation_id and start trace ----
+        trace_ctx: TraceContext | None = None
+        obs: ObservabilityTrace | None = None  # type: ignore[assignment]
+        try:
+            derived_corr = correlation_id or derive_correlation_id(
+                fingerprint=fingerprint,
+                idempotency_key=idempotency_key,
+                s3_key=s3_key,
+                exception_id=request.exception_id,
+            )
+            validate_correlation_id(derived_corr)
+            validate_correlation_id(tenant_id)
+            # Use ObservabilityTrace facade when available; fall back to raw tracer
+            try:
+                obs = ObservabilityTrace(  # type: ignore[operator]
+                    self._tracer,
+                    correlation_id=derived_corr,
+                    tenant_id=tenant_id,
+                    case_id=request.exception_id,
+                    exception_type=request.exception_type,
+                )
+                trace_ctx = obs.start_case()
+                obs.context_assembly(
+                    trace_ctx,
+                    evidence_ids=request.evidence_ids,
+                    latency_ms=0,
+                    status="ok",
+                )
+                obs.planner(
+                    trace_ctx,
+                    evidence_ids=request.evidence_ids,
+                    allowlist=request.capability_allowlist,
+                    status="planned",
+                )
+            except Exception:
+                # Fallback: raw tracer trace
+                trace_ctx = self._tracer.trace(  # type: ignore[union-attr]
+                    request.exception_id, tenant_id, request.exception_type
+                )
+        except Exception:
+            trace_ctx = None
+            obs = None
 
         verdicts: list[Verdict] = []
         last_plan: Any | None = None
@@ -121,7 +228,11 @@ class InvestigateOrchestrator:
 
         for attempt in range(self._max_replans + 1):
             try:
-                plan = self._planner.plan(request)
+                # Pass trace_ctx when planner supports it
+                try:
+                    plan = self._planner.plan(request, trace_ctx)  # type: ignore[call-arg]
+                except TypeError:
+                    plan = self._planner.plan(request)
             except PlannerError as exc:
                 # Distinguish provider-caused failures for HITL type.
                 cause = exc.__cause__
@@ -179,8 +290,25 @@ class InvestigateOrchestrator:
                 continue
 
             last_plan = plan
-            verdict = self._verifier.verify(plan, request.evidence_ids, attempt)
+            # Wire verifier through tracer when possible
+            try:
+                verdict = self._verifier.verify(plan, request.evidence_ids, attempt, trace_ctx)  # type: ignore[call-arg]
+            except TypeError:
+                verdict = self._verifier.verify(plan, request.evidence_ids, attempt)
             verdicts.append(verdict)
+            # Observability: verifier + replan hops
+            if obs is not None and trace_ctx is not None:
+                try:
+                    obs.verifier(
+                        trace_ctx,
+                        status=verdict.status,
+                        reason_codes=verdict.reasons,
+                        attempt=attempt,
+                    )
+                    if verdict.status != "ACCEPTED":
+                        obs.replan(trace_ctx, attempt=attempt, reason_codes=verdict.reasons)
+                except Exception:
+                    pass
 
             if verdict.status == "REJECTED_REPLAN":
                 journal = self._collect_journal()
@@ -214,7 +342,10 @@ class InvestigateOrchestrator:
 
             # ACCEPTED -> execute capabilities
             try:
-                outcomes = self._executor.execute(plan, tenant_id)
+                try:
+                    outcomes = self._executor.execute(plan, tenant_id, trace_ctx)  # type: ignore[call-arg]
+                except TypeError:
+                    outcomes = self._executor.execute(plan, tenant_id)
             except ExecutorRejectedError as exc:
                 # Treat whole-run rejection as verifier-level replan without execution
                 reject = Verdict(
@@ -252,6 +383,31 @@ class InvestigateOrchestrator:
                 except Exception as exc:  # pragma: no cover
                     logger.info("proposal build skipped: %s", exc)
 
+            # Observability: final candidate + policy + approval placeholders
+            if obs is not None and trace_ctx is not None:
+                try:
+                    obs.final_candidate(
+                        trace_ctx,
+                        hypothesis_ref=getattr(plan, "hypothesis_text", "")[:100],
+                        evidence_required=getattr(plan, "evidence_required", ()),
+                        status="candidate",
+                    )
+                    # Policy/approval/execution/verification are outside P4.5;
+                    # record placeholders so trace is queryable by correlation_id
+                    obs.policy(trace_ctx, decision="DEFERRED", reason_codes=("p4.5_no_policy",))
+                except Exception:
+                    pass
+            # Flush observability
+            if obs is not None:
+                try:
+                    obs.flush()
+                except Exception:
+                    pass
+            elif trace_ctx is not None:
+                try:
+                    self._tracer.flush()  # type: ignore[union-attr]
+                except Exception:
+                    pass
             journal = self._collect_journal()
             return OrchestrationResult(
                 status="ACCEPTED_CANDIDATE",
@@ -266,6 +422,11 @@ class InvestigateOrchestrator:
             )
 
         # Exhausted loop
+        if obs is not None:
+            try:
+                obs.flush()
+            except Exception:
+                pass
         journal = self._collect_journal()
         return OrchestrationResult(
             status="REPLAN_EXHAUSTED_HITL",

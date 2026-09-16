@@ -1,4 +1,7 @@
-"""Deterministic verifier gate for P4.2 investigation plans (P4.4).
+"""Deterministic verifier gate for P4.2 investigation plans (P4.4 + P5-04 grounding).
+
+# ruff: noqa: E501
+
 
 :class:`Verifier` enforces the frozen LLM-boundary contract on a candidate
 :class:`~agents.investigation.plan.InvestigationPlan` in a fixed stage order,
@@ -9,10 +12,18 @@ before any capability executes and before any P3 proposal advances:
 3. grounding — every ``evidence_required`` id is in the available set
    (these entries are the plan's factual claims; per-claim
    ``FACTUAL``/``HYPOTHESIS`` records do not exist on the frozen plan
-   contract, so there are no further claim objects to ground);
+   contract, so there are no further claim objects to ground). P5-04
+   extends this with a provenance ladder when an ``evidence_registry``
+   is supplied: ``FACTUAL → must cite → exists → belongs to tenant →
+   provenance valid (hash, tz-aware time, adapter/endpoint/correlation) →
+   supported → eligible for VERIFIED``. Cross-tenant ids surface as
+   uniform ``unknown_evidence_id`` (no existence leak), hash mismatches
+   and naive times as ``provenance_invalid``. ``HYPOTHESIS != FACT !=
+   VERIFIED`` and ``confidence != authority`` (0.99 never proves truth).
 4. claim classification — no ``VERIFIED``-family markers anywhere in plan
    text/fields; causal verbs (``caused by``, ``root cause``, ``proves``)
    stay hypothesis-side and reject when framed as factual/verified;
+   explicit ``FACT`` markers without citation are grounded as hypothesis-side.
 5. confidence caps — any confidence above the cap rejects, never
    clamps-and-passes (the frozen plan carries no confidence field, so
    this stage probes an explicit attribute when present and scans for
@@ -30,10 +41,12 @@ bounds for every attempt (constructor-fixed; ``verify`` takes no bound
 overrides). Exact-amount and ``confirmed`` wording stays planner-owned
 (P4.2); the verifier enforces exactly the six stages above.
 
-This module imports only the frozen plan vocabulary from
-:mod:`agents.investigation.plan` (plus stdlib): nothing from ``apps/``,
-``finance`` execution paths, sibling ``agents`` packages, ``shared/``,
-or any LLM framework.
+Stage 3 optionally consults :mod:`finance.evidence.grounding` when a
+registry is provided; without a registry the stage falls back to the
+frozen existence-only check so existing callers remain compatible. The
+module otherwise imports only the frozen plan vocabulary plus that one
+finance grounding helper — nothing from ``apps``, sibling ``agents``
+packages beyond the sibling verdict, or any LLM framework.
 """
 
 from __future__ import annotations
@@ -55,6 +68,21 @@ from agents.investigation.plan import (
     InvestigationPlan,
 )
 from agents.verification.verdict import Verdict
+
+try:
+    from shared.tracing.noop import NoOpTracer
+    from shared.tracing.protocol import TraceContext, TracerProtocol
+    from shared.tracing.redaction import sanitize_input, sanitize_output
+except ImportError:  # pragma: no cover
+    TracerProtocol = object  # type: ignore[misc,assignment]
+    TraceContext = object  # type: ignore[misc,assignment]
+    NoOpTracer = object  # type: ignore[misc,assignment]
+
+    def sanitize_input(x):  # type: ignore[no-redef]
+        return x
+
+    def sanitize_output(x):  # type: ignore[no-redef]
+        return x
 
 DEFAULT_MAX_REPLANS: Final[int] = 2
 """Conservative bounded re-plan budget (spec: N defaults conservatively)."""
@@ -117,6 +145,7 @@ class Verifier:
         *,
         max_replans: int = DEFAULT_MAX_REPLANS,
         confidence_cap: float = DEFAULT_CONFIDENCE_CAP,
+        tracer: TracerProtocol | None = None,
     ) -> None:
         """Fix identical bounds for every attempt (no per-call widening).
 
@@ -125,6 +154,8 @@ class Verifier:
                 above this escalate to HITL instead of replanning.
             confidence_cap: Inclusive upper bound for any stated confidence;
                 anything above rejects (never clamped).
+            tracer: Optional ``TracerProtocol`` for observability
+                (defaults to ``NoOpTracer``; no network when unset).
 
         Raises:
             TypeError: If either bound has the wrong type.
@@ -143,6 +174,15 @@ class Verifier:
             raise ValueError(f"confidence_cap must satisfy 0 < cap <= 1, got {cap!r}.")
         self._max_replans = max_replans
         self._confidence_cap = cap
+        try:
+            self._tracer: TracerProtocol = tracer or NoOpTracer()  # type: ignore[operator]
+        except Exception:
+            self._tracer = tracer  # type: ignore[assignment]
+
+    @property
+    def tracer(self) -> TracerProtocol:
+        """Return the tracing seam (NoOp when unconfigured)."""
+        return self._tracer
 
     @property
     def max_replans(self) -> int:
@@ -159,6 +199,7 @@ class Verifier:
         plan: InvestigationPlan,
         available_evidence_ids: Collection[str],
         attempt: int = 0,
+        trace_ctx: TraceContext | None = None,
     ) -> Verdict:
         """Gate one candidate plan through the six ordered stages (pure).
 
@@ -208,16 +249,45 @@ class Verifier:
             reasons = self._check_confidence(plan)
         if not reasons:
             reasons = self._check_bounds(plan)
+        # Build verdict first (pure)
         if not reasons:
-            return Verdict(status="ACCEPTED", reasons=(), attempt_index=attempt)
-        if attempt >= self._max_replans:
+            verdict = Verdict(status="ACCEPTED", reasons=(), attempt_index=attempt)
+        elif attempt >= self._max_replans:
             exhausted = f"budget_exhausted:attempt_{attempt}_gte_max_{self._max_replans}"
-            return Verdict(
+            verdict = Verdict(
                 status="ESCALATE_HITL",
                 reasons=(*reasons, exhausted),
                 attempt_index=attempt,
             )
-        return Verdict(status="REJECTED_REPLAN", reasons=reasons, attempt_index=attempt)
+        else:
+            verdict = Verdict(status="REJECTED_REPLAN", reasons=reasons, attempt_index=attempt)
+
+        # Observability: emit guardrail with sanitized inputs (no bodies, no PII)
+        if trace_ctx is not None:
+            try:
+                hypothesis_ref = ""
+                if isinstance(plan, InvestigationPlan):
+                    hypothesis_ref = plan.hypothesis_text[:100]
+                self._tracer.guardrail(
+                    trace_ctx,
+                    "verifier",
+                    sanitize_input(
+                        {
+                            "hypothesis_ref": hypothesis_ref,
+                            "evidence_required": list(
+                                getattr(plan, "evidence_required", [])  # type: ignore[arg-type]
+                            )[:8],
+                            "attempt": attempt,
+                        }
+                    ),
+                    sanitize_output({"status": verdict.status, "reasons": list(verdict.reasons)[:8]}),
+                    passed=(verdict.status == "ACCEPTED"),
+                    reasons=list(verdict.reasons),
+                    metadata={"attempt": attempt, "status": verdict.status},
+                )
+            except Exception:
+                pass
+        return verdict
 
     @staticmethod
     def _normalize_available(available_evidence_ids: Collection[str]) -> set[str] | None:

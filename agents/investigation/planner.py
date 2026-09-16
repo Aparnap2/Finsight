@@ -1,5 +1,8 @@
 """Deterministic typed investigation planner (P4.2).
 
+# ruff: noqa: SIM105
+
+
 :class:`Planner` turns an :class:`InvestigationRequest` into an
 :class:`InvestigationPlan` — semantic interpretation, hypothesis generation,
 investigation planning, and capability selection — through exactly one
@@ -34,6 +37,21 @@ from shared.llm.provider import LLMProvider
 from shared.llm.types import InvestigationPrompt
 
 logger = logging.getLogger(__name__)
+
+try:  # noqa: I001
+    from shared.tracing.noop import NoOpTracer
+    from shared.tracing.protocol import TraceContext, TracerProtocol
+    from shared.tracing.redaction import sanitize_input, sanitize_output
+except ImportError:  # pragma: no cover - tracing optional in import cycle
+    TracerProtocol = object  # type: ignore[misc,assignment]
+    TraceContext = object  # type: ignore[misc,assignment]
+    NoOpTracer = object  # type: ignore[misc,assignment]
+
+    def sanitize_input(x):  # type: ignore[no-redef]
+        return x
+
+    def sanitize_output(x):  # type: ignore[no-redef]
+        return x
 
 _SYSTEM_PROMPT = (
     "You are the FinSight investigation planner. Return ONE candidate "
@@ -123,12 +141,18 @@ def render_investigation_prompt(request: InvestigationRequest) -> InvestigationP
 class Planner:
     """One-shot typed planner over a constructor-injected LLMProvider."""
 
-    def __init__(self, llm: LLMProvider) -> None:
+    def __init__(
+        self,
+        llm: LLMProvider,
+        tracer: TracerProtocol | None = None,
+    ) -> None:
         """Bind the provider seam (no capability execution here).
 
         Args:
             llm: Any ``LLMProvider`` (Groq, FakeLLM, ...); behavior is
                 identical across implementations by construction.
+            tracer: Optional ``TracerProtocol`` for observability
+                (defaults to ``NoOpTracer``; no network when unset).
 
         Raises:
             TypeError: If ``llm`` is None.
@@ -136,13 +160,27 @@ class Planner:
         if llm is None:
             raise TypeError("llm must be an LLMProvider, got None.")
         self._llm: LLMProvider = llm
+        # Lazy NoOp when tracing not configured; import guarded above.
+        try:
+            self._tracer: TracerProtocol = tracer or NoOpTracer()  # type: ignore[operator]
+        except Exception:
+            self._tracer = tracer  # type: ignore[assignment]
 
     @property
     def llm(self) -> LLMProvider:
         """Return the injected provider seam."""
         return self._llm
 
-    def plan(self, request: InvestigationRequest) -> InvestigationPlan:
+    @property
+    def tracer(self) -> TracerProtocol:
+        """Return the tracing seam (NoOp when unconfigured)."""
+        return self._tracer
+
+    def plan(
+        self,
+        request: InvestigationRequest,
+        trace_ctx: TraceContext | None = None,
+    ) -> InvestigationPlan:
         """Produce a structurally valid candidate plan with one LLM call.
 
         Args:
@@ -169,6 +207,29 @@ class Planner:
             len(request.evidence_ids),
             len(request.capability_allowlist),
         )
+        # Observability: planner span (tenant-safe, bounded, no bodies)
+        if trace_ctx is not None:
+            try:
+                self._tracer.span(
+                    trace_ctx,
+                    "planner",
+                    sanitize_input(
+                        {
+                            "exception_id": request.exception_id,
+                            "tenant_id": request.tenant_id,
+                            "exception_type": request.exception_type,
+                            "evidence_ids": list(request.evidence_ids)[:8],
+                            "allowlist": list(request.capability_allowlist)[:5],
+                        }
+                    ),
+                    {"status": "planning", "evidence_count": len(request.evidence_ids)},
+                    {"correlation_id": request.exception_id, "tenant_id": request.tenant_id},
+                )
+            except Exception:
+                pass
+        import time
+
+        _start = time.monotonic()
         try:
             candidate = self._llm.generate_structured(prompt, InvestigationPlan)
         except (PlanRejectedError, PlannerError):
@@ -177,6 +238,47 @@ class Planner:
             raise PlannerError(f"provider failed for exception {request.exception_id}") from exc
         except Exception as exc:
             raise PlannerError(f"planning failed for exception {request.exception_id}") from exc
+        # Observability: LLM generation (sanitized, no unrestricted bodies)
+        if trace_ctx is not None:
+            try:
+                elapsed_ms = (time.monotonic() - _start) * 1000.0
+                model = "unknown"
+                try:
+                    meta = self._llm.model_metadata()  # type: ignore[attr-defined]
+                    model = getattr(meta, "model", "unknown")
+                except Exception:
+                    pass
+                self._tracer.generation(
+                    trace_ctx,
+                    "planner_llm",
+                    model,
+                    sanitize_input(
+                        {
+                            "evidence_ids": list(request.evidence_ids)[:8],
+                            "allowlist": list(request.capability_allowlist)[:5],
+                            "exception_type": request.exception_type,
+                        }
+                    ),
+                    sanitize_output(
+                        {
+                            "hypothesis_text": candidate.hypothesis_text[:200],
+                            "evidence_required": list(candidate.evidence_required)[:8],
+                            "capability_calls": len(candidate.capability_calls),
+                        }
+                    ),
+                    {},
+                    {"correlation_id": request.exception_id, "tenant_id": request.tenant_id},
+                )
+                # Also record latency as span
+                self._tracer.span(
+                    trace_ctx,
+                    "planner_latency",
+                    {"correlation_id": request.exception_id},
+                    {"latency_ms": elapsed_ms},
+                    {"latency_ms": elapsed_ms},
+                )
+            except Exception:
+                pass
         self._validate_structure(candidate, request)
         logger.info(
             "plan accepted exception=%s calls=%d escalation=%s",
