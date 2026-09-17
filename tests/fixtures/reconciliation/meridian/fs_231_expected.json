@@ -1,0 +1,9 @@
+{
+  "batch_id": "SHEETS-EXPECTED-20260916",
+  "company_id": "meridian",
+  "currency": "INR",
+  "environment": "prod",
+  "expected_total": "1000000.00",
+  "source": "sheets",
+  "spreadsheet_cell": "Settlements!B42"
+}
