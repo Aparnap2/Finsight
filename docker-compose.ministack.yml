@@ -3,6 +3,16 @@
 # No redis/qdrant/redpanda/temporal — those live in docker-compose.yml.
 # No SQS/SNS/EventBridge/DynamoDB — NOT REQUIRED per docs/architecture/MINISTACK_SEAM_AUDIT.md.
 #
+# Tenant isolation (P5-03 boundaries 5, 9, 11):
+#   Buckets are per-deployment (finsight-evidence-test, finsight-legacy-outbound-test,
+#   finsight-legacy-result-test) — NOT per-tenant. Tenant isolation is key-prefix:
+#   {tenant_id}/... enforced by finance/object_store (FakeS3 + S3Adapter) via
+#   TenantIsolationError BEFORE any boto3/store access. Cross-tenant attempts are
+#   uniform (no existential leak, no timing/size oracle). See
+#   docs/architecture/P5-03_TENANT_ISOLATION_MATRIX.md #5, #9, #11.
+#   S3Adapter uses shared/aws/config.AwsSettings endpoint abstraction
+#   (host localhost:4566 vs container ministack:4566) with test/test creds only.
+#
 # Usage:
 #   docker compose -f docker-compose.ministack.yml up -d
 #   uv run python scripts/ministack_init.py

@@ -1,70 +1,78 @@
-# Problem Statement
+# Problem Statement — Meridian Settlement Reconciliation
 
-## What We Set Out to Solve
+## What We Set Out to Solve (Meridian-Specific)
 
-Financial analysts manually reconcile budgets versus actuals, calculate variances, validate assertions, and produce reports. This process is:
+Meridian's finance team reconciles **settlement vs accounting vs expectation** daily across 6 systems. The business problem is not a missing ERP. It is **no continuous reasoning across systems** — a gap FinSight now fills as the Meridian Finance Resolution Agent.
 
-- **Repetitive:** The same cycle of data gathering, formula checking, and variance flagging repeats every month, quarter, and year. The work is mechanical but requires financial domain knowledge to perform correctly.
-- **Error-prone:** Spreadsheet formulas drift, break, or get overwritten. A single broken formula in a 10,000-row variance model can produce undetected errors across the entire analysis. Manual reconciliation misses discrepancies.
-- **Difficult to scale:** Adding more accounts, entities, or data sources increases mechanical work linearly. The analytical capacity of the team remains fixed.
-- **Intellectually wasteful:** Trained financial analysts spend the majority of their time on clerical work rather than the strategic analysis that justifies their compensation.
+### The Manual 13-Step Flow (Observed)
+
+```
+1. Razorpay payout received (gross)
+2. Fees extracted (7,500)
+3. Refunds extracted (2,500)
+4. Adjustments extracted (10,000)
+5. Net = gross - fees - refunds - adjustments (9,72,500) — manual Decimal
+6. Expected looked up in Sheets (10,00,000)
+7. QuickBooks entries checked (9,82,500)
+8. Legacy batch checked (9,82,500)
+9. Variance computed (10,000)
+10. Gmail searched for context (fee notice? refund request? rejection?)
+11. Legacy rejections inspected (499/500 accepted, 1 INVALID_ACCOUNT_CODE 4812)
+12. Case history checked (prior FS for same merchant/batch)
+13. Proposal drafted → Slack approval → Correction file → S3 → COBOL → result → re-reconcile → close
+```
+
+Steps 1-10 are mechanical but require domain judgment; steps 11-13 require human accountability. Today steps 1-12 are **manual**, error-prone, and scale linearly with merchant count.
 
 ### The Core Tension
 
-FP&A teams face an impossible trade-off: **faster close vs. higher quality.** Speeding up the close cycle by cutting validation steps increases the risk of errors reaching board packs. Slowing down to improve quality means less time for analysis and decision support.
+| Current Approach | Why It Fails at 1,500 Merchants / 20k Payments Day |
+|------------------|-----------------------------------------------------|
+| **More analysts** | Linear cost, does not fix reasoning gap |
+| **Spreadsheet automation** | Macros drift, no audit trail for variance math |
+| **BI dashboards** | Show variance, not why; no hypothesis or evidence chain |
+| **LLM copilot** | Generates plausible text but cannot guarantee INR arithmetic; hallucinates figures |
+| **Generic ERP/reconciliation SaaS** | Assumes multi-tenant pluggability; Meridian needs COBOL fixed-width + S3 transport boundary, not a plugin platform |
 
-Current approaches fail to resolve this tension:
+### Existing Systems Own Facts — FinSight Was Missing
 
-| Approach | Problem |
-|----------|---------|
-| **More analysts** | Linear cost increase for (at best) linear throughput improvement |
-| **Spreadsheet automation** | Macros and VBA break silently; no audit trail for changes |
-| **Traditional BI tools** | Dashboards show what happened but not why; no root cause analysis |
-| **LLM copilots** | Generate plausible-sounding text but cannot guarantee numerical accuracy; hallucinate financial figures |
-| **ERP-native reporting** | Rigid, slow to configure, designed for statutory reporting not management analysis |
+| Fact | Authority | FinSight Before |
+|------|-----------|-----------------|
+| Provider net 9,72,500 | Razorpay | Analyst reconciles by hand |
+| Accounting 9,82,500 | QuickBooks (debits==credits, period open) | Analyst reconciles by hand |
+| Legacy 9,82,500 (plus 499/1 rejection) | COBOL | Analyst inspects batch file by hand |
+| Expected 10,00,000 | Sheets | Analyst looks up by hand |
+| Context | Gmail | Analyst searches by hand |
+| Approval | Slack → Human | Analyst chases by DM |
 
-### The Gap in AI-Enabled Finance
+**Gap:** No system owned the **reasoning state** that ties these facts into a resolution: `FinancialSituation` → `Investigation` → `Evidence` → `Hypothesis` → `ResolutionProposal` → `PolicyDecision` → `Approval` → `Execution` → `Verification` → `Audit`. FinSight now owns exactly that — and nothing else.
 
-Existing AI tools in financial analysis operate as **copilots** — they generate text when prompted but do not:
+### What a Solution Must Guarantee (Meridian-Specific)
 
-- Own the end-to-end workflow
-- Enforce data quality guarantees
-- Validate claims against deterministic evidence
-- Guard against hallucinated financial figures
-- Provide audit trails for every computed value
-- Measure their own correctness through structured evaluation
-
-They produce **drafts, not auditable outcomes.**
-
-### What a Solution Must Guarantee
-
-An FP&A intelligence system must meet requirements that are unusual in AI applications:
-
-1. **100% calculation accuracy.** No AI model can be trusted for financial arithmetic. All variance computations, KPI evaluations, materiality assessments, and bridge decompositions must use deterministic code with `Decimal` precision. **Zero tolerance for numerical errors.**
-
-2. **Audit-grade traceability.** Every number presented in a report must trace back to a specific source record. An FP&A analyst must be able to verify any claim by following its evidence chain. Claims without evidence are not permitted.
-
-3. **Hallucination-proof architecture.** The AI's role must be limited to language generation from structured, pre-validated data. The AI must never produce financial facts — only arrange, paraphrase, and contextualise facts that were computed deterministically.
-
-4. **Quantifiable correctness.** Beyond unit tests, the system must have a structured evaluation framework that measures planning quality, execution success, verification accuracy, reflection quality, and output correctness — all against golden datasets.
-
-5. **Regression detection.** Changes to the system must not silently degrade correctness. A regression harness must compare current evaluation results against stored baselines with threshold-based breaking change detection.
+1. **100% reconciliation accuracy.** `net_settlement`, `debits==credits`, variance are deterministic `Decimal`. Zero tolerance.
+2. **Audit-grade traceability.** Every claim traces to an authoritative source via hash-verified `EvidenceItem`. Claims without evidence remain `HYPOTHESIS`.
+3. **Hallucination-proof boundary.** LLM is restricted to: what is unusual, what to investigate, which hypothesis, is evidence enough. It never computes money, never approves, never executes.
+4. **Company-specific policy enforced in code.** Refund <₹5k auto (if complete) / ₹5k-50k Manager / >₹50k Director; legacy always approval + valid code + balanced batch; closed period never modify — `MeridianBusinessRules`, not SaaS knobs.
+5. **Legacy truth without HTTP.** Fixed-width batch via S3; control total + checksum; accepted/rejected/partial/duplicate semantics proven before close.
+6. **Measurable resolution.** Cases detected/resolved, exposure ₹, false-positive rate, 100% verification, bounded LLM cost.
 
 ---
 
-## Problem Statement (One Sentence)
+## Problem Statement (One Sentence — Frozen)
 
-> Financial FP&A teams spend 60–80% of their cycle time on mechanical data work rather than analysis, because no existing system can automate the cognitive loop of *analyse → verify → reflect → revise* while guaranteeing audit-grade numerical accuracy, evidence traceability, and hallucination-free AI output.
+> Meridian's 8-person finance team spends 60-80% of settlement close time manually correlating Razorpay/QuickBooks/COBOL/Sheets/Gmail/Slack across 13 steps because no system owns continuous reasoning that can **detect a FinancialSituation (e.g. 10,00,000 vs 9,72,500 vs 9,82,500 variance 10,000) → investigate with evidence → propose a policy-gated resolution → execute via S3 batch → post-verify → close** with audit-grade proof, while existing systems remain the sole authorities for their facts.
 
-## Success Criteria
-
-The solution must demonstrate:
+## Success Criteria (Meridian)
 
 | Criterion | Measure |
 |-----------|---------|
-| **Calculation accuracy** | 0% error rate on all financial computations |
-| **Audit readiness** | Every monetary claim traceable to a source record |
+| **Reconciliation accuracy** | 0% error on net_settlement / debits==credits / period checks |
+| **Audit readiness** | Every INR claim traceable via `EvidenceItem` hash+provenance |
 | **Hallucination rate** | 0% — LLM never produces unverified financial facts |
-| **Cycle time reduction** | Variance analysis from 3 days to 30 minutes |
-| **Adoption friction** | < 15 minutes to configure a new account set |
-| **Correctness measurement** | 22 golden datasets across 4 categories with automatic regression detection |
+| **Resolution loop** | 13 manual steps → `Detect→...→Close` autonomous where policy allows |
+| **Closed-period safety** | 100% — closed period modification blocked (deterministic gate) |
+| **Legacy handling** | Partial (499/1) + duplicate correctly as one effect; control total mismatch fails closed |
+| **Correctness measurement** | Golden FS-231 + P5 dimensions (grounding, investigation, security, control, financial, reliability) |
+
+---
+*Business Context details the Meridian dossier and environment diagram; Success Metrics defines the six measurement dimensions.*

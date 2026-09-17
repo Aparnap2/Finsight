@@ -16,6 +16,7 @@ import logging
 from typing import Any
 
 from shared.tracing.protocol import TraceContext
+from shared.tracing.redaction import sanitize_args, sanitize_input, sanitize_output
 
 logger = logging.getLogger(__name__)
 
@@ -101,20 +102,20 @@ class LangfuseTracer:
         usage: dict[str, int],
         metadata: dict[str, Any] | None = None,
     ) -> None:
-        """Record an LLM generation under the given trace."""
-        # Hypothesis truncation — keep payload small.
-        safe_input = dict(input_data)
+        """Record an LLM generation under the given trace (sanitized)."""
+        safe_input = sanitize_input(dict(input_data))
         if "hypothesis_text" in safe_input:
             safe_input["hypothesis_text"] = _truncate(
                 str(safe_input["hypothesis_text"]), _HYPOTHESIS_MAX
             )
+        safe_output = sanitize_output(dict(output))
 
         with self._langfuse.start_as_current_observation(
             name=name,
             as_type="generation",
             trace_context=trace_ctx._ref,
             input=safe_input,
-            output=output,
+            output=safe_output,
             model=model,
             usage_details=usage,
             metadata=metadata or {},
@@ -129,13 +130,25 @@ class LangfuseTracer:
         output: dict[str, Any],
         metadata: dict[str, Any] | None = None,
     ) -> None:
-        """Record a deterministic tool call (SQL, API, etc.)."""
+        """Record a deterministic tool call (sanitized, no Gmail bodies)."""
+        # Extract capability name from tool name (e.g. capability:search_gmail)
+        cap = name.split(":", 1)[-1] if ":" in name else None
+        safe_input: dict[str, Any]
+        if isinstance(input_data, dict):
+            # If input looks like args, sanitize as args; else generic sanitize
+            safe_input = sanitize_args(dict(input_data), capability=cap)
+            # Also apply generic input sanitization for free-text fields
+            safe_input = sanitize_input(safe_input, capability=cap)
+        else:
+            safe_input = {}
+        safe_output = sanitize_output(dict(output)) if isinstance(output, dict) else {}
+
         with self._langfuse.start_as_current_observation(
             name=name,
             as_type="tool",
             trace_context=trace_ctx._ref,
-            input=_truncate_args(input_data),
-            output=output,
+            input=safe_input,
+            output=safe_output,
             metadata=metadata or {},
         ):
             pass
@@ -150,7 +163,7 @@ class LangfuseTracer:
         reasons: list[str],
         metadata: dict[str, Any] | None = None,
     ) -> None:
-        """Record a guardrail check result."""
+        """Record a guardrail check result (sanitized)."""
         merged_meta = dict(metadata or {})
         merged_meta["passed"] = passed
         merged_meta["reasons"] = reasons
@@ -159,8 +172,8 @@ class LangfuseTracer:
             name=f"guardrail:{stage}",
             as_type="guardrail",
             trace_context=trace_ctx._ref,
-            input=input_data,
-            output=output,
+            input=sanitize_input(dict(input_data)),
+            output=sanitize_output(dict(output)),
             metadata=merged_meta,
         ):
             pass
@@ -173,13 +186,13 @@ class LangfuseTracer:
         output: dict[str, Any],
         metadata: dict[str, Any] | None = None,
     ) -> None:
-        """Record a generic span (planner step, reasoning, etc.)."""
+        """Record a generic span (sanitized)."""
         with self._langfuse.start_as_current_observation(
             name=name,
             as_type="span",
             trace_context=trace_ctx._ref,
-            input=input_data,
-            output=output,
+            input=sanitize_input(dict(input_data)),
+            output=sanitize_output(dict(output)),
             metadata=metadata or {},
         ):
             pass

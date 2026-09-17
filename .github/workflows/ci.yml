@@ -51,6 +51,10 @@ jobs:
       - name: Ruff format check
         run: uv run ruff format --check .
 
+      - name: Secret leak gate (rg)
+        run: |
+          ! rg -n "sk_live|sk-live|Bearer [A-Za-z0-9._~+/=-]{8}" --glob '!*.pyc' --glob '!.venv/**' --glob '!.git/**' prompts traces tests/fixtures 2>/dev/null || (echo "secret literal found in prompts/traces/fixtures" && exit 1)
+
       - name: Mypy (strict, per pyproject.toml)
         run: uv run mypy .
 

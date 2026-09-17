@@ -855,11 +855,18 @@ class TestZeroP3Mutation:
             name: _import_modules(package / name) for name in ("verifier.py", "verdict.py")
         }
         roots = {name: _import_roots(package / name) for name in ("verifier.py", "verdict.py")}
+        # P5-04: exactly one finance helper is allowed — the pure grounding
+        # ladder (no execution, no DB, no money arithmetic). All other
+        # finance imports remain forbidden.
+        allowed_finance = {"finance.evidence.grounding"}
         # Act + Assert.
         assert modules["verifier.py"], "expected verifier imports to scan"
         for name, imports in modules.items():
             assert not [
-                module for module in imports if module == "finance" or module.startswith("finance.")
+                module
+                for module in imports
+                if (module == "finance" or module.startswith("finance."))
+                and module not in allowed_finance
             ], f"{name} must not import finance execution"
             assert not [
                 module for module in imports if module == "apps" or module.startswith("apps.")

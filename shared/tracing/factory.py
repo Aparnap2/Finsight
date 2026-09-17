@@ -7,9 +7,15 @@ Usage::
     tracer = create_tracer()        # reads LANGFUSE_PUBLIC_KEY from env
     tracer = create_tracer(_env={})  # explicit env dict for testing
 
-Returns ``NoOpTracer`` when ``LANGFUSE_PUBLIC_KEY`` is unset, and
-``LangfuseTracer`` when it is.  The langfuse SDK is lazy-imported —
-it is only loaded when the factory decides to create a real tracer.
+Priority:
+    1. ``PHOENIX_COLLECTOR_ENDPOINT`` (or ``PHOENIX_ENDPOINT``) → PhoenixTracer
+       (local OTel, ``http://localhost:6006/v1/traces``, no SaaS).
+    2. ``LANGFUSE_PUBLIC_KEY`` → LangfuseTracer.
+    3. Otherwise → NoOpTracer.
+
+All SDKs are lazy-imported — only loaded when the factory decides to
+create that tracer. Phoenix wraps ``phoenix.otel.register`` with
+``project_name``, ``endpoint``, ``auto_instrument``, and ``batch``.
 """
 
 from __future__ import annotations
@@ -30,8 +36,9 @@ def create_tracer(
             ``os.environ`` is used.
 
     Returns:
-        ``NoOpTracer`` when ``LANGFUSE_PUBLIC_KEY`` is not set (or empty),
-        otherwise a ``LangfuseTracer`` wired to the configured host.
+        PhoenixTracer when ``PHOENIX_COLLECTOR_ENDPOINT`` is set,
+        LangfuseTracer when ``LANGFUSE_PUBLIC_KEY`` is set, otherwise
+        NoOpTracer.
     """
     env: dict[str, str] | None = _env if _env is not None else None
 
@@ -40,6 +47,29 @@ def create_tracer(
             return env.get(key, "")
         return os.environ.get(key, "")
 
+    # 1. Phoenix — local OTel collector (no SaaS account, reproducible).
+    phoenix_endpoint = (
+        _get("PHOENIX_COLLECTOR_ENDPOINT").strip()
+        or _get("PHOENIX_ENDPOINT").strip()
+        or _get("PHOENIX_HOST").strip()
+    )
+    if phoenix_endpoint:
+        project = _get("PHOENIX_PROJECT_NAME").strip() or "finsight"
+        auto_instr_raw = _get("PHOENIX_AUTO_INSTRUMENT").strip().lower()
+        auto_instrument = auto_instr_raw not in ("0", "false", "no") if auto_instr_raw else True
+        batch_raw = _get("PHOENIX_BATCH").strip().lower()
+        batch = batch_raw not in ("0", "false", "no") if batch_raw else True
+
+        from shared.tracing.phoenix_tracer import PhoenixTracer  # noqa: PLC0415
+
+        return PhoenixTracer(
+            endpoint=phoenix_endpoint,
+            project_name=project,
+            auto_instrument=auto_instrument,
+            batch=batch,
+        )
+
+    # 2. Langfuse — hosted SaaS (optional).
     public_key = _get("LANGFUSE_PUBLIC_KEY").strip()
     if not public_key:
         return NoOpTracer()

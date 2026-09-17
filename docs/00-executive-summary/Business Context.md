@@ -1,72 +1,78 @@
-# Business Context
+# Business Context — Meridian Commerce Pvt Ltd (Frozen)
 
-## The FP&A Cycle Time Problem
+## Company Dossier
 
-Financial Planning & Analysis (FP&A) teams are the analytical engine of every enterprise. They are responsible for transforming raw financial data into actionable business intelligence — variance analyses, KPI dashboards, forecast updates, and board-ready management packs. Yet despite the criticality of this function, FP&A teams consistently report that **60–80% of their time is consumed by mechanical, non-analytical work**.
+| Attribute | Detail |
+|-----------|--------|
+| **Company** | **Meridian Commerce Pvt Ltd** — B2B commerce platform |
+| **Scale** | 250 employees, ~1,500 merchants, ~20,000 payments/day |
+| **Finance** | 8 finance team members, 3 payment-ops, Finance Manager + Director |
+| **Base currency** | INR (`CompanyConfiguration.base_currency`) |
+| **Fiscal calendar** | April–March (configured in `Company.fiscal_year_start`) |
 
-### The Current Reality
+### Systems of Record (Frozen Environment Diagram)
 
-A typical monthly close cycle follows this pattern:
+```
+                    Meridian Commerce Pvt Ltd
+                              │
+   ┌──────────────┬───────────┼───────────┬──────────────┬──────────────┐
+   │              │           │           │              │              │
+Razorpay      QuickBooks   COBOL Legacy  Google Sheets  Gmail          Slack
+(Payments)    (Accounting) (Settlement   (Expected       (Context)      (Approval)
+              [Authority]   Ledger)      Settlement)                    Human HITL
+- payouts       - Journal     - Fixed-width  - Business    - search_     - Approve/Reject
+- fees 7,500      entries       batch file     expectation    finance_      pinned to
+- refunds 2,500    debits==      NO HTTP         10,00,000      email         proposal hash
+- adjustments     credits       via S3          per day       (read-only)
+  10,000        - Period        transport
+                open/closed
+     ▲              ▲              ▲
+     │              │              │
+     └──────────────┼──────────────┘
+                    ▼
+           FinSight Core
+   Reconciliation (Decimal) — net_settlement, debits==credits
+   Evidence (hash-chain)   — EvidenceItem immutability
+   Business Rules (Meridian) — refund tiers, legacy, closed period
+                    │
+           AI Investigator (bounded, cognitive tools only)
+                    │
+           FinancialSituation (central object)
+```
 
-1. **Data gathering (Days 1–3):** Export actuals from ERP (NetSuite, SAP, Oracle), pull budget data from planning systems, reconcile discrepancies between sources, and load everything into spreadsheets. This is manual, error-prone, and varies by the quality and format of each data source.
+**Constraint:** COBOL legacy has no HTTP. FinSight writes `CORRECTION_YYYYMMDD_XXX.DAT` (fixed-width, 500 records, control total + hash) to S3 bucket `finsight-legacy-outbound`; legacy polls S3, processes, writes result file to `finsight-legacy-result`; FinSight ingests result, re-reconciles, closes. PostgreSQL remains financial/idempotency authority; S3 is transport only (same as `add-ministack-s3-contract`).
 
-2. **Validation (Days 3–5):** Check for missing data, stale periods, inconsistent chart of accounts, and currency mismatches. These are simple checks but require institutional knowledge to perform correctly. In practice, validation happens inconsistently.
+### Who FinSight Serves
 
-3. **Variance computation (Day 5):** Calculate actual-versus-budget variances, flag material exceptions, and compute standard KPIs. Spreadsheet formulas drift, break, or get accidentally overwritten. Minor errors here cascade into the entire analysis.
+- **Primary:** Finance analyst (owns FinancialSituation queue; needs one-screen evidence packs, one-click safe actions, audit trail)
+- **Secondary:** Payment-ops (settlement breaks), Finance Manager/Director (approvers per MeridianBusinessRules), Auditor (replay FS-231 from frozen inputs + goldens)
 
-4. **Root cause investigation (Days 5–7):** For material variances, trace back to operational drivers. Why did revenue miss budget? Was it price, volume, or mix? This requires cross-referencing multiple data sources — GL accounts, headcount reports, vendor invoices, pipeline data.
+## Engagement Scope — Meridian Finance Resolution Agent
 
-5. **Commentary writing (Days 7–9):** Write narrative explanations for each material variance. This is where analysts add value, but the writing itself is formulaic — and often cut short because the earlier steps consumed the available time.
+FinSight's frozen job is **detect/investigate/explain/propose/execute-under-authorization/verify** financial discrepancy resolution — not variance packs, not forecasting, not generic CFO work.
 
-6. **Review and revision (Days 9–10):** Managers review, challenge assumptions, request corrections. The cycle may iterate 2–3 times before final approval.
+It operates on **FinancialSituation** (not transaction) — the reasoning state Meridian owns:
 
-**Result:** A 10-business-day close cycle that leaves **at most 2 days for actual strategic analysis.** The majority of the team's cognitive capacity is spent on clerical work.
+```
+FinancialSituation FS-2026-0916-00231
+  expected: 10,00,000 (Sheets authority)
+  razorpay_net: 9,72,500 (Razorpay authority: gross - fee - refund - adjustment)
+  quickbooks: 9,82,500 (QuickBooks authority)
+  legacy: 9,82,500 (COBOL authority)
+  variance: 10,000 (FinSight correlates, deterministic maths)
+  status: INVESTIGATING → ... → CLOSED (verified)
+```
 
-### The Scaling Problem
+FinSight owns: `FinancialSituation`, `Investigation`, `Evidence` (hash-verified, provenance), `Hypothesis`, `ResolutionProposal`, `PolicyDecision`, `Approval`, `Execution`, `Verification`, `Audit`.
 
-As organisations grow, the problem compounds:
+Existing systems own facts (provider state, accounting, legacy, expected, context, approval signal). FinSight never invents a fact; it correlates authoritative facts into a provable resolution.
 
-- **More accounts:** A mid-market company has 200–500 GL accounts. An enterprise has 5,000+.
-- **More data sources:** Multi-entity consolidations, multi-currency operations, intercompany eliminations.
-- **More stakeholders:** Each department head wants their own variance report with their own format.
-- **Faster cycles:** The push toward continuous close and real-time FP&A means cycle times must shrink, not grow.
+## Architecture Freeze (Post Phase 3 + Meridian Bound)
 
-Hiring more analysts is not a sustainable solution — it increases headcount cost without changing the fundamental ratio of mechanical work to analytical work.
-
-### The Trust Problem in AI-Enabled Finance
-
-Financial systems have zero tolerance for error. A miscalculated variance of 0.1% on a $50M revenue line is a $50,000 error. An LLM that "hallucinates" a supporting number in a board pack erodes trust in the entire system.
-
-The finance industry has learned through hard experience that:
-
-- **LLMs cannot be trusted for financial arithmetic.** They produce plausible-looking numbers that are frequently wrong.
-- **Unreferenced claims are worthless.** An FP&A analyst needs to know: *Which account? Which period? What's the source? How confident is this claim?*
-- **Validation cannot be optional.** Every number must be cross-checked against a deterministic source before it reaches a report.
-
-### The Opportunity
-
-A system that can:
-
-- **Automate the mechanical loop** — gathering, validating, computing, flagging
-- **Preserve the analytical loop** — root cause investigation, scenario modelling, strategic recommendations
-- **Eliminate calculation errors entirely** — deterministic engines with `Decimal` precision
-- **Make every claim auditable** — every number traces back to a source record
-- **Restrict AI to what it does well** — language generation from structured, validated data
-
-...would transform FP&A from a cost centre constrained by cycle time into a strategic function that drives business decisions.
+- **Deterministic engines:** `net_settlement`, `debits==credits`, `accounting_period_open`, `duplicate_action`, `refund_threshold` are code. No LLM math.
+- **LLM:** What is unusual, what to investigate, which hypothesis, is evidence enough — bounded, typed candidates only.
+- **Data model:** `Company`/`CompanyConfiguration`/`MeridianBusinessRules`/`AccountMappings`/`FinancialOntology`/`IntegrationRegistry` — static, not SaaS knobs. `Tenant`/`Plugin`/`WorkflowBuilder`/`CustomSchema` removed.
+- **Success measured by:** cases detected/resolved, exposure ₹, false-positive rate, LLM cost (see `docs/00-executive-summary/Success Metrics.md`).
 
 ---
-
-## Engagement Scope
-
-This engagement delivered a production-ready cognitive reasoning system for FP&A that:
-
-1. **Ingests** financial source data (GL accounts, budgets, forecasts)
-2. **Validates** data quality through 6 deterministic checks (coverage, freshness, row count, source diversity, filters, quality score)
-3. **Computes** variances, KPIs, materiality, and bridge decompositions — all without floating-point arithmetic
-4. **Generates evidence-backed assertions** — typed, scored, and traceable to source records
-5. **Applies AI reasoning** only for planning decomposition and language generation — never for computation
-6. **Validates output** through a 6-metric business evaluation suite
-7. **Detects regressions** automatically via threshold-based comparison against stored baselines
-
-The architecture is **frozen after Phase 3** — the cognitive runtime is complete, stable, and ready for production use.
+*This document replaces the generic FP&A cycle narrative. Meridian's problem is settlement reconciliation across 6 systems, not close-cycle packaging.*

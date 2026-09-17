@@ -1,0 +1,35 @@
+# Local Phoenix OTel stack — no SaaS account, reproducible.
+# Usage: docker compose -f docker-compose.phoenix.yml up -d
+# UI:    http://localhost:6006
+# OTLP HTTP: http://localhost:6006/v1/traces  (also gRPC 4317)
+#
+# This stack is SEPARATE from finsight's main compose — it runs
+# alongside postgres/redis/qdrant without port clashes.
+# Secrets are not required; Phoenix runs locally with no auth.
+# Vendor swap: set PHOENIX_COLLECTOR_ENDPOINT=http://localhost:6006/v1/traces
+# to route finsight traces to this collector instead of Langfuse.
+
+services:
+  phoenix:
+    image: arizephoenix/phoenix:12.9.0
+    ports:
+      - "6006:6006"
+      - "4317:4317"
+    environment:
+      PHOENIX_ENABLE_AUTH: "false"
+      PHOENIX_SQL_DATABASE_URL: "sqlite:////tmp/phoenix.db"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:6006/ || wget -qO- http://localhost:6006/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+    volumes:
+      - phoenix_data:/tmp
+
+volumes:
+  phoenix_data:
