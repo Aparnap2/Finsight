@@ -5,8 +5,8 @@ Walks situation ``FS-2026-0916-00231`` along the canonical forward chain in
 ``CLOSED``, asserting every state, a stable variance of exactly 10000 at
 each step, and one audit event per transition. The clean zero-variance
 fixture closes through the same legal chain (no fast path exists in the
-frozen contract). Approval gating uses the landed
-``require_proposal_ref_for_approval`` invariant — no invented states.
+frozen contract). Approval gating uses the landed D2 hash/version/role
+gate — no invented states.
 """
 
 from datetime import UTC, datetime, timedelta
@@ -16,7 +16,7 @@ import pytest
 
 from finance.domain.audit import AuditLog, emit_for_transition
 from finance.domain.financial_situation import FinancialSituation, SituationStatus
-from finance.domain.lifecycle import require_proposal_ref_for_approval
+from finance.domain.verification import VerificationReport, VerificationVerdict
 
 SITUATION_ID = "FS-2026-0916-00231"
 """Golden FinancialSituation id from the process-model worked example."""
@@ -68,30 +68,85 @@ def _clean_situation(status: SituationStatus) -> FinancialSituation:
 
 
 
-def test_fs231_golden_matrix_every_state_variance_and_audit() -> None:
-    """FS-231 walks DETECTED → CLOSED with variance 10000 and 9 audit events."""
-    log = AuditLog()
-    situation = _fs231(FULL_CHAIN[0])
-    assert situation.variance() == Decimal("10000")
+def _bound_close_report(
+    situation: FinancialSituation,
+    *,
+    legacy_total_after: Decimal,
+    variance_after: Decimal,
+    at: datetime,
+) -> VerificationReport:
+    """Build the D1-bound report for a golden close."""
+    return VerificationReport(
+        situation_id=situation.situation_id,
+        execution_id="LEGACY-20260916-0042",
+        legacy_total_after=legacy_total_after,
+        variance_after=variance_after,
+        verdict=VerificationVerdict.VERIFIED,
+        checked_at=at,
+    )
 
+
+def _walk_chain(
+    situation: FinancialSituation,
+    log: AuditLog,
+    *,
+    actor: str = "finsight-test-harness",
+    legacy_total_after: Decimal = Decimal("992500"),
+) -> FinancialSituation:
+    """Walk FULL_CHAIN through the enforced gates with per-step audit."""
+    opening_variance = situation.variance()
     for step, target in enumerate(FULL_CHAIN[1:], start=1):
         before = situation
-        situation = situation.transition_to(target)
+        if target is SituationStatus.PROPOSED:
+            situation = situation.model_copy(
+                update={"evidence_ids": ("ev-001",), "hypothesis_count": 2}
+            )
+        if target is SituationStatus.APPROVED:
+            situation = situation.model_copy(
+                update={
+                    "proposal_hash": "PROP-231-v1",
+                    "proposal_version": 1,
+                    "decider_role": "manager",
+                }
+            )
+        if target is SituationStatus.CLOSED:
+            at = BASE_AT + timedelta(minutes=step)
+            situation = situation.transition_to(
+                target,
+                at=at,
+                verification=_bound_close_report(
+                    situation,
+                    legacy_total_after=legacy_total_after,
+                    variance_after=Decimal("0"),
+                    at=at,
+                ),
+            )
+        else:
+            situation = situation.transition_to(target)
         assert situation.status is target
-        assert situation.situation_id == SITUATION_ID
-        assert situation.variance() == Decimal("10000")
+        assert situation.variance() == opening_variance
         event = emit_for_transition(
             before,
             situation,
             at=BASE_AT + timedelta(minutes=step),
-            actor="finsight-test-harness",
+            actor=actor,
         )
         log.append(event)
         assert event.from_status == FULL_CHAIN[step - 1]
         assert event.to_status == target
-        assert event.variance_snapshot == Decimal("10000")
+        assert event.variance_snapshot == opening_variance
+    return situation
 
+
+def test_fs231_golden_matrix_every_state_variance_and_audit() -> None:
+    """FS-231 walks DETECTED → CLOSED with variance 10000 and 9 audit events."""
+    log = AuditLog()
+    situation = _walk_chain(_fs231(FULL_CHAIN[0]), log)
     assert situation.status is SituationStatus.CLOSED
+    assert situation.situation_id == SITUATION_ID
+    assert situation.variance() == Decimal("10000")
+    assert situation.verification is not None
+    assert situation.verification.variance_after == Decimal("0")
     assert len(log) == len(FULL_CHAIN) - 1 == 9
     assert len(log.events_for(SITUATION_ID)) == 9
     assert log.verify_chain() is True
@@ -106,25 +161,14 @@ def test_fs231_variance_stable_at_each_chain_state() -> None:
 def test_clean_zero_variance_closes_through_legal_chain() -> None:
     """A clean fixture closes via the canonical chain (no fast path)."""
     log = AuditLog()
-    situation = _clean_situation(FULL_CHAIN[0])
-    assert situation.variance() == Decimal("0")
-
-    for step, target in enumerate(FULL_CHAIN[1:], start=1):
-        before = situation
-        situation = situation.transition_to(target)
-        assert situation.status is target
-        assert situation.variance() == Decimal("0")
-        event = emit_for_transition(
-            before,
-            situation,
-            at=BASE_AT + timedelta(minutes=step),
-            actor="finsight-test-harness",
-        )
-        log.append(event)
-        assert event.variance_snapshot == Decimal("0")
-
+    situation = _walk_chain(
+        _clean_situation(FULL_CHAIN[0]),
+        log,
+        legacy_total_after=Decimal("1000000"),
+    )
     assert situation.status is SituationStatus.CLOSED
     assert situation.situation_id == "FS-2026-0916-00240"
+    assert situation.variance() == Decimal("0")
     assert len(log) == len(FULL_CHAIN) - 1 == 9
     assert log.verify_chain() is True
 
@@ -136,35 +180,50 @@ def test_clean_fixture_cannot_skip_chain() -> None:
         clean.transition_to(SituationStatus.CLOSED)
 
 
+def _pinned_proposed(
+    proposal_hash: str | None = "PROP-231-v1",
+) -> FinancialSituation:
+    """PROPOSED aggregate pinned for the landed D2 approval gate."""
+    return _fs231(SituationStatus.PROPOSED).model_copy(
+        update={
+            "proposal_hash": proposal_hash,
+            "proposal_version": 1,
+            "decider_role": "manager",
+        }
+    )
+
+
 def test_approval_requires_pinned_proposal_ref() -> None:
-    """PROPOSED without a proposal_ref fails the landed approval gate."""
+    """PROPOSED without a hash fails the landed D2 approval gate."""
     proposed = _fs231(SituationStatus.PROPOSED)
-    with pytest.raises(ValueError, match="proposal_ref"):
-        require_proposal_ref_for_approval(proposed)
-    pinned = proposed.model_copy(update={"proposal_ref": "PROP-231-v1"})
-    require_proposal_ref_for_approval(pinned)
+    with pytest.raises(ValueError, match="proposal_hash"):
+        proposed.transition_to(SituationStatus.APPROVED)
+    pinned = _pinned_proposed()
     assert pinned.transition_to(SituationStatus.APPROVED).status is (
         SituationStatus.APPROVED
     )
 
 
 def test_approval_rejects_blank_proposal_ref() -> None:
-    """Blank proposal refs fail the landed approval gate."""
+    """Blank hashes fail the landed D2 approval gate."""
     for blank in ("", "   "):
         proposed = _fs231(SituationStatus.PROPOSED).model_copy(
-            update={"proposal_ref": blank}
+            update={
+                "proposal_hash": blank,
+                "proposal_version": 1,
+                "decider_role": "manager",
+            }
         )
-        with pytest.raises(ValueError, match="proposal_ref"):
-            require_proposal_ref_for_approval(proposed)
+        with pytest.raises(ValueError, match="proposal_hash"):
+            proposed.transition_to(SituationStatus.APPROVED)
 
 
 def test_pinned_ref_travels_proposed_to_approved() -> None:
-    """The pinned ref survives the PROPOSED → APPROVED transition."""
-    proposed = _fs231(SituationStatus.PROPOSED).model_copy(
-        update={"proposal_ref": "PROP-231-v1"}
-    )
-    require_proposal_ref_for_approval(proposed)
+    """The pinned hash/version/role survive PROPOSED → APPROVED."""
+    proposed = _pinned_proposed()
     approved = proposed.transition_to(SituationStatus.APPROVED)
     assert approved.status is SituationStatus.APPROVED
-    assert approved.proposal_ref == "PROP-231-v1"
+    assert approved.proposal_hash == "PROP-231-v1"
+    assert approved.proposal_version == 1
+    assert approved.decider_role == "manager"
     assert approved.situation_id == SITUATION_ID

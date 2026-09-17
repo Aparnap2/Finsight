@@ -10,6 +10,7 @@ calls the real frozen P1 ``reconcile()`` (pure, no network).
 """
 
 import json
+from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 
@@ -33,6 +34,7 @@ from finance.domain.ontology import (
     FinancialOntology,
     LegacyRejectionReason,
 )
+from finance.domain.verification import VerificationReport, VerificationVerdict
 from finance.integration.registry import INTEGRATIONS, compare_financial_states
 from finance.reconciliation.models import ExceptionCode, ReconciliationOutcome
 
@@ -43,6 +45,21 @@ MERIDIAN_FIXTURES = (
 
 SITUATION_ID = "FS-2026-0916-00231"
 """Golden FinancialSituation id from the process-model worked example."""
+
+CLOSE_AT = datetime(2026, 9, 16, 12, 0, tzinfo=UTC)
+"""Caller-supplied deterministic tz-aware close timestamp."""
+
+
+def _close_report() -> VerificationReport:
+    """Build the bound accepted report that closes FS-231 (tolerance 100)."""
+    return VerificationReport(
+        situation_id=SITUATION_ID,
+        execution_id="EXEC-231-v1",
+        legacy_total_after=Decimal("992500"),
+        variance_after=Decimal("0"),
+        verdict=VerificationVerdict.VERIFIED,
+        checked_at=datetime(2026, 9, 16, 11, 55, tzinfo=UTC),
+    )
 
 
 def _load_fixture(name: str) -> dict[str, str]:
@@ -179,9 +196,21 @@ def test_lifecycle_full_forward_chain() -> None:
         SituationStatus.VERIFYING,
         SituationStatus.CLOSED,
     ]
-    situation = _fs231(status=chain[0])
+    situation = _fs231(
+        status=chain[0],
+        evidence_ids=("EV-231-batch", "EV-231-result"),
+        hypothesis_count=1,
+        proposal_hash="PROP-HASH-231-v1",
+        proposal_version=1,
+        decider_role="manager",
+    )
     for target in chain[1:]:
-        situation = situation.transition_to(target)
+        if target is SituationStatus.CLOSED:
+            situation = situation.transition_to(
+                target, at=CLOSE_AT, verification=_close_report()
+            )
+        else:
+            situation = situation.transition_to(target)
         assert situation.status is target
     assert situation.situation_id == SITUATION_ID
 
@@ -210,8 +239,11 @@ def test_lifecycle_escalation_and_return() -> None:
         escalated.transition_to(SituationStatus.INVESTIGATING).status
         is SituationStatus.INVESTIGATING
     )
+    evidenced = escalated.model_copy(
+        update={"evidence_ids": ("EV-231-batch",), "hypothesis_count": 1}
+    )
     assert (
-        escalated.transition_to(SituationStatus.PROPOSED).status
+        evidenced.transition_to(SituationStatus.PROPOSED).status
         is SituationStatus.PROPOSED
     )
 

@@ -17,9 +17,28 @@ from pydantic import ValidationError
 
 from finance.domain import lifecycle
 from finance.domain.financial_situation import FinancialSituation, SituationStatus
+from finance.domain.verification import VerificationReport, VerificationVerdict
 
 SITUATION_ID = "FS-2026-0916-00231"
 """Golden FinancialSituation id from the process-model worked example."""
+
+CLOSE_AT = datetime(2026, 9, 16, 12, 0, tzinfo=UTC)
+"""Caller-supplied deterministic tz-aware close timestamp."""
+
+
+def _close_report(
+    situation_id: str = SITUATION_ID,
+    variance_after: Decimal = Decimal("0"),
+) -> VerificationReport:
+    """Build a bound accepted report for ``situation_id`` (tolerance 100)."""
+    return VerificationReport(
+        situation_id=situation_id,
+        execution_id="EXEC-231-v1",
+        legacy_total_after=Decimal("992500"),
+        variance_after=variance_after,
+        verdict=VerificationVerdict.VERIFIED,
+        checked_at=datetime(2026, 9, 16, 11, 55, tzinfo=UTC),
+    )
 
 FULL_CHAIN = [
     SituationStatus.DETECTED,
@@ -83,7 +102,14 @@ def test_transition_table_is_canonical_single_source() -> None:
 
 def test_full_legal_chain_fs231_detected_to_closed() -> None:
     """FS-231 walks DETECTED all the way to CLOSED with evidence attached."""
-    situation = _fs231(status=SituationStatus.DETECTED)
+    situation = _fs231(
+        status=SituationStatus.DETECTED,
+        evidence_ids=("EV-231-batch", "EV-231-result"),
+        hypothesis_count=1,
+        proposal_hash="PROP-HASH-231-v1",
+        proposal_version=1,
+        decider_role="manager",
+    )
     for target in [
         SituationStatus.TRIAGED,
         SituationStatus.INVESTIGATING,
@@ -98,9 +124,14 @@ def test_full_legal_chain_fs231_detected_to_closed() -> None:
     situation = situation.transition_to(SituationStatus.VERIFYING)
     situation = situation.record_verification(Decimal("10000"))
     lifecycle.require_verified_total_for_close(situation)
-    situation = situation.transition_to(SituationStatus.CLOSED)
+    situation = situation.transition_to(
+        SituationStatus.CLOSED, at=CLOSE_AT, verification=_close_report()
+    )
     assert situation.status is SituationStatus.CLOSED
     assert situation.verified_total == Decimal("10000")
+    assert situation.closed_at == CLOSE_AT
+    assert situation.verification is not None
+    assert situation.verification.situation_id == SITUATION_ID
     assert situation.situation_id == SITUATION_ID
 
 
@@ -124,8 +155,11 @@ def test_escalation_and_return_paths() -> None:
         escalated.transition_to(SituationStatus.INVESTIGATING).status
         is SituationStatus.INVESTIGATING
     )
+    evidenced = escalated.model_copy(
+        update={"evidence_ids": ("EV-231-batch",), "hypothesis_count": 1}
+    )
     assert (
-        escalated.transition_to(SituationStatus.PROPOSED).status
+        evidenced.transition_to(SituationStatus.PROPOSED).status
         is SituationStatus.PROPOSED
     )
 
@@ -269,16 +303,29 @@ def test_record_verification_rejects_float() -> None:
         _situation.record_verification(10000.0)  # type: ignore[arg-type]
 
 
-def test_closed_at_auto_stamped_on_close_tz_aware() -> None:
-    """Transitioning to CLOSED stamps a tz-aware closed_at when unset."""
-    before = datetime.now(UTC)
+def test_close_requires_caller_supplied_tz_aware_at() -> None:
+    """Closing stores the caller-supplied tz-aware `at` (no auto-stamp)."""
+    report = _close_report(variance_after=Decimal("50"))
     closed = _fs231(status=SituationStatus.VERIFYING).transition_to(
-        SituationStatus.CLOSED
+        SituationStatus.CLOSED, at=CLOSE_AT, verification=report
     )
+    assert closed.closed_at == CLOSE_AT
     assert closed.closed_at is not None
     assert closed.closed_at.tzinfo is not None
     assert closed.closed_at.utcoffset() is not None
-    assert closed.closed_at >= before
+    assert closed.verification == report
+
+
+def test_close_without_at_or_report_raises() -> None:
+    """The enforced close gate refuses a missing timestamp or report."""
+    with pytest.raises(ValueError, match="explicit close timestamp"):
+        _fs231(status=SituationStatus.VERIFYING).transition_to(
+            SituationStatus.CLOSED, verification=_close_report()
+        )
+    with pytest.raises(ValueError, match="VerificationReport"):
+        _fs231(status=SituationStatus.VERIFYING).transition_to(
+            SituationStatus.CLOSED, at=CLOSE_AT
+        )
 
 
 def test_closed_at_rejects_naive() -> None:

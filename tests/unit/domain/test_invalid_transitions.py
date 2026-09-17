@@ -1,14 +1,12 @@
 """Adversarial transition tests for the P6-02 lifecycle audit.
 
 Attempts every banned move from ``docs/domain/meridian-process-model.md``
-§2.2 against the P6-01 base aggregate: jumps to ``CLOSED``, exits from
-terminal states, approval without a proposal, close without a verified
-total, cross-company tampering, garbage statuses, and a missing actor.
-Two gates that the base table does not enforce yet (proposal presence for
-approval, verified total for close) are covered through minimal local
-adapters defined in this file — the audit layer itself never drives
-transitions, so the adapters stand in for the pending sibling lifecycle
-work and the reviewer reconciles them after it lands.
+§2.2 against the aggregate: jumps to ``CLOSED``, exits from terminal
+states, approval without a pinned proposal, close without a bound
+verification report, cross-company tampering, garbage statuses, and a
+missing actor. The two local adapters below delegate to the landed D1/D2
+gates (hash/version/role pinning, bound VerificationReport) — they are
+thin conveniences over the enforced predicates, not parallel gates.
 """
 
 from datetime import UTC, datetime
@@ -19,6 +17,7 @@ from pydantic import ValidationError
 
 from finance.domain.audit import AuditLog, emit_for_transition
 from finance.domain.financial_situation import FinancialSituation, SituationStatus
+from finance.domain.verification import VerificationReport, VerificationVerdict
 
 SITUATION_ID = "FS-2026-0916-00231"
 """Golden FinancialSituation id from the process-model worked example."""
@@ -41,38 +40,48 @@ def _fs231(status: SituationStatus) -> FinancialSituation:
 
 
 def _require_proposal_for_approval(
-    situation: FinancialSituation, proposal_ref: str | None
+    situation: FinancialSituation, proposal_hash: str | None
 ) -> FinancialSituation:
-    """Local adapter for the sibling approval gate (not in P6-01).
+    """Delegate to the landed D2 gate: pin hash/version/role, then move."""
+    pinned = situation.model_copy(
+        update={
+            "proposal_hash": proposal_hash,
+            "proposal_version": 1,
+            "decider_role": "manager",
+        }
+    )
+    return pinned.transition_to(SituationStatus.APPROVED)
 
-    Stands in for the pending lifecycle rule that ``PROPOSED → APPROVED``
-    requires a live proposal: a missing ``proposal_ref`` is refused before
-    the move. The reviewer reconciles this against the sibling work.
-    """
-    if proposal_ref is None or not proposal_ref.strip():
-        raise ValueError(
-            f"Cannot approve {situation.situation_id}: no proposal pinned."
-        )
-    return situation.transition_to(SituationStatus.APPROVED)
+
+def _bound_report(
+    situation: FinancialSituation, legacy_total_after: object
+) -> VerificationReport:
+    """Build the D1-bound report for the golden post-execution state."""
+    return VerificationReport(
+        situation_id=situation.situation_id,
+        execution_id="LEGACY-20260916-0042",
+        legacy_total_after=legacy_total_after,  # type: ignore[arg-type]
+        variance_after=Decimal("0"),
+        verdict=VerificationVerdict.VERIFIED,
+        checked_at=BASE_AT,
+    )
 
 
 def _require_verified_total_for_close(
     situation: FinancialSituation, verified_total: Decimal | None
 ) -> FinancialSituation:
-    """Local adapter for the sibling close gate (not in P6-01).
-
-    Stands in for the pending lifecycle rule that ``VERIFYING → CLOSED``
-    requires a deterministic re-reconcile total (the ``EXECUTION_VERIFIED``
-    verdict): a missing ``verified_total`` is refused before the move.
-    The reviewer reconciles this against the sibling work.
-    """
+    """Delegate to the landed D1 gate: bound report required to close."""
     if verified_total is None:
         raise ValueError(
             f"Cannot close {situation.situation_id}: no verified total."
         )
     if not isinstance(verified_total, Decimal):
         raise ValueError("verified_total must be a Decimal (money is exact).")
-    return situation.transition_to(SituationStatus.CLOSED)
+    return situation.transition_to(
+        SituationStatus.CLOSED,
+        at=BASE_AT,
+        verification=_bound_report(situation, verified_total),
+    )
 
 
 def test_detected_to_closed_jump_rejected() -> None:
@@ -118,14 +127,15 @@ def test_execution_without_approval_rejected() -> None:
 
 
 def test_approved_without_proposal_rejected_by_gate() -> None:
-    """Approval requires a pinned proposal (sibling gate adapter)."""
+    """Approval requires a pinned hash/version/role (landed D2 gate)."""
     proposed = _fs231(SituationStatus.PROPOSED)
-    with pytest.raises(ValueError, match="no proposal"):
+    with pytest.raises(ValueError, match="proposal_hash"):
         _require_proposal_for_approval(proposed, None)
-    with pytest.raises(ValueError, match="no proposal"):
+    with pytest.raises(ValueError, match="proposal_hash"):
         _require_proposal_for_approval(proposed, "   ")
     approved = _require_proposal_for_approval(proposed, "PROP-231-v1")
     assert approved.status is SituationStatus.APPROVED
+    assert approved.proposal_hash == "PROP-231-v1"
 
 
 def test_close_without_verified_total_rejected_by_gate() -> None:

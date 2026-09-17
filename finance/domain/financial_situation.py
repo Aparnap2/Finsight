@@ -12,17 +12,36 @@ P6-02 adds optional lifecycle-only evidence (``proposal_ref``,
 :meth:`FinancialSituation.record_verification` helper. All default to
 ``None`` so P6-01 construction stays valid. Lifecycle state only: this
 module never writes ledgers.
+
+P6-02 gates (D1+D2+D3+D8) add further additive fields — ``proposal_hash``,
+``proposal_version``, ``decider_role``, ``evidence_ids``,
+``hypothesis_count``, ``verification`` — all with safe defaults so older
+construction stays valid. The enforced gates live as standalone predicates
+in ``finance/domain/lifecycle.py`` and :meth:`transition_to` calls them on
+the relevant paths (un-bypassable by design): evidence for ``PROPOSED``
+(D3), pinned proposal plus tier-conformant decider for ``APPROVED`` (D8),
+bound accepted ``VerificationReport`` for ``CLOSED`` (D1), and the proposal
+freeze past approval on every post-approval transition (D2).
 """
 
 import re
-from datetime import UTC, datetime
+from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
+from finance.business_rules.meridian import CompanyConfiguration
 from finance.domain._types import MoneyDecimal
-from finance.domain.lifecycle import ALLOWED_TRANSITIONS, assert_transition_allowed
+from finance.domain.lifecycle import (
+    ALLOWED_TRANSITIONS,
+    assert_transition_allowed,
+    require_decider_authority_for_approval,
+    require_evidence_for_proposal,
+    require_proposal_frozen,
+    require_verification_for_close,
+)
+from finance.domain.verification import VerificationReport
 
 _SITUATION_ID_PATTERN = re.compile(r"FS-\d{4}-\d{4}-\d{5}")
 """Shape ``FS-YYYY-MMDD-NNNNN``, e.g. ``FS-2026-0916-00231``."""
@@ -115,6 +134,29 @@ class FinancialSituation(BaseModel):
     rejection_reason: str | None = None
     """Refusal reason recorded when a proposal version is REJECTED."""
 
+    proposal_hash: str | None = None
+    """Immutable proposal hash pinned at approval (D2 freeze, D8 gate)."""
+
+    proposal_version: int = 0
+    """Proposal version; approval requires version >= 1 (D8 gate)."""
+
+    decider_role: str | None = None
+    """Recorded decider role (``manager`` or ``director``).
+
+    Recorded, not verified (D7 principle): the tier check is a recorded
+    conformance check against the deterministic variance band, not an
+    authentication of the human behind the Slack signal.
+    """
+
+    evidence_ids: tuple[str, ...] = ()
+    """Evidence ids supporting the proposal (D3 gate needs >= 1)."""
+
+    hypothesis_count: int = 0
+    """Number of ranked hypotheses (D3 gate needs >= 1)."""
+
+    verification: VerificationReport | None = None
+    """Accepted post-execution report, stored on the close (D1 gate)."""
+
     @field_validator("situation_id")
     @classmethod
     def _validate_situation_id(cls, value: str) -> str:
@@ -194,33 +236,78 @@ class FinancialSituation(BaseModel):
             )
         return self.model_copy(update={"verified_total": verified_total})
 
-    def transition_to(self, target: SituationStatus) -> "FinancialSituation":
+    def transition_to(
+        self,
+        target: SituationStatus,
+        *,
+        at: datetime | None = None,
+        verification: VerificationReport | None = None,
+    ) -> "FinancialSituation":
         """Return a copy in ``target`` state when the move is allowed.
 
         Validates against the canonical table in
-        ``finance/domain/lifecycle.py`` (spec section 2.1). Field-level
-        invariants (``verified_total`` before close, ``proposal_ref``
-        before approval, ``rejection_reason`` on reject) live as explicit
-        predicates in that module so the frozen P6-01 chain stays
-        constructible; call them before transitioning. Moving to
-        ``CLOSED`` auto-stamps a timezone-aware ``closed_at`` when unset.
+        ``finance/domain/lifecycle.py`` (spec section 2.1) first — this
+        covers every banned move: execution without approval, close
+        without terminal verification, and any exit from a terminal
+        state. The enforced P6-02 gates then run on their paths
+        (un-bypassable by design; the standalone predicates stay
+        available for testability):
+
+        - ``PROPOSED`` calls ``require_evidence_for_proposal`` (D3):
+          ``evidence_ids`` and ``hypothesis_count`` must be set on self.
+        - ``APPROVED`` calls ``require_decider_authority_for_approval``
+          (D8): non-blank ``proposal_hash``, ``proposal_version >= 1``,
+          and a tier-conformant ``decider_role`` (variance above the
+          manager band requires a director; recorded, not verified).
+        - ``CLOSED`` calls ``require_verification_for_close`` (D1) with
+          tolerance ``CompanyConfiguration().tolerance_minor``: ``at``
+          must be an explicit timezone-aware timestamp (there is no
+          auto-stamp on the close path), ``verification`` must bind to
+          this ``situation_id`` and be accepted at tolerance. The stored
+          copy carries ``verification`` and ``closed_at=at``.
+        - Every transition whose source is at or after ``APPROVED``
+          consults ``require_proposal_frozen`` (D2) comparing the
+          post-transition copy against self, so the pinned
+          ``proposal_hash``/``proposal_version`` cannot drift.
+
+        Field-level invariants (``verified_total`` before close,
+        ``proposal_ref`` before approval, ``rejection_reason`` on reject)
+        remain available as explicit predicates in that module so the
+        frozen P6-01 chain stays constructible; call them before
+        transitioning where the older contract needs them.
 
         Args:
             target: The lifecycle state to move into.
+            at: Caller-supplied timezone-aware close timestamp; required
+                for ``CLOSED``, ignored otherwise.
+            verification: Bound accepted verification report; required
+                for ``CLOSED``, ignored otherwise.
 
         Returns:
-            A new frozen aggregate with ``status`` set to ``target``.
+            A new frozen aggregate with ``status`` set to ``target`` (and,
+            for ``CLOSED``, ``verification`` and ``closed_at`` stored).
 
         Raises:
             ValueError: If ``target`` is not reachable from the current
-                status under the canonical table (this covers every
-                banned move: execution without approval, close without
-                ``EXECUTION_VERIFIED``, and any exit from a terminal
-                state).
+                status under the canonical table, or any enforced gate
+                on the path refuses.
         """
         assert_transition_allowed(self.status, target)
-        if target is SituationStatus.CLOSED and self.closed_at is None:
-            return self.model_copy(
-                update={"status": target, "closed_at": datetime.now(UTC)}
+        if target is SituationStatus.PROPOSED:
+            require_evidence_for_proposal(self)
+            updated = self.model_copy(update={"status": target})
+        elif target is SituationStatus.APPROVED:
+            require_decider_authority_for_approval(self)
+            updated = self.model_copy(update={"status": target})
+        elif target is SituationStatus.CLOSED:
+            tolerance = CompanyConfiguration().tolerance_minor
+            require_verification_for_close(self, verification, at, tolerance)
+            assert verification is not None
+            assert at is not None
+            updated = self.model_copy(
+                update={"status": target, "verification": verification, "closed_at": at}
             )
-        return self.model_copy(update={"status": target})
+        else:
+            updated = self.model_copy(update={"status": target})
+        require_proposal_frozen(updated, self)
+        return updated
