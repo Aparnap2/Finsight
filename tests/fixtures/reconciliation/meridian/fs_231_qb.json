@@ -1,0 +1,9 @@
+{
+  "company_id": "meridian",
+  "currency": "INR",
+  "entries": 42,
+  "environment": "prod",
+  "period": "2026-09",
+  "quickbooks_total": "982500.00",
+  "source": "quickbooks"
+}

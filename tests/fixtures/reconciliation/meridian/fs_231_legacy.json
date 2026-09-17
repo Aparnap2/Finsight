@@ -1,0 +1,19 @@
+{
+  "accepted": 499,
+  "accepted_total": "982500.00",
+  "batch_id": "LEGACY-20260916-0042",
+  "company_id": "meridian",
+  "currency": "INR",
+  "environment": "prod",
+  "records_sent": 500,
+  "rejected": 1,
+  "rejections": [
+    {
+      "account_code": "4812",
+      "amount": "10000.00",
+      "reason": "INVALID_ACCOUNT_CODE",
+      "sequence": 500
+    }
+  ],
+  "source": "cobol_legacy"
+}

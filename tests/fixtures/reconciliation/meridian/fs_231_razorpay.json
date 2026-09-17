@@ -1,0 +1,13 @@
+{
+  "adjustment": "10000.00",
+  "company_id": "meridian",
+  "currency": "INR",
+  "environment": "prod",
+  "fee": "7500.00",
+  "gross": "1000000.00",
+  "net": "972500.00",
+  "pending": "7500.00",
+  "provider": "razorpay",
+  "refund": "2500.00",
+  "settlement_id": "RAZORPAY-SETTLE-20260916"
+}
