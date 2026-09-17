@@ -111,6 +111,7 @@ def _walk_chain(
             )
         if target is SituationStatus.CLOSED:
             at = BASE_AT + timedelta(minutes=step)
+            situation = situation.record_verification(legacy_total_after)
             situation = situation.transition_to(
                 target,
                 at=at,

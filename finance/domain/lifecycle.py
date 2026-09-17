@@ -385,3 +385,85 @@ def require_verification_for_close(
             f"{verification.variance_after} is not accepted at tolerance "
             f"{tolerance}."
         )
+
+
+def validate_persistable_state(
+    situation: FinancialSituation,
+    *,
+    tolerance: Decimal | None = None,
+) -> None:
+    """Require terminal snapshots to carry their close proof (D1 persist).
+
+    This is persisted-state integrity, not transition authorization: the
+    repository calls it for any snapshot whose status is terminal, so no
+    persistence path can manufacture ``CLOSED`` (or ``REJECTED``) without
+    the evidence the D1 close contract demands. Non-terminal snapshots
+    pass with ordinary model validity. The allowed-transition table is
+    never consulted here.
+
+    Rules:
+    - ``CLOSED`` requires a bound accepted ``VerificationReport``
+      (same situation, ``VERIFIED`` verdict, residual within
+      tolerance, non-blank execution id), a tz-aware ``closed_at``,
+      and ``verified_total`` present and equal to the report's
+      ``legacy_total_after`` (unifying the two verification
+      representations into one consistency rule).
+    - ``REJECTED`` requires a non-blank ``rejection_reason``.
+
+    Args:
+        situation: The aggregate snapshot proposed for persistence.
+        tolerance: Maximum acceptable absolute residual; defaults to
+            ``CompanyConfiguration().tolerance_minor``.
+
+    Raises:
+        ValueError: If a terminal snapshot lacks its close proof.
+    """
+    from finance.business_rules.meridian import CompanyConfiguration
+
+    status = situation.status.value if isinstance(situation.status, StrEnum) else str(
+        situation.status
+    )
+    if status == "CLOSED":
+        report = situation.verification
+        if report is None:
+            raise ValueError(
+                "Cannot persist CLOSED without a VerificationReport: "
+                "closure is an earned outcome, not a reachable state."
+            )
+        if report.situation_id != situation.situation_id:
+            raise ValueError(
+                "Cannot persist CLOSED with a report bound to another "
+                f"situation: {report.situation_id!r} != "
+                f"{situation.situation_id!r}."
+            )
+        bound = tolerance if tolerance is not None else CompanyConfiguration().tolerance_minor
+        if report.verdict.value != "VERIFIED" or abs(report.variance_after) > bound:
+            raise ValueError(
+                "Cannot persist CLOSED with an unaccepted VerificationReport: "
+                f"verdict {report.verdict.value} residual "
+                f"{report.variance_after} fails tolerance {bound}."
+            )
+        if not report.execution_id or not report.execution_id.strip():
+            raise ValueError(
+                "Cannot persist CLOSED without an execution binding: "
+                "execution_id must be non-blank."
+            )
+        require_tz_aware_closed_at(situation)
+        if situation.closed_at is None:
+            raise ValueError(
+                "Cannot persist CLOSED without closed_at: the deterministic "
+                "close timestamp is part of the close proof."
+            )
+        if situation.verified_total is None:
+            raise ValueError(
+                "Cannot persist CLOSED without verified_total: the "
+                "aggregate snapshot must carry the re-reconcile total."
+            )
+        if situation.verified_total != report.legacy_total_after:
+            raise ValueError(
+                "Cannot persist CLOSED with verified_total disagreeing "
+                f"from the report: {situation.verified_total} != "
+                f"{report.legacy_total_after}."
+            )
+    elif status == "REJECTED":
+        require_rejection_reason_for_reject(situation)

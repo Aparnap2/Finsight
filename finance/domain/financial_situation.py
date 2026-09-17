@@ -129,7 +129,7 @@ class FinancialSituation(BaseModel):
     """Deterministic re-reconcile total, INR; set via record_verification."""
 
     closed_at: datetime | None = None
-    """Timezone-aware close timestamp; auto-stamped on transition to CLOSED."""
+    """Timezone-aware close timestamp; caller-supplied on transition to CLOSED."""
 
     rejection_reason: str | None = None
     """Refusal reason recorded when a proposal version is REJECTED."""

@@ -64,6 +64,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
 
 from finance.domain.financial_situation import FinancialSituation, SituationStatus
+from finance.domain.lifecycle import validate_persistable_state
 
 logger = logging.getLogger(__name__)
 
@@ -670,6 +671,7 @@ class SituationRepository:
             if event.event_id in seen:
                 raise ValueError(f"duplicate audit event_id in batch: {event.event_id!r}.")
             seen.add(event.event_id)
+        validate_persistable_state(situation)
         if self._engine is not None:
             return self._save_sql(situation, expected_version, events)
         return self._save_memory(situation, expected_version, events)

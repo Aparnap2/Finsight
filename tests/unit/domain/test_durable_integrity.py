@@ -110,10 +110,10 @@ def test_from_to_must_agree_with_stored_transition(
 
 def test_terminal_rows_refuse_writes(repo: SituationRepository) -> None:
     """Stored CLOSED and REJECTED rows reject every further save."""
-    closed = _situation(status=SituationStatus.CLOSED)
+    closed = _proven_closed()
     repo.save(closed)
     with pytest.raises(TerminalStateError):
-        repo.save(_situation(status=SituationStatus.CLOSED))
+        repo.save(_proven_closed())
     with pytest.raises(TerminalStateError):
         repo.save(_situation(status=SituationStatus.DETECTED), expected_version=1)
     assert repo.get_for_company("meridian", SID_1) == closed
@@ -121,15 +121,181 @@ def test_terminal_rows_refuse_writes(repo: SituationRepository) -> None:
 
 def test_terminal_refusal_precedes_stale_version(repo: SituationRepository) -> None:
     """Terminal check wins over version logic on closed rows."""
-    repo.save(_situation(status=SituationStatus.REJECTED))
+    repo.save(
+        _situation(status=SituationStatus.REJECTED).model_copy(
+            update={"rejection_reason": "duplicate proposal version"}
+        )
+    )
     with pytest.raises(TerminalStateError):
         repo.save(_situation(status=SituationStatus.DETECTED), expected_version=99)
     assert issubclass(TerminalStateError, ValueError)
 
 
-def test_fresh_closed_create_allowed(repo: SituationRepository) -> None:
-    """Creating a CLOSED row directly is permitted (records arrival)."""
-    assert repo.save(_situation(status=SituationStatus.CLOSED)) == 1
+def _proven_closed() -> FinancialSituation:
+    """CLOSED aggregate carrying the full D1 close proof (FS-231)."""
+    from finance.domain.verification import VerificationReport, VerificationVerdict
+
+    recorded = _situation(status=SituationStatus.VERIFYING).record_verification(
+        Decimal("992500")
+    )
+    report = VerificationReport(
+        situation_id=SID_1,
+        execution_id="LEGACY-20260916-0042",
+        legacy_total_after=Decimal("992500"),
+        variance_after=Decimal("0"),
+        verdict=VerificationVerdict.VERIFIED,
+        checked_at=AT_1,
+    )
+    return recorded.transition_to(SituationStatus.CLOSED, at=AT_1, verification=report)
+
+
+def _bare_closed() -> FinancialSituation:
+    """CLOSED aggregate with no proof at all (the persistence backdoor)."""
+    return _situation(status=SituationStatus.CLOSED)
+
+
+def test_fresh_closed_without_verification_rejected(
+    repo: SituationRepository,
+) -> None:
+    """1. A proof-less CLOSED snapshot cannot be persisted."""
+    with pytest.raises(ValueError, match="VerificationReport"):
+        repo.save(_bare_closed())
+    assert repo.get_for_company("meridian", SID_1) is None
+
+
+def test_fresh_closed_with_failed_report_rejected(
+    repo: SituationRepository,
+) -> None:
+    """2. A FAILED verdict never earns CLOSED, even with full shape."""
+    from finance.domain.verification import VerificationReport, VerificationVerdict
+
+    base = _proven_closed().model_copy(update={"status": SituationStatus.VERIFYING})
+    failed = VerificationReport(
+        situation_id=SID_1,
+        execution_id="LEGACY-20260916-0042",
+        legacy_total_after=Decimal("992500"),
+        variance_after=Decimal("0"),
+        verdict=VerificationVerdict.FAILED,
+        checked_at=AT_1,
+    )
+    bad = base.model_copy(update={
+        "status": SituationStatus.CLOSED,
+        "verification": failed,
+        "closed_at": AT_1,
+        "verified_total": Decimal("992500"),
+    })
+    with pytest.raises(ValueError, match="unaccepted"):
+        repo.save(bad)
+    assert repo.get_for_company("meridian", SID_1) is None
+
+
+def test_fresh_closed_with_wrong_situation_rejected(
+    repo: SituationRepository,
+) -> None:
+    """3. A report bound to another situation cannot close this one."""
+    from finance.domain.verification import VerificationReport, VerificationVerdict
+
+    base = _proven_closed().model_copy(update={"status": SituationStatus.VERIFYING})
+    foreign = VerificationReport(
+        situation_id="FS-2026-0916-00999",
+        execution_id="LEGACY-20260916-0042",
+        legacy_total_after=Decimal("992500"),
+        variance_after=Decimal("0"),
+        verdict=VerificationVerdict.VERIFIED,
+        checked_at=AT_1,
+    )
+    bad = base.model_copy(update={
+        "status": SituationStatus.CLOSED,
+        "verification": foreign,
+        "closed_at": AT_1,
+        "verified_total": Decimal("992500"),
+    })
+    with pytest.raises(ValueError, match="another situation"):
+        repo.save(bad)
+    assert repo.get_for_company("meridian", SID_1) is None
+
+
+def test_fresh_closed_with_over_tolerance_residual_rejected(
+    repo: SituationRepository,
+) -> None:
+    """4. Residual 101 exceeds tolerance 100: no close."""
+    from finance.domain.verification import VerificationReport, VerificationVerdict
+
+    base = _proven_closed().model_copy(update={"status": SituationStatus.VERIFYING})
+    loose = VerificationReport(
+        situation_id=SID_1,
+        execution_id="LEGACY-20260916-0042",
+        legacy_total_after=Decimal("992500"),
+        variance_after=Decimal("101"),
+        verdict=VerificationVerdict.VERIFIED,
+        checked_at=AT_1,
+    )
+    bad = base.model_copy(update={
+        "status": SituationStatus.CLOSED,
+        "verification": loose,
+        "closed_at": AT_1,
+        "verified_total": Decimal("992500"),
+    })
+    with pytest.raises(ValueError, match="tolerance"):
+        repo.save(bad)
+    assert repo.get_for_company("meridian", SID_1) is None
+
+
+def test_fresh_closed_without_closed_at_rejected(
+    repo: SituationRepository,
+) -> None:
+    """5. Proof without a close timestamp still cannot persist CLOSED."""
+    from finance.domain.verification import VerificationReport, VerificationVerdict
+
+    base = _proven_closed().model_copy(update={"status": SituationStatus.VERIFYING})
+    report = VerificationReport(
+        situation_id=SID_1,
+        execution_id="LEGACY-20260916-0042",
+        legacy_total_after=Decimal("992500"),
+        variance_after=Decimal("0"),
+        verdict=VerificationVerdict.VERIFIED,
+        checked_at=AT_1,
+    )
+    bad = base.model_copy(update={
+        "status": SituationStatus.CLOSED,
+        "verification": report,
+        "closed_at": None,
+        "verified_total": Decimal("992500"),
+    })
+    with pytest.raises(ValueError, match="closed_at"):
+        repo.save(bad)
+    assert repo.get_for_company("meridian", SID_1) is None
+
+
+def test_fresh_closed_with_accepted_report_persisted(
+    repo: SituationRepository,
+) -> None:
+    """6. The proven close persists and rehydrates with its proof intact."""
+    closed = _proven_closed()
+    assert repo.save(closed) == 1
+    loaded = repo.get_for_company("meridian", SID_1)
+    assert loaded == closed
+    assert loaded is not None and loaded.verification is not None
+    assert loaded.verification.verdict.value == "VERIFIED"
+    assert loaded.verified_total == Decimal("992500")
+    assert loaded.closed_at == AT_1
+
+
+def test_nonterminal_to_closed_without_proof_impossible() -> None:
+    """7. The aggregate transition path cannot close without verification."""
+    with pytest.raises(ValueError, match="Cannot close"):
+        _situation(status=SituationStatus.VERIFYING).transition_to(
+            SituationStatus.CLOSED
+        )
+
+
+def test_persisted_closed_rejects_any_save(repo: SituationRepository) -> None:
+    """8. A proven CLOSED row still refuses every further save (D5)."""
+    repo.save(_proven_closed())
+    with pytest.raises(TerminalStateError):
+        repo.save(_situation(status=SituationStatus.DETECTED))
+    loaded = repo.get_for_company("meridian", SID_1)
+    assert loaded is not None and loaded.status is SituationStatus.CLOSED
 
 
 def test_equal_bytes_short_circuit(repo: SituationRepository) -> None:
