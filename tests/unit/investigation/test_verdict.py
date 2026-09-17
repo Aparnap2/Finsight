@@ -706,3 +706,71 @@ def test_module_hygiene_no_side_effects() -> None:
         for token in forbidden:
             assert token not in source, token
         assert re.search(r"(?<![A-Za-z0-9_.])print\s*\(", source) is None, "print("
+
+
+def test_cross_case_finding_refused() -> None:
+    """Assembled findings must carry the target situation id (review)."""
+    foreign = make_finding_v11().model_copy(
+        update={"situation_id": OTHER_SITUATION}
+    )
+    with pytest.raises(ValueError, match="CROSS_CASE_REFUSED"):
+        assemble_verdict(
+            situation_id=SITUATION,
+            discrepancy=VARIANCE,
+            findings=(foreign,),
+            correlations=(),
+            hypotheses=(),
+            proposal=None,
+            evidence_binding={EV_RAZORPAY: SITUATION},
+            reasons=("foreign finding probe",),
+        )
+
+
+def test_cross_case_proposal_refused() -> None:
+    """An assembled proposal bound elsewhere cannot complete a verdict."""
+    proposal = make_proposal_v16().model_copy(
+        update={"situation_id": OTHER_SITUATION}
+    )
+    with pytest.raises(ValueError, match="CROSS_CASE_REFUSED"):
+        assemble_verdict(
+            situation_id=SITUATION,
+            discrepancy=VARIANCE,
+            findings=make_findings(),
+            correlations=(),
+            hypotheses=(make_hypothesis_v15(),),
+            proposal=proposal,
+            evidence_binding={eid: SITUATION for eid in ALL_AUTHORITATIVE},
+        )
+
+
+def test_nonfinite_amount_refused() -> None:
+    """NaN/Infinity amounts fail the ValueError contract (review)."""
+    from decimal import Decimal as _Decimal
+
+    for bad in (_Decimal("NaN"), _Decimal("Infinity")):
+        with pytest.raises(ValueError, match="AMOUNT_MUST_BE_DECIMAL"):
+            ResolutionProposal(
+                proposal_id="P-NONFINITE",
+                situation_id=SITUATION,
+                action="REPROCESS_LEGACY_RECORD",
+                amount=bad,  # type: ignore[arg-type]
+                account_code="4812",
+                evidence_refs=ALL_AUTHORITATIVE,
+                hypothesis_ref="HYP-V15",
+                policy_pointer=POLICY,
+            )
+
+
+def test_standalone_caused_refused_and_neutralised() -> None:
+    """Bare 'caused' is refused as causal and scrubbed in quarantine."""
+    from finance.investigation.verdict import check_no_causal_text
+
+    with pytest.raises(ValueError, match="CAUSAL_UPGRADE"):
+        check_no_causal_text("the RJ caused the variance", where="probe")
+    quarantined = quarantine_llm_shaped(
+        {"root_cause": "invalid code caused the delay"},
+        situation_id=SITUATION,
+        basis_refs=("FIND-V11",),
+    )
+    assert quarantined.confidence == "LOW"
+    assert "caused" not in quarantined.text.lower()

@@ -59,6 +59,7 @@ LIFECYCLE_OUTPUT_LABELS: frozenset[str] = frozenset(
 
 _CAUSAL_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"\bcaused\s+by\b"),
+    re.compile(r"\bcaused\b"),
     re.compile(r"\broot\s+cause\b"),
     re.compile(r"\bproves?\b"),
     re.compile(r"\bproving\b"),

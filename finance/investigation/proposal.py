@@ -43,6 +43,7 @@ _LLM_CAUSAL_KEYS: frozenset[str] = frozenset(
 _SANITISE_RULES: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"root[\s_\-]*causes?", re.IGNORECASE), "candidate factor"),
     (re.compile(r"caused[\s_\-]*by", re.IGNORECASE), "correlated with"),
+    (re.compile(r"\bcaused\b", re.IGNORECASE), "correlated"),
     (re.compile(r"\bcauses?\b", re.IGNORECASE), "co-occurs with"),
     (re.compile(r"\bcausing\b", re.IGNORECASE), "co-occurring with"),
     (re.compile(r"prove[nd]?s?", re.IGNORECASE), "indicated"),
@@ -69,6 +70,10 @@ def _require_decimal_money(value: object, *, where: str) -> Decimal:
         )
     if not isinstance(value, Decimal):
         raise ValueError(f"AMOUNT_MUST_BE_DECIMAL: {where} must be Decimal.")
+    if not value.is_finite():
+        raise ValueError(
+            f"AMOUNT_MUST_BE_DECIMAL: {where} must be finite, got {value!r}."
+        )
     if value.as_tuple().exponent < -2:
         raise ValueError(
             f"AMOUNT_PRECISION: {where} allows at most 2 decimal places."
@@ -507,6 +512,18 @@ def assemble_verdict(
     for finding in findings:
         for evidence_id in finding.evidence_ids:
             _refuse_cross_case(binding, situation_id, evidence_id)
+    for label, owned, id_attr in (
+        ("finding", findings, "finding_id"),
+        ("correlation", correlations, "edge_id"),
+        ("hypothesis", hypotheses, "hypothesis_id"),
+    ):
+        for item in owned:
+            if item.situation_id != situation_id:
+                raise ValueError(
+                    f"CROSS_CASE_REFUSED: assembled {label} "
+                    f"{getattr(item, id_attr)!r} belongs to "
+                    f"{item.situation_id!r}, not {situation_id!r}."
+                )
     if package is not None and not package.complete:
         missing = ", ".join(
             f"{leg.source_system}:{leg.key}:{leg.reason}"
@@ -526,6 +543,12 @@ def assemble_verdict(
             "the conflict marker explicitly or end UNRESOLVED."
         )
     if proposal is not None:
+        if proposal.situation_id != situation_id:
+            raise ValueError(
+                "CROSS_CASE_REFUSED: assembled proposal "
+                f"{proposal.proposal_id!r} belongs to "
+                f"{proposal.situation_id!r}, not {situation_id!r}."
+            )
         for evidence_id in proposal.evidence_refs:
             _refuse_cross_case(binding, situation_id, evidence_id)
         if not hypotheses:
