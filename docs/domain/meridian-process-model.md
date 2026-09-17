@@ -251,7 +251,10 @@ Situation `FS-2026-0916-00231`, Meridian, INR, Decimal only.
   `7500`, leaving provider net `972500`.
 - QuickBooks total: `982500`.
 - Legacy accepted total: `982500`.
-- Variance: `1000000 - (982500 correlated) = 10000`.
+- Provider → Books gap (actionable variance):
+  `982500 - 972500 = 10000`.
+- Expected → Books gap: `1000000 - 982500 = 17500`
+  (`7500` timing item + `10000` unexplained discrepancy).
 - State `DETECTED -> TRIAGED` (severity Medium).
 
 ### 4.2 Investigation and correlation

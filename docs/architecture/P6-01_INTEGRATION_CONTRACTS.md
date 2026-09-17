@@ -192,7 +192,8 @@ Batch `LEGACY-20260916-0042`: 500 sent, 499 accepted, 1 rejected.
 | QuickBooks total | `982500` | C-QUICKBOOKS |
 | Legacy accepted total | `982500` | C-LEGACY |
 | Gmail context (refund/fee notes, DATA) | — | C-GMAIL |
-| Variance: `1000000` minus `982500` | `10000` | deterministic Decimal |
+| Variance (actionable): books `982500` minus provider `972500` | `10000` | deterministic Decimal |
+| Expected → Books gap (`7500` timing + `10000`) | `17500` | deterministic Decimal |
 | Cause: 1 record `RJ INVALID_ACCOUNT_CODE` | code `4812` | C-LEGACY (`I-LEGACY-REJECT`) |
 | Proposal: reprocess `10000` under `4812` | hashed | C-SLACK payload (stubbed) |
 | Slack `APPROVE` pinned to proposal hash | — | C-SLACK (stubbed) |
