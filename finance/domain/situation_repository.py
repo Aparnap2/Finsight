@@ -185,6 +185,26 @@ class _StoredCase(TypedDict):
     payload: bytes
 
 
+_AUDIT_UNIQUE_NAME = "uq_situation_audits_event_once"
+"""Unique constraint backing audit event dedup (see ``SituationAuditRow``)."""
+
+
+def _is_audit_duplicate(exc: IntegrityError) -> bool:
+    """Return True iff ``exc`` violates the audit event dedup constraint.
+
+    Inspects the DBAPI error/constraint identity so composite-PK or
+    other integrity failures propagate unchanged instead of being
+    misreported as duplicate audit events.
+    """
+    orig = exc.orig
+    diag = getattr(orig, "diag", None)
+    name = getattr(diag, "constraint_name", None) if diag is not None else None
+    if name is not None:
+        return name == _AUDIT_UNIQUE_NAME
+    text = str(orig) if orig is not None else str(exc)
+    return _AUDIT_UNIQUE_NAME in text or "situation_audits.event_id" in text
+
+
 def _decimal_text(value: Decimal) -> str:
     """Encode a money value in fixed-point form (no exponents)."""
     return format(value, "f")
@@ -506,9 +526,34 @@ class SituationRepository:
                 if expected_version is not None and expected_version != actual_version:
                     raise ConcurrencyError(sid, expected_version, actual_version)
                 new_version = actual_version + 1
-                row.status = situation.status.value
-                row.version = new_version
-                row.payload = payload_text
+                # Atomic compare-and-swap: the UPDATE lands only when no
+                # concurrent transaction bumped the row after our SELECT.
+                # SQLite serializes writers (belt-and-braces there); the
+                # Postgres target needs this. Zero rows → lost race.
+                matched = (
+                    session.query(SituationRow)
+                    .filter(
+                        SituationRow.company_id == company,
+                        SituationRow.situation_id == sid,
+                        SituationRow.version == actual_version,
+                    )
+                    .update(
+                        {
+                            SituationRow.status: situation.status.value,
+                            SituationRow.version: new_version,
+                            SituationRow.payload: payload_text,
+                        },
+                        synchronize_session="fetch",
+                    )
+                )
+                if matched != 1:
+                    session.rollback()
+                    raise ConcurrencyError(
+                        sid,
+                        expected_version,
+                        actual_version,
+                        detail="concurrent write won the race",
+                    )
             for event in events:
                 session.add(
                     SituationAuditRow(
@@ -525,8 +570,12 @@ class SituationRepository:
                 session.commit()
             except IntegrityError as exc:
                 session.rollback()
-                logger.warning("situation save rolled back sid=%s: %s", sid, exc)
-                raise ValueError(f"audit event_id already stored for {sid}.") from exc
+                if _is_audit_duplicate(exc):
+                    logger.warning("situation save rolled back sid=%s: %s", sid, exc)
+                    raise ValueError(
+                        f"audit event_id already stored for {sid}."
+                    ) from exc
+                raise
             logger.info("situation saved sid=%s version=%s", sid, new_version)
             return new_version
 

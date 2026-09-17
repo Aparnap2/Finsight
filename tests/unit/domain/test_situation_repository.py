@@ -12,9 +12,12 @@ import json
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta, timezone
 from decimal import Decimal
+from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 from sqlalchemy import create_engine
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from finance.domain.financial_situation import FinancialSituation, SituationStatus
@@ -359,3 +362,64 @@ def test_extended_lifecycle_fields_round_trip(
     assert loaded.closed_at is not None
     assert loaded.closed_at.timestamp() == pytest.approx(at_close.timestamp())
     assert loaded.rejection_reason is None
+
+
+def test_db_duplicate_audit_event_translates_to_valueerror(
+    repo: SituationRepository,
+) -> None:
+    """A stored audit event_id re-saved surfaces ValueError on every backend."""
+    repo.save(_situation(), audit_events=[_audit("EVT-DUP")])
+    with pytest.raises(ValueError, match="already stored"):
+        repo.save(_situation(), audit_events=[_audit("EVT-DUP")])
+
+
+def test_non_audit_integrity_error_propagates(
+    sqlite_repo: SituationRepository,
+) -> None:
+    """A non-audit IntegrityError is re-raised, never mistranslated."""
+
+    def _boom(self: Session) -> None:
+        raise IntegrityError(
+            "INSERT INTO situations",
+            {},
+            Exception("UNIQUE constraint failed: situations.pk"),
+        )
+
+    with (
+        patch.object(Session, "commit", autospec=True, side_effect=_boom),
+        pytest.raises(IntegrityError),
+    ):
+        sqlite_repo.save(_situation())
+
+
+def test_race_loser_raises_concurrency_error() -> None:
+    """Zero-row conditional UPDATE surfaces as ConcurrencyError."""
+    import finance.domain.situation_repository as repo_module
+
+    row = MagicMock(version=1)
+    query = MagicMock()
+    query.filter.return_value = query
+    query.one_or_none.return_value = row
+    query.update.return_value = 0
+    session = MagicMock()
+    session.query.return_value = query
+    with patch.object(repo_module, "Session", return_value=session):
+        repo = SituationRepository(create_engine("sqlite:///:memory:"))
+        with pytest.raises(ConcurrencyError):
+            repo.save(_situation())
+
+
+def test_concurrent_handles_no_lost_update(tmp_path: Path) -> None:
+    """Two handles on one file DB: stale writer loses loudly, winner persists."""
+    url = f"sqlite:///{tmp_path}/race.db"
+    first = SituationRepository(create_engine(url))
+    second = SituationRepository(create_engine(url))
+    first.save(_situation())
+    second.save(_situation(status=SituationStatus.TRIAGED))
+    with pytest.raises(ConcurrencyError):
+        first.save(
+            _situation(status=SituationStatus.CORRELATED), expected_version=1
+        )
+    loaded = first.get_for_company("meridian", SID_1)
+    assert loaded is not None
+    assert loaded.status is SituationStatus.TRIAGED
