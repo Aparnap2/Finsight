@@ -423,3 +423,84 @@ def test_concurrent_handles_no_lost_update(tmp_path: Path) -> None:
     loaded = first.get_for_company("meridian", SID_1)
     assert loaded is not None
     assert loaded.status is SituationStatus.TRIAGED
+
+
+def test_duplicate_audit_leaves_stored_state_untouched(
+    repo: SituationRepository,
+) -> None:
+    """A duplicate-event ValueError changes neither version nor trail."""
+    repo.save(_situation(), audit_events=[_audit("EVT-DUP")])
+    with pytest.raises(ValueError, match="already stored"):
+        repo.save(_situation(), audit_events=[_audit("EVT-DUP")])
+    assert [e.event_id for e in repo.audit_trail("meridian", SID_1)] == ["EVT-DUP"]
+    assert repo.save(_situation(), expected_version=1) == 2
+
+
+def test_in_batch_duplicate_event_ids_rejected_before_write(
+    repo: SituationRepository,
+) -> None:
+    """Two same-id events in one batch abort before anything is stored."""
+    with pytest.raises(ValueError, match="duplicate"):
+        repo.save(_situation(), audit_events=[_audit("EVT-X"), _audit("EVT-X")])
+    assert repo.get_for_company("meridian", SID_1) is None
+    assert repo.audit_trail("meridian", SID_1) == []
+
+
+def test_threaded_memory_saves_serialize() -> None:
+    """Concurrent blind saves on one memory repo: unique versions, no loss."""
+    import threading
+
+    repo = SituationRepository()
+    returned: list[int] = []
+    guard = threading.Lock()
+
+    def _worker(offset: int) -> None:
+        for index in range(5):
+            version = repo.save(
+                _situation(),
+                audit_events=[_audit(f"EVT-T{offset}-{index}")],
+            )
+            with guard:
+                returned.append(version)
+
+    threads = [threading.Thread(target=_worker, args=(n,)) for n in range(4)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert sorted(returned) == list(range(1, 21))
+    assert len(repo.audit_trail("meridian", SID_1)) == 20
+
+
+def test_threaded_file_db_no_partial_writes(tmp_path: Path) -> None:
+    """Interleaved writers: losers fail loudly, winners leave full rows."""
+    import threading
+
+    from finance.domain.situation_repository import ConcurrencyError
+
+    repo = SituationRepository(create_engine(f"sqlite:///{tmp_path}/mix.db"))
+    succeeded: list[int] = []
+    guard = threading.Lock()
+
+    def _worker(offset: int) -> None:
+        for index in range(5):
+            try:
+                version = repo.save(
+                    _situation(),
+                    audit_events=[_audit(f"EVT-F{offset}-{index}")],
+                )
+            except ConcurrencyError:
+                continue
+            with guard:
+                succeeded.append(version)
+
+    threads = [threading.Thread(target=_worker, args=(n,)) for n in range(4)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    wins = len(succeeded)
+    assert wins >= 1
+    assert sorted(succeeded) == list(range(1, wins + 1))
+    assert len(repo.audit_trail("meridian", SID_1)) == wins
+    assert repo.save(_situation(), expected_version=wins) == wins + 1

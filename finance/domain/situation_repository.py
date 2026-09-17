@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -303,6 +304,7 @@ class SituationRepository:
     def __init__(self, engine: Engine | None = None) -> None:
         """Bind to ``engine`` (creating tables) or start an empty memory store."""
         self._engine = engine
+        self._lock = threading.Lock()
         self._cases: dict[tuple[str, str], _StoredCase] = {}
         self._audit_events: dict[str, SituationAuditEvent] = {}
         self._audit_order: list[str] = []
@@ -589,34 +591,45 @@ class SituationRepository:
 
         Every check runs before any mutation, so a failure leaves the
         previous snapshot and audit log untouched (same atomicity as
-        the SQL transaction path).
+        the SQL transaction path). The whole check-and-mutate sequence
+        holds ``self._lock`` so concurrent threads serialize exactly
+        like concurrent SQL transactions.
         """
-        key = (situation.company_id, situation.situation_id)
-        current = self._cases.get(key)
-        if current is None:
-            if expected_version is not None and expected_version != 0:
-                raise ConcurrencyError(
-                    situation.situation_id,
-                    expected_version,
-                    0,
-                    detail="claimed version for absent row",
-                )
-            new_version = 1
-        else:
-            actual_version = current["version"]
-            if expected_version is not None and expected_version != actual_version:
-                raise ConcurrencyError(situation.situation_id, expected_version, actual_version)
-            new_version = actual_version + 1
-        for event in events:
-            if event.event_id in self._audit_events:
-                raise ValueError(f"audit event_id already stored: {event.event_id!r}.")
-        self._cases[key] = {
-            "status": situation.status.value,
-            "version": new_version,
-            "payload": canonical_payload_bytes(situation),
-        }
-        for event in events:
-            self._audit_events[event.event_id] = event
-            self._audit_order.append(event.event_id)
-        logger.info("situation saved sid=%s version=%s", situation.situation_id, new_version)
-        return new_version
+        with self._lock:
+            key = (situation.company_id, situation.situation_id)
+            current = self._cases.get(key)
+            if current is None:
+                if expected_version is not None and expected_version != 0:
+                    raise ConcurrencyError(
+                        situation.situation_id,
+                        expected_version,
+                        0,
+                        detail="claimed version for absent row",
+                    )
+                new_version = 1
+            else:
+                actual_version = current["version"]
+                if expected_version is not None and expected_version != actual_version:
+                    raise ConcurrencyError(
+                        situation.situation_id, expected_version, actual_version
+                    )
+                new_version = actual_version + 1
+            for event in events:
+                if event.event_id in self._audit_events:
+                    raise ValueError(
+                        f"audit event_id already stored: {event.event_id!r}."
+                    )
+            self._cases[key] = {
+                "status": situation.status.value,
+                "version": new_version,
+                "payload": canonical_payload_bytes(situation),
+            }
+            for event in events:
+                self._audit_events[event.event_id] = event
+                self._audit_order.append(event.event_id)
+            logger.info(
+                "situation saved sid=%s version=%s",
+                situation.situation_id,
+                new_version,
+            )
+            return new_version
