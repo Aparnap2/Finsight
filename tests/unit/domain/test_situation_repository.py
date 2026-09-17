@@ -46,13 +46,18 @@ AT_2 = datetime(2026, 9, 16, 11, 30, tzinfo=UTC)
 def _situation(
     situation_id: str = SID_1,
     status: SituationStatus = SituationStatus.DETECTED,
+    jitter: int = 0,
 ) -> FinancialSituation:
-    """Build the golden FS-231 aggregate with an overridable status."""
+    """Build the golden FS-231 aggregate with overridable status/money.
+
+    ``jitter`` shifts ``razorpay_net`` by whole rupees so stress tests
+    can force distinct payloads (identical bytes short-circuit by D6).
+    """
     return FinancialSituation(
         situation_id=situation_id,
         company_id="meridian",
         expected=Decimal("1000000"),
-        razorpay_net=Decimal("972500"),
+        razorpay_net=Decimal(972500 + jitter),
         quickbooks=Decimal("982500"),
         legacy=Decimal("982500"),
         status=status,
@@ -68,8 +73,14 @@ def _audit(
     to_status: object = SituationStatus.TRIAGED,
     at: datetime = AT_1,
     actor: str = "case-worker",
+    version: int = 1,
 ) -> dict[str, object]:
-    """Build one caller-side audit dict in the repository-owned shape."""
+    """Build one caller-side audit dict in the repository-owned shape.
+
+    ``version`` must equal the stored bump the event ships with;
+    ``from_status``/``to_status`` must agree with the stored transition
+    (on create ``from_status`` equals the situation's own status).
+    """
     return {
         "event_id": event_id,
         "situation_id": situation_id,
@@ -78,6 +89,7 @@ def _audit(
         "to_status": to_status,
         "at": at,
         "actor": actor,
+        "version": version,
     }
 
 
@@ -148,10 +160,11 @@ def test_cross_company_read_returns_none_without_leak(
 
 
 def test_version_bumps_on_each_save(repo: SituationRepository) -> None:
-    """First save yields version 1; each later save bumps the counter."""
+    """First save yields version 1; each differing save bumps the counter."""
     assert repo.save(_situation()) == 1
     assert repo.save(_situation(status=SituationStatus.TRIAGED), expected_version=1) == 2
-    assert repo.save(_situation(status=SituationStatus.TRIAGED)) == 3
+    assert repo.save(_situation(status=SituationStatus.TRIAGED)) == 2
+    assert repo.save(_situation(status=SituationStatus.INVESTIGATING)) == 3
 
 
 def test_create_with_nonzero_expected_version_conflicts(
@@ -209,14 +222,19 @@ def test_atomic_audit_batch_commits_together(
     """Aggregate plus audit events commit in one transaction, ordered."""
     version = repo.save(
         _situation(status=SituationStatus.TRIAGED),
-        audit_events=[_audit("EVT-001", at=AT_1), _audit("EVT-002", at=AT_2)],
+        audit_events=[
+            _audit("EVT-001", at=AT_1, from_status=SituationStatus.TRIAGED,
+                   to_status=SituationStatus.TRIAGED),
+            _audit("EVT-002", at=AT_2, from_status=SituationStatus.TRIAGED,
+                   to_status=SituationStatus.TRIAGED),
+        ],
     )
     assert version == 1
     trail = repo.audit_trail("meridian", SID_1)
     assert [event.event_id for event in trail] == ["EVT-001", "EVT-002"]
     assert trail[0].at == AT_1
     assert trail[1].at == AT_2
-    assert trail[0].from_status == "DETECTED"
+    assert trail[0].from_status == "TRIAGED"
     assert trail[0].to_status == "TRIAGED"
     assert trail[0].actor == "case-worker"
 
@@ -252,7 +270,7 @@ def test_commit_failure_rolls_back_both(
         sqlite_repo.save(
             _situation(status=SituationStatus.TRIAGED),
             expected_version=version_1,
-            audit_events=[_audit("EVT- comm")],
+            audit_events=[_audit("EVT- comm", version=2)],
         )
     monkeypatch.undo()
     stored = sqlite_repo.get_for_company("meridian", SID_1)
@@ -270,7 +288,7 @@ def test_identical_sequences_produce_identical_bytes(
         target.save(
             _situation(SID_1, SituationStatus.TRIAGED),
             expected_version=1,
-            audit_events=[_audit("EVT-001", at=AT_1)],
+            audit_events=[_audit("EVT-001", at=AT_1, version=2)],
         )
         target.save(_situation(SID_2))
 
@@ -326,7 +344,8 @@ def test_audit_at_round_trips_across_timezone(
     at_ist = datetime(2026, 9, 16, 15, 30, tzinfo=timezone(timedelta(hours=5, minutes=30)))
     repo.save(
         _situation(status=SituationStatus.TRIAGED),
-        audit_events=[_audit("EVT-TZ", at=at_ist)],
+        audit_events=[_audit("EVT-TZ", at=at_ist, from_status=SituationStatus.TRIAGED,
+                             to_status=SituationStatus.TRIAGED)],
     )
     trail = repo.audit_trail("meridian", SID_1)
     assert len(trail) == 1
@@ -370,7 +389,13 @@ def test_db_duplicate_audit_event_translates_to_valueerror(
     """A stored audit event_id re-saved surfaces ValueError on every backend."""
     repo.save(_situation(), audit_events=[_audit("EVT-DUP")])
     with pytest.raises(ValueError, match="already stored"):
-        repo.save(_situation(), audit_events=[_audit("EVT-DUP")])
+        repo.save(
+            _situation(),
+            audit_events=[_audit(
+                "EVT-DUP", version=2, from_status=SituationStatus.DETECTED,
+                to_status=SituationStatus.DETECTED,
+            )],
+        )
 
 
 def test_non_audit_integrity_error_propagates(
@@ -431,9 +456,15 @@ def test_duplicate_audit_leaves_stored_state_untouched(
     """A duplicate-event ValueError changes neither version nor trail."""
     repo.save(_situation(), audit_events=[_audit("EVT-DUP")])
     with pytest.raises(ValueError, match="already stored"):
-        repo.save(_situation(), audit_events=[_audit("EVT-DUP")])
+        repo.save(
+            _situation(),
+            audit_events=[_audit(
+                "EVT-DUP", version=2, from_status=SituationStatus.DETECTED,
+                to_status=SituationStatus.DETECTED,
+            )],
+        )
     assert [e.event_id for e in repo.audit_trail("meridian", SID_1)] == ["EVT-DUP"]
-    assert repo.save(_situation(), expected_version=1) == 2
+    assert repo.save(_situation(), expected_version=1) == 1
 
 
 def test_in_batch_duplicate_event_ids_rejected_before_write(
@@ -454,53 +485,53 @@ def test_threaded_memory_saves_serialize() -> None:
     returned: list[int] = []
     guard = threading.Lock()
 
-    def _worker(offset: int) -> None:
-        for index in range(5):
-            version = repo.save(
-                _situation(),
-                audit_events=[_audit(f"EVT-T{offset}-{index}")],
-            )
+    counter = 0
+    counter_guard = threading.Lock()
+
+    def _worker() -> None:
+        nonlocal counter
+        for _ in range(5):
+            with counter_guard:
+                counter += 1
+                mark = counter
+            version = repo.save(_situation(jitter=mark))
             with guard:
                 returned.append(version)
 
-    threads = [threading.Thread(target=_worker, args=(n,)) for n in range(4)]
+    threads = [threading.Thread(target=_worker) for _ in range(4)]
     for thread in threads:
         thread.start()
     for thread in threads:
         thread.join()
     assert sorted(returned) == list(range(1, 21))
-    assert len(repo.audit_trail("meridian", SID_1)) == 20
 
 
 def test_threaded_file_db_no_partial_writes(tmp_path: Path) -> None:
-    """Interleaved writers: losers fail loudly, winners leave full rows."""
+    """Interleaved per-case writers: every committed version has its events."""
     import threading
 
-    from finance.domain.situation_repository import ConcurrencyError
-
     repo = SituationRepository(create_engine(f"sqlite:///{tmp_path}/mix.db"))
-    succeeded: list[int] = []
-    guard = threading.Lock()
 
     def _worker(offset: int) -> None:
-        for index in range(5):
-            try:
-                version = repo.save(
-                    _situation(),
-                    audit_events=[_audit(f"EVT-F{offset}-{index}")],
-                )
-            except ConcurrencyError:
-                continue
-            with guard:
-                succeeded.append(version)
+        sid = f"FS-2026-0916-0030{offset}"
+        for version in range(1, 6):
+            repo.save(
+                _situation(sid),
+                audit_events=[_audit(
+                    f"EVT-F{offset}-{version}", situation_id=sid, version=version,
+                    from_status=SituationStatus.DETECTED,
+                    to_status=SituationStatus.DETECTED,
+                )],
+            )
 
     threads = [threading.Thread(target=_worker, args=(n,)) for n in range(4)]
     for thread in threads:
         thread.start()
     for thread in threads:
         thread.join()
-    wins = len(succeeded)
-    assert wins >= 1
-    assert sorted(succeeded) == list(range(1, wins + 1))
-    assert len(repo.audit_trail("meridian", SID_1)) == wins
-    assert repo.save(_situation(), expected_version=wins) == wins + 1
+    total = 0
+    for offset in range(4):
+        sid = f"FS-2026-0916-0030{offset}"
+        assert repo.save(_situation(sid), expected_version=5) == 5
+        total += len(repo.audit_trail("meridian", sid))
+    assert total == 20

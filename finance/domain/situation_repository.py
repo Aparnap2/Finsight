@@ -27,6 +27,22 @@ Two backends share one semantic core. Pass an SQLAlchemy ``Engine``
 tables apply to Postgres) or pass nothing for a pure-Python in-memory
 map with identical semantics for fast unit tests.
 
+Durability (P6-02 D4+D5+D6): every audit event is bound to the exact
+stored version it ships with (``version`` must equal the bump result,
+else the save is rejected as stale); every event must agree with the
+stored transition (on create ``from_status`` equals the situation's own
+status, on update ``from_status`` equals the stored status and
+``to_status`` equals the incoming status — agreement only, the
+allowed-state table is never consulted here and stays lifecycle-owned);
+audit rows carry fixed-point ``variance_snapshot`` text plus a
+``prev_hash`` chain verifiable via :meth:`verify_durable_chain`;
+stored ``CLOSED``/``REJECTED`` rows refuse every further save
+(terminal-at-rest, checked before version logic); and a stored row
+re-saved with identical canonical bytes and no audit events
+short-circuits to the current version with no write and no bump.
+Recorded actors are stored verbatim — recorded, never verified (D7):
+this repository checks event shape and agreement only, never authority.
+
 This module imports nothing from ``apps/``, ``agents/``, ``shared/``,
 or ``finance/reconciliation/``.
 """
@@ -38,10 +54,11 @@ import logging
 import threading
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
-from decimal import Decimal
-from typing import Any, TypedDict
+from decimal import Decimal, InvalidOperation
+from enum import Enum
+from typing import Any, TypedDict, get_args
 
-from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 from sqlalchemy import DateTime, Engine, Integer, String, Text, UniqueConstraint
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
@@ -52,6 +69,11 @@ logger = logging.getLogger(__name__)
 
 _STATUS_VALUES = frozenset(item.value for item in SituationStatus)
 """Lifecycle state names accepted on stored rows and audit events."""
+
+_TERMINAL_STATUSES = frozenset(
+    {SituationStatus.CLOSED.value, SituationStatus.REJECTED.value}
+)
+"""Stored statuses that refuse every further save (D5 terminal-at-rest)."""
 
 
 class ConcurrencyError(Exception):
@@ -85,11 +107,40 @@ class ConcurrencyError(Exception):
         )
 
 
+class TerminalStateError(ValueError):
+    """Raised when a save targets a case whose stored row is terminal.
+
+    A ``CLOSED`` or ``REJECTED`` stored row refuses every further save
+    (D5 terminal-at-rest). The check runs before version logic, so a
+    stale ``expected_version`` over a terminal row still surfaces as
+    terminal, never as a concurrency conflict. Subclasses ``ValueError``
+    so generic fail-closed handlers keep working.
+
+    Attributes:
+        situation_id: Aggregate identity the write targeted.
+        stored_status: Terminal status found on the stored row.
+    """
+
+    def __init__(self, situation_id: str, stored_status: str) -> None:
+        """Record the terminal status and build the message."""
+        self.situation_id = situation_id
+        self.stored_status = stored_status
+        super().__init__(
+            f"TERMINAL_STATE for {situation_id}: "
+            f"stored status {stored_status} refuses further saves."
+        )
+
+
 class SituationAuditEvent(BaseModel):
     """One immutable audit fact bound to a persisted situation version.
 
     Mirrors the sibling-owned emission shape; the repository owns only
     the transactional write path and the tz-aware ``at`` contract.
+    ``version`` binds the event to the exact stored version it ships
+    with (D4a); ``variance_snapshot`` is fixed-point ``Decimal`` text or
+    ``None`` (D4c); ``prev_hash`` chains to the previous event id for
+    the case, ``''`` for the first (D4c). The actor is recorded verbatim
+    — recorded, never verified (D7).
     """
 
     model_config = ConfigDict(frozen=True, strict=True)
@@ -113,7 +164,16 @@ class SituationAuditEvent(BaseModel):
     """Caller-supplied tz-aware instant; naive datetimes are rejected."""
 
     actor: str
-    """Caller identity recorded for the event."""
+    """Caller identity recorded for the event (never verified)."""
+
+    version: int = Field(ge=1)
+    """New stored version this event ships with; stale events rejected."""
+
+    variance_snapshot: str | None = None
+    """Post-transition variance as fixed-point Decimal text (or None)."""
+
+    prev_hash: str = ""
+    """Event id of the preceding record for the case; '' for the first."""
 
     @field_validator("event_id", "situation_id", "company_id", "actor")
     @classmethod
@@ -138,6 +198,26 @@ class SituationAuditEvent(BaseModel):
         if value.tzinfo is None or value.tzinfo.utcoffset(value) is None:
             raise ValueError("audit 'at' must be tz-aware (caller supplies time).")
         return value
+
+    @field_validator("variance_snapshot", mode="before")
+    @classmethod
+    def _normalize_variance(cls, value: Any) -> str | None:
+        """Accept Decimal|str|None, storing fixed-point text (Decimal-only)."""
+        if value is None:
+            return None
+        if isinstance(value, Decimal):
+            return format(value, "f")
+        if isinstance(value, str):
+            try:
+                return format(Decimal(value), "f")
+            except InvalidOperation as err:
+                raise ValueError(
+                    f"audit variance_snapshot is not Decimal text: {value!r}."
+                ) from err
+        raise ValueError(
+            "audit variance_snapshot must be Decimal, Decimal text, or None; "
+            f"got {type(value).__name__}."
+        )
 
 
 class Base(DeclarativeBase):
@@ -176,6 +256,9 @@ class SituationAuditRow(Base):
     to_status: Mapped[str] = mapped_column(String, nullable=False)
     actor: Mapped[str] = mapped_column(String, nullable=False)
     at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    variance_snapshot: Mapped[str | None] = mapped_column(Text, nullable=True)
+    prev_hash: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class _StoredCase(TypedDict):
@@ -211,26 +294,96 @@ def _decimal_text(value: Decimal) -> str:
     return format(value, "f")
 
 
+def _canonical_verification(value: Any) -> dict[str, Any] | None:
+    """Normalize the sibling-owned verification object to canonical dict.
+
+    Accepts a mapping, a Pydantic model (via ``model_dump``), or any
+    object exposing the canonical verification attributes, and returns
+    the fixed six-key shape (``checked_at`` ISO text, ``execution_id``,
+    ``legacy_total_after`` fixed-point text, ``situation_id``,
+    ``variance_after`` fixed-point text, ``verdict`` value) with sorted
+    keys at dump time. ``None`` stays ``None``. Money stays
+    ``Decimal``-exact; unknown shapes pass through for the sibling
+    layer to judge — this function never raises on shape alone.
+    """
+    if value is None:
+        return None
+    if isinstance(value, Mapping):
+        data = dict(value)
+    elif hasattr(value, "model_dump") and callable(value.model_dump):
+        dumped = value.model_dump()
+        data = dict(dumped) if isinstance(dumped, dict) else {}
+    else:
+        data = {
+            key: getattr(value, key)
+            for key in (
+                "checked_at",
+                "execution_id",
+                "legacy_total_after",
+                "situation_id",
+                "variance_after",
+                "verdict",
+            )
+            if hasattr(value, key)
+        }
+    checked_at = data.get("checked_at")
+    if isinstance(checked_at, datetime):
+        data["checked_at"] = checked_at.isoformat()
+    for money_key in ("legacy_total_after", "variance_after"):
+        money = data.get(money_key)
+        if isinstance(money, Decimal):
+            data[money_key] = format(money, "f")
+    verdict = data.get("verdict")
+    if isinstance(verdict, Enum):
+        data["verdict"] = verdict.value
+    return {
+        "checked_at": data.get("checked_at"),
+        "execution_id": data.get("execution_id"),
+        "legacy_total_after": data.get("legacy_total_after"),
+        "situation_id": data.get("situation_id"),
+        "variance_after": data.get("variance_after"),
+        "verdict": data.get("verdict"),
+    }
+
+
 def canonical_payload_bytes(situation: FinancialSituation) -> bytes:
     """Return the deterministic canonical bytes for an aggregate.
 
     Sorted keys, compact separators, and fixed-point ``Decimal``
     encoding make the output a pure function of the aggregate: equal
     aggregates always yield equal bytes on any backend. Covers the
-    four P6-01 money states plus the four P6-02 optional lifecycle
-    fields (``None`` encodes as JSON null; datetimes as ISO text).
+    seventeen-key shape — the P6-01 money states, the P6-02 optional
+    lifecycle fields, and the sibling-owned extensions (``decider_role``,
+    ``evidence_ids``, ``hypothesis_count``, ``proposal_hash``,
+    ``proposal_version``, ``verification``) read tolerantly via
+    ``getattr`` so rows written before (or without) those fields still
+    encode with ``None``/``[]`` defaults and never lose data silently.
+    ``None`` encodes as JSON null; datetimes as ISO text; the nested
+    verification object uses the fixed six-key canonical form.
     """
+    decider = getattr(situation, "decider_role", None)
+    if isinstance(decider, Enum):
+        decider = decider.value
+    evidence = getattr(situation, "evidence_ids", None)
     payload = {
         "closed_at": situation.closed_at.isoformat() if situation.closed_at else None,
         "company_id": situation.company_id,
+        "decider_role": decider,
+        "evidence_ids": list(evidence) if evidence is not None else [],
         "expected": _decimal_text(situation.expected),
+        "hypothesis_count": getattr(situation, "hypothesis_count", None),
         "legacy": _decimal_text(situation.legacy),
-        "proposal_ref": situation.proposal_ref,
+        "proposal_hash": getattr(situation, "proposal_hash", None),
+        "proposal_ref": getattr(situation, "proposal_ref", None),
+        "proposal_version": getattr(situation, "proposal_version", None),
         "quickbooks": _decimal_text(situation.quickbooks),
         "razorpay_net": _decimal_text(situation.razorpay_net),
         "rejection_reason": situation.rejection_reason,
         "situation_id": situation.situation_id,
         "status": situation.status.value,
+        "verification": _canonical_verification(
+            getattr(situation, "verification", None)
+        ),
         "verified_total": (
             _decimal_text(situation.verified_total)
             if situation.verified_total is not None
@@ -240,14 +393,83 @@ def canonical_payload_bytes(situation: FinancialSituation) -> bytes:
     return json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
 
+def _enum_member(annotation: Any, value: str) -> Any:
+    """Coerce ``str`` to an enum member using a model field annotation.
+
+    Unwraps ``Optional``/``Union`` annotations for the first ``Enum``
+    candidate; returns ``value`` unchanged when no candidate matches, so
+    the frozen aggregate validates (or ignores, for unknown extras) the
+    raw value itself.
+    """
+    candidates: list[type[Enum]] = []
+    if isinstance(annotation, type) and issubclass(annotation, Enum):
+        candidates.append(annotation)
+    else:
+        for arg in get_args(annotation):
+            try:
+                if isinstance(arg, type) and issubclass(arg, Enum):
+                    candidates.append(arg)
+            except TypeError:
+                continue
+    for candidate in candidates:
+        try:
+            return candidate(value)
+        except ValueError:
+            continue
+    return value
+
+
+def _rehydrate_verification(raw: dict[str, Any]) -> dict[str, Any]:
+    """Coerce a canonical verification dict back to model-typed values.
+
+    Money strings return to ``Decimal``, ISO text to ``datetime``, and
+    verdict strings to enum members when the sibling-owned nested model
+    resolves from the aggregate annotation. Every step is best-effort:
+    unknown shapes pass through for ``model_validate`` to judge, and
+    absent keys stay absent so old rows still load.
+    """
+    data = dict(raw)
+    for money_key in ("legacy_total_after", "variance_after"):
+        if data.get(money_key) is not None and not isinstance(
+            data[money_key], Decimal
+        ):
+            data[money_key] = Decimal(str(data[money_key]))
+    if data.get("checked_at") is not None and isinstance(data["checked_at"], str):
+        data["checked_at"] = datetime.fromisoformat(data["checked_at"])
+    if isinstance(data.get("verdict"), str):
+        try:
+            vfield = FinancialSituation.model_fields.get("verification")
+            vann: Any = vfield.annotation if vfield is not None else None
+            nested: Any = None
+            if isinstance(vann, type) and hasattr(vann, "model_fields"):
+                nested = vann
+            else:
+                for arg in get_args(vann):
+                    if isinstance(arg, type) and hasattr(arg, "model_fields"):
+                        nested = arg
+                        break
+            if nested is not None:
+                verdict_field = nested.model_fields.get("verdict")
+                if verdict_field is not None:
+                    data["verdict"] = _enum_member(
+                        verdict_field.annotation, data["verdict"]
+                    )
+        except Exception:  # noqa: BLE001 - best-effort coercion only
+            pass
+    return data
+
+
 def _rehydrate(payload: str) -> FinancialSituation:
     """Rebuild an aggregate from its canonical payload (Decimal-exact).
 
     The frozen aggregate validates in strict mode, so canonical JSON
     strings are converted back to ``Decimal``, ``datetime``, and
     ``SituationStatus`` before ``model_validate`` — parsing is exact,
-    never float-based. Absent optional keys default to ``None`` so
-    P6-01-shaped rows still rehydrate.
+    never float-based. Absent optional keys (including every
+    sibling-owned extension) fall through to model defaults so P6-01-
+    shaped rows still rehydrate; unknown extras are ignored by the
+    frozen model. Sibling enums resolve via field annotations when the
+    extended aggregate is present, else raw values pass through.
     """
     data: dict[str, Any] = json.loads(payload)
     for key in ("expected", "razorpay_net", "quickbooks", "legacy"):
@@ -257,6 +479,15 @@ def _rehydrate(payload: str) -> FinancialSituation:
     if data.get("closed_at") is not None:
         data["closed_at"] = datetime.fromisoformat(data["closed_at"])
     data["status"] = SituationStatus(data["status"])
+    decider_field = FinancialSituation.model_fields.get("decider_role")
+    if decider_field is not None and isinstance(data.get("decider_role"), str):
+        data["decider_role"] = _enum_member(
+            decider_field.annotation, data["decider_role"]
+        )
+    if isinstance(data.get("evidence_ids"), (list, tuple)):
+        data["evidence_ids"] = tuple(data["evidence_ids"])
+    if isinstance(data.get("verification"), dict):
+        data["verification"] = _rehydrate_verification(data["verification"])
     return FinancialSituation.model_validate(data)
 
 
@@ -271,6 +502,11 @@ def _coerce_audit_event(
     situation: FinancialSituation, raw: Mapping[str, Any]
 ) -> SituationAuditEvent:
     """Validate one caller-supplied audit dict against the saved aggregate.
+
+    Accepts the sibling-owned shape plus the durable options
+    ``version`` (required, ``>= 1``), ``variance_snapshot``
+    (``Decimal``|``str``|``None`` normalized to fixed-point text) and
+    ``prev_hash`` (``str``, blank until linked at write time).
 
     Raises:
         ValueError: If the dict is malformed, carries a naive ``at``,
@@ -291,6 +527,68 @@ def _coerce_audit_event(
             f"does not match {situation.company_id}/{situation.situation_id}."
         )
     return event
+
+
+def _link_batch(
+    events: list[SituationAuditEvent], last_stored_event_id: str
+) -> list[SituationAuditEvent]:
+    """Auto-link blank ``prev_hash`` values to the predecessor event id.
+
+    The first blank links to the last stored event for the case (``''``
+    when the case has no history); later blanks chain within the batch.
+    Caller-set values — including forged links — are preserved as-is so
+    :meth:`SituationRepository.verify_durable_chain` can detect
+    tampering. Actors are recorded, never verified (D7): this path
+    checks linkage shape only, never authority.
+    """
+    base = last_stored_event_id
+    linked: list[SituationAuditEvent] = []
+    for event in events:
+        if event.prev_hash:
+            linked.append(event)
+        else:
+            linked.append(event.model_copy(update={"prev_hash": base}))
+        base = event.event_id
+    return linked
+
+
+def _check_event_agreement(
+    *,
+    events: list[SituationAuditEvent],
+    situation: FinancialSituation,
+    stored_status: str | None,
+    new_version: int,
+) -> None:
+    """Enforce D4a version binding and D4b transition agreement.
+
+    D4a: every event's ``version`` must equal the new stored version
+    being written (stale events are rejected, never rebound). D4b: on
+    create (``stored_status`` is ``None``) each event's ``from_status``
+    must equal the situation's own status (the event records arrival,
+    not travel); on update ``from_status`` must equal the stored status
+    and ``to_status`` must equal the incoming status. The
+    allowed-transition table is never consulted here — agreement, not
+    authorization, stays lifecycle-owned. Actors recorded-not-verified.
+    """
+    current = situation.status.value
+    for event in events:
+        if event.version != new_version:
+            raise ValueError(
+                f"stale audit event {event.event_id!r}: version {event.version} "
+                f"!= new stored version {new_version}."
+            )
+        if stored_status is None:
+            if event.from_status != current:
+                raise ValueError(
+                    f"audit event {event.event_id!r} disagrees on create: "
+                    f"from_status {event.from_status!r} != status {current!r}."
+                )
+        elif event.from_status != stored_status or event.to_status != current:
+            raise ValueError(
+                f"audit event {event.event_id!r} disagrees: "
+                f"{event.from_status!r}->{event.to_status!r} against "
+                f"stored {stored_status!r} -> incoming {current!r}."
+            )
 
 
 class SituationRepository:
@@ -329,22 +627,42 @@ class SituationRepository:
         absent row conflicts against actual 0.
 
         Audit dicts commit in the same transaction as the aggregate row:
-        any invalid event (or any commit failure) rolls back both.
+        any invalid event (or any commit failure) rolls back both. Each
+        event must carry ``version`` equal to the new stored version
+        being written (D4a, stale events rejected) and must agree with
+        the stored transition — on create ``from_status`` equals the
+        situation's own status, on update ``from_status`` equals the
+        stored status and ``to_status`` equals the incoming status (D4b,
+        agreement only; the allowed-state table stays lifecycle-owned).
+        Blank ``prev_hash`` values auto-link to the predecessor event id
+        (``''`` for the first); caller-set links are preserved verbatim
+        for tamper detection. A stored ``CLOSED``/``REJECTED`` row
+        refuses every further save with :class:`TerminalStateError`,
+        checked before version logic (D5). A stored row re-saved with
+        identical canonical bytes and no audit events short-circuits:
+        the current version returns with no write and no bump (D6); any
+        supplied events take the normal path (duplicate ids still
+        rejected). Recorded actors are stored verbatim — recorded, never
+        verified (D7).
 
         Args:
             situation: Frozen aggregate snapshot to persist.
             expected_version: Version the caller read, or ``None``/``0``.
             audit_events: Caller-side audit dicts in the sibling-owned
-                shape; ``at`` must be tz-aware (the repository never
-                mints time).
+                shape plus ``version`` (required, ``>= 1``) and optional
+                ``variance_snapshot``/``prev_hash``; ``at`` must be
+                tz-aware (the repository never mints time).
 
         Returns:
-            The new stored version.
+            The new stored version (or the current version on a D6
+            short-circuit).
 
         Raises:
             ConcurrencyError: On stale or claimed-but-absent versions.
-            ValueError: On malformed, mismatched, or duplicate audit
-                events.
+            TerminalStateError: When the stored row is ``CLOSED`` or
+                ``REJECTED`` (a ``ValueError`` subclass).
+            ValueError: On malformed, mismatched, stale-versioned,
+                disagreeing, or duplicate audit events.
         """
         events = [_coerce_audit_event(situation, raw) for raw in (audit_events or [])]
         seen: set[str] = set()
@@ -448,6 +766,9 @@ class SituationRepository:
                         to_status=row.to_status,
                         at=_as_utc(row.at),
                         actor=row.actor,
+                        version=row.version,
+                        variance_snapshot=row.variance_snapshot,
+                        prev_hash=row.prev_hash or "",
                     )
                     for row in rows
                 ]
@@ -457,6 +778,47 @@ class SituationRepository:
             if (event := self._audit_events[event_id]).company_id == company
             and event.situation_id == sid
         ]
+
+    def verify_durable_chain(self, company_id: str, situation_id: str) -> bool:
+        """Verify the durable hash-chain for one case (D4c tamper-evidence).
+
+        The first stored event must carry a blank ``prev_hash`` and every
+        later event must name its immediate predecessor's ``event_id``.
+        Caller-forged links (preserved verbatim at write time) surface as
+        ``False`` here. An empty trail — including wrong-company or blank
+        inputs, scoped like :meth:`get_for_company` — verifies vacuously
+        as ``True`` (no contradicting rows).
+        """
+        company = company_id.strip()
+        sid = situation_id.strip()
+        if not company or not sid:
+            return True
+        if self._engine is not None:
+            with Session(self._engine) as session:
+                rows = (
+                    session.query(SituationAuditRow)
+                    .filter(
+                        SituationAuditRow.company_id == company,
+                        SituationAuditRow.situation_id == sid,
+                    )
+                    .order_by(SituationAuditRow.id.asc())
+                    .all()
+                )
+                chain = [
+                    (row.event_id, row.prev_hash or "") for row in rows
+                ]
+        else:
+            chain = [
+                (event.event_id, event.prev_hash)
+                for event_id in self._audit_order
+                if (event := self._audit_events[event_id]).company_id == company
+                and event.situation_id == sid
+            ]
+        for index, (_event_id, prev_hash) in enumerate(chain):
+            wanted = "" if index == 0 else chain[index - 1][0]
+            if prev_hash != wanted:
+                return False
+        return True
 
     def stored_payload(self, company_id: str, situation_id: str) -> bytes | None:
         """Return the canonical stored bytes for one case, if visible.
@@ -498,7 +860,8 @@ class SituationRepository:
         assert self._engine is not None
         company = situation.company_id
         sid = situation.situation_id
-        payload_text = canonical_payload_bytes(situation).decode("utf-8")
+        payload_bytes = canonical_payload_bytes(situation)
+        payload_text = payload_bytes.decode("utf-8")
         with Session(self._engine) as session:
             row = (
                 session.query(SituationRow)
@@ -508,12 +871,46 @@ class SituationRepository:
                 )
                 .one_or_none()
             )
+            stored_status: str | None = row.status if row is not None else None
+            if row is not None and row.status in _TERMINAL_STATUSES:
+                raise TerminalStateError(sid, row.status)
             if row is None:
                 if expected_version is not None and expected_version != 0:
                     raise ConcurrencyError(
                         sid, expected_version, 0, detail="claimed version for absent row"
                     )
                 new_version = 1
+            else:
+                actual_version = row.version
+                if expected_version is not None and expected_version != actual_version:
+                    raise ConcurrencyError(sid, expected_version, actual_version)
+                new_version = actual_version + 1
+                if not events and payload_bytes == row.payload.encode("utf-8"):
+                    logger.info(
+                        "situation save short-circuited sid=%s version=%s",
+                        sid,
+                        actual_version,
+                    )
+                    return actual_version
+            _check_event_agreement(
+                events=events,
+                situation=situation,
+                stored_status=stored_status,
+                new_version=new_version,
+            )
+            last_id_row = (
+                session.query(SituationAuditRow.event_id)
+                .filter(
+                    SituationAuditRow.company_id == company,
+                    SituationAuditRow.situation_id == sid,
+                )
+                .order_by(SituationAuditRow.id.desc())
+                .first()
+            )
+            linked = _link_batch(
+                events, last_id_row[0] if last_id_row is not None else ""
+            )
+            if row is None:
                 session.add(
                     SituationRow(
                         company_id=company,
@@ -556,7 +953,7 @@ class SituationRepository:
                         actual_version,
                         detail="concurrent write won the race",
                     )
-            for event in events:
+            for event in linked:
                 session.add(
                     SituationAuditRow(
                         event_id=event.event_id,
@@ -566,6 +963,9 @@ class SituationRepository:
                         to_status=event.to_status,
                         actor=event.actor,
                         at=event.at.astimezone(UTC),
+                        version=event.version,
+                        variance_snapshot=event.variance_snapshot,
+                        prev_hash=event.prev_hash,
                     )
                 )
             try:
@@ -598,6 +998,9 @@ class SituationRepository:
         with self._lock:
             key = (situation.company_id, situation.situation_id)
             current = self._cases.get(key)
+            stored_status: str | None = current["status"] if current is not None else None
+            if current is not None and current["status"] in _TERMINAL_STATUSES:
+                raise TerminalStateError(situation.situation_id, current["status"])
             if current is None:
                 if expected_version is not None and expected_version != 0:
                     raise ConcurrencyError(
@@ -614,7 +1017,28 @@ class SituationRepository:
                         situation.situation_id, expected_version, actual_version
                     )
                 new_version = actual_version + 1
-            for event in events:
+                if not events and canonical_payload_bytes(situation) == current["payload"]:
+                    logger.info(
+                        "situation save short-circuited sid=%s version=%s",
+                        situation.situation_id,
+                        actual_version,
+                    )
+                    return actual_version
+            _check_event_agreement(
+                events=events,
+                situation=situation,
+                stored_status=stored_status,
+                new_version=new_version,
+            )
+            last_stored = ""
+            for event_id in self._audit_order:
+                prior = self._audit_events[event_id]
+                if prior.company_id == situation.company_id and (
+                    prior.situation_id == situation.situation_id
+                ):
+                    last_stored = prior.event_id
+            linked = _link_batch(events, last_stored)
+            for event in linked:
                 if event.event_id in self._audit_events:
                     raise ValueError(
                         f"audit event_id already stored: {event.event_id!r}."
@@ -624,7 +1048,7 @@ class SituationRepository:
                 "version": new_version,
                 "payload": canonical_payload_bytes(situation),
             }
-            for event in events:
+            for event in linked:
                 self._audit_events[event.event_id] = event
                 self._audit_order.append(event.event_id)
             logger.info(

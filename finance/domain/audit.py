@@ -80,6 +80,13 @@ class AuditEvent(BaseModel):
     prev_hash: str = ""
     """Event id of the preceding record; empty when unlinked."""
 
+    version: int | None = None
+    """Stored version this event ships with (D4a parity with durable rows).
+
+    Optional so existing volatile-only flows keep working; when set it
+    must be ``>= 1``. The repository requires it on durable writes.
+    """
+
     @field_validator("event_id")
     @classmethod
     def _validate_event_id(cls, value: str) -> str:
@@ -95,6 +102,17 @@ class AuditEvent(BaseModel):
         if value != "meridian":
             raise ValueError(
                 "company_id must be 'meridian' (single-company boundary), "
+                f"got {value!r}."
+            )
+        return value
+
+    @field_validator("version")
+    @classmethod
+    def _validate_version(cls, value: int | None) -> int | None:
+        """Require a positive version whenever one is pinned."""
+        if value is not None and value < 1:
+            raise ValueError(
+                "version must be >= 1 when set, "
                 f"got {value!r}."
             )
         return value
