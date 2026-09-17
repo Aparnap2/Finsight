@@ -227,3 +227,32 @@ def test_pinned_ref_travels_proposed_to_approved() -> None:
     assert approved.proposal_version == 1
     assert approved.decider_role == "manager"
     assert approved.situation_id == SITUATION_ID
+
+
+def test_fs231_resolution_proven_at_close() -> None:
+    """Close proves the outcome: 992500 bound, pending reconciles, residual 0.
+
+    The business assertion the state-walk alone cannot make: the ₹10,000
+    discrepancy is actually resolved (legacy 982500 + correction 10000 =
+    992500), the pending ₹7,500 reconciles to the ₹10,00,000 expected
+    total, and the residual sits within tolerance. Closure is earned.
+    """
+    log = AuditLog()
+    situation = _walk_chain(
+        _fs231(FULL_CHAIN[0]),
+        log,
+        legacy_total_after=Decimal("992500"),
+    )
+    assert situation.status is SituationStatus.CLOSED
+    report = situation.verification
+    assert report is not None
+    assert report.verdict.value == "VERIFIED"
+    assert report.legacy_total_after == Decimal("992500")
+    assert report.legacy_total_after - Decimal("982500") == Decimal("10000")
+    assert report.legacy_total_after + Decimal("7500") == Decimal("1000000")
+    assert abs(report.variance_after) <= Decimal("100")
+    assert report.situation_id == SITUATION_ID
+    assert report.execution_id == "LEGACY-20260916-0042"
+    assert situation.proposal_hash == "PROP-231-v1"
+    assert len(log) == 9
+    assert log.verify_chain() is True

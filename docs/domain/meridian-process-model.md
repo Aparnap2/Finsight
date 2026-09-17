@@ -141,6 +141,18 @@ Human decision on Slack, bound to one immutable proposal hash.
 
 One decision per proposal hash. Double-approve is rejected.
 
+### 1.8.1 Authority Boundary (D7)
+
+In-domain `actor` / `decider_role` values are **recorded claims, never
+verified identity**. The deterministic domain checks conformance it can
+compute (tier band vs recorded role, hash presence, version floor) and
+records the outcome; authentication and authorization are enforced
+upstream — RBAC at the API boundary (P5) and the Slack approval
+transport (P6-07). No domain transition mints authority, and no audit
+event proves who a human is, only what was claimed when. Tier-conformance
+checks are recorded conformance evidence for reviewers, not
+authorization proofs.
+
 ### 1.9 ExecutionRecord
 
 Deterministic S3 transport of a fixed-width correction file.
