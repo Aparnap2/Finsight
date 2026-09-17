@@ -4,42 +4,50 @@ Central object of FinSight per ``docs/domain/meridian-process-model.md``
 (section 1.6): one detected discrepancy, one case. The aggregate is a
 frozen Pydantic v2 model (strict mode, ``Decimal``-only money) scoped to
 the single company ``meridian``. State changes never mutate: use
-:meth:`FinancialSituation.transition_to`, which enforces the lifecycle
-in section 2 of the process model.
+:meth:`FinancialSituation.transition_to`, which enforces the canonical
+lifecycle in ``finance/domain/lifecycle.py`` (spec section 2).
+
+P6-02 adds optional lifecycle-only evidence (``proposal_ref``,
+``verified_total``, ``closed_at``, ``rejection_reason``) plus the
+:meth:`FinancialSituation.record_verification` helper. All default to
+``None`` so P6-01 construction stays valid. Lifecycle state only: this
+module never writes ledgers.
+
+P6-02 gates (D1+D2+D3+D8) add further additive fields — ``proposal_hash``,
+``proposal_version``, ``decider_role``, ``evidence_ids``,
+``hypothesis_count``, ``verification`` — all with safe defaults so older
+construction stays valid. The enforced gates live as standalone predicates
+in ``finance/domain/lifecycle.py`` and :meth:`transition_to` calls them on
+the relevant paths (un-bypassable by design): evidence for ``PROPOSED``
+(D3), pinned proposal plus tier-conformant decider for ``APPROVED`` (D8),
+bound accepted ``VerificationReport`` for ``CLOSED`` (D1), and the proposal
+freeze past approval on every post-approval transition (D2).
 """
 
 import re
+from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
+from finance.business_rules.meridian import CompanyConfiguration
 from finance.domain._types import MoneyDecimal
+from finance.domain.lifecycle import (
+    ALLOWED_TRANSITIONS,
+    assert_transition_allowed,
+    require_decider_authority_for_approval,
+    require_evidence_for_proposal,
+    require_proposal_frozen,
+    require_verification_for_close,
+)
+from finance.domain.verification import VerificationReport
 
 _SITUATION_ID_PATTERN = re.compile(r"FS-\d{4}-\d{4}-\d{5}")
 """Shape ``FS-YYYY-MMDD-NNNNN``, e.g. ``FS-2026-0916-00231``."""
 
-_ALLOWED_TRANSITIONS: dict[str, frozenset[str]] = {
-    "DETECTED": frozenset({"TRIAGED"}),
-    "TRIAGED": frozenset({"INVESTIGATING"}),
-    "INVESTIGATING": frozenset({"CORRELATED", "ESCALATED"}),
-    "CORRELATED": frozenset({"EXPLAINED", "ESCALATED"}),
-    "EXPLAINED": frozenset({"PROPOSED", "ESCALATED"}),
-    "PROPOSED": frozenset({"APPROVED", "REJECTED", "ESCALATED"}),
-    "APPROVED": frozenset({"EXECUTING", "ESCALATED"}),
-    "EXECUTING": frozenset({"VERIFYING", "ESCALATED"}),
-    "VERIFYING": frozenset({"CLOSED", "INVESTIGATING", "ESCALATED"}),
-    "ESCALATED": frozenset({"INVESTIGATING", "PROPOSED"}),
-    "REJECTED": frozenset(),
-    "CLOSED": frozenset(),
-}
-"""Forward chain plus side states, mirroring section 2.1 of the spec.
-
-Every non-terminal state may escalate; ``ESCALATED`` re-enters only via
-``INVESTIGATING`` or ``PROPOSED`` (a new proposal version). ``REJECTED``
-and ``CLOSED`` are terminal: re-entry happens through a new version,
-never through a transition on the same aggregate.
-"""
+__all__ = ["ALLOWED_TRANSITIONS", "SituationStatus", "FinancialSituation"]
+"""Re-exported canonical table, lifecycle states, and the aggregate."""
 
 
 class SituationStatus(StrEnum):
@@ -114,6 +122,41 @@ class FinancialSituation(BaseModel):
     status: SituationStatus
     """Current lifecycle state."""
 
+    proposal_ref: str | None = None
+    """Pinned proposal reference (immutable proposal hash), set by PROPOSED."""
+
+    verified_total: MoneyDecimal | None = None
+    """Deterministic re-reconcile total, INR; set via record_verification."""
+
+    closed_at: datetime | None = None
+    """Timezone-aware close timestamp; caller-supplied on transition to CLOSED."""
+
+    rejection_reason: str | None = None
+    """Refusal reason recorded when a proposal version is REJECTED."""
+
+    proposal_hash: str | None = None
+    """Immutable proposal hash pinned at approval (D2 freeze, D8 gate)."""
+
+    proposal_version: int = 0
+    """Proposal version; approval requires version >= 1 (D8 gate)."""
+
+    decider_role: str | None = None
+    """Recorded decider role (``manager`` or ``director``).
+
+    Recorded, not verified (D7 principle): the tier check is a recorded
+    conformance check against the deterministic variance band, not an
+    authentication of the human behind the Slack signal.
+    """
+
+    evidence_ids: tuple[str, ...] = ()
+    """Evidence ids supporting the proposal (D3 gate needs >= 1)."""
+
+    hypothesis_count: int = 0
+    """Number of ranked hypotheses (D3 gate needs >= 1)."""
+
+    verification: VerificationReport | None = None
+    """Accepted post-execution report, stored on the close (D1 gate)."""
+
     @field_validator("situation_id")
     @classmethod
     def _validate_situation_id(cls, value: str) -> str:
@@ -135,6 +178,18 @@ class FinancialSituation(BaseModel):
             )
         return value
 
+    @field_validator("closed_at")
+    @classmethod
+    def _validate_closed_at(cls, value: datetime | None) -> datetime | None:
+        """Require timezone-aware timestamps for closed_at when set."""
+        if value is not None and (
+            value.tzinfo is None or value.utcoffset() is None
+        ):
+            raise ValueError(
+                "closed_at must be timezone-aware when set, got a naive datetime."
+            )
+        return value
+
     def variance(self) -> Decimal:
         """Return the residual variance between books and provider net.
 
@@ -148,26 +203,111 @@ class FinancialSituation(BaseModel):
         """
         return self.quickbooks - self.razorpay_net
 
-    def transition_to(self, target: SituationStatus) -> "FinancialSituation":
+    def record_verification(self, verified_total: Decimal) -> "FinancialSituation":
+        """Record the deterministic re-reconcile total while in VERIFYING.
+
+        Per spec section 2.1, verification runs in ``VERIFYING`` and the
+        ``VERIFYING -> CLOSED`` gate is the ``EXECUTION_VERIFIED`` verdict
+        with residual near zero. There is no separate evidence state: this
+        helper stores ``verified_total`` (lifecycle state only, never a
+        ledger write) and keeps the status at ``VERIFYING`` so the caller
+        can then transition to ``CLOSED``.
+
+        Args:
+            verified_total: The re-reconciled total in exact ``Decimal``.
+
+        Returns:
+            A new frozen aggregate with ``verified_total`` set.
+
+        Raises:
+            TypeError: If ``verified_total`` is not a ``Decimal`` (floats
+                forbidden, Decimal-only money).
+            ValueError: If the current status is not ``VERIFYING``.
+        """
+        if not isinstance(verified_total, Decimal):
+            raise TypeError(
+                "verified_total must be a decimal.Decimal for monetary "
+                f"values, got {type(verified_total).__name__}."
+            )
+        if self.status is not SituationStatus.VERIFYING:
+            raise ValueError(
+                "record_verification() is only allowed from VERIFYING "
+                f"(spec section 2.1), current status is {self.status.value}."
+            )
+        return self.model_copy(update={"verified_total": verified_total})
+
+    def transition_to(
+        self,
+        target: SituationStatus,
+        *,
+        at: datetime | None = None,
+        verification: VerificationReport | None = None,
+    ) -> "FinancialSituation":
         """Return a copy in ``target`` state when the move is allowed.
+
+        Validates against the canonical table in
+        ``finance/domain/lifecycle.py`` (spec section 2.1) first — this
+        covers every banned move: execution without approval, close
+        without terminal verification, and any exit from a terminal
+        state. The enforced P6-02 gates then run on their paths
+        (un-bypassable by design; the standalone predicates stay
+        available for testability):
+
+        - ``PROPOSED`` calls ``require_evidence_for_proposal`` (D3):
+          ``evidence_ids`` and ``hypothesis_count`` must be set on self.
+        - ``APPROVED`` calls ``require_decider_authority_for_approval``
+          (D8): non-blank ``proposal_hash``, ``proposal_version >= 1``,
+          and a tier-conformant ``decider_role`` (variance above the
+          manager band requires a director; recorded, not verified).
+        - ``CLOSED`` calls ``require_verification_for_close`` (D1) with
+          tolerance ``CompanyConfiguration().tolerance_minor``: ``at``
+          must be an explicit timezone-aware timestamp (there is no
+          auto-stamp on the close path), ``verification`` must bind to
+          this ``situation_id`` and be accepted at tolerance. The stored
+          copy carries ``verification`` and ``closed_at=at``.
+        - Every transition whose source is at or after ``APPROVED``
+          consults ``require_proposal_frozen`` (D2) comparing the
+          post-transition copy against self, so the pinned
+          ``proposal_hash``/``proposal_version`` cannot drift.
+
+        Field-level invariants (``verified_total`` before close,
+        ``proposal_ref`` before approval, ``rejection_reason`` on reject)
+        remain available as explicit predicates in that module so the
+        frozen P6-01 chain stays constructible; call them before
+        transitioning where the older contract needs them.
 
         Args:
             target: The lifecycle state to move into.
+            at: Caller-supplied timezone-aware close timestamp; required
+                for ``CLOSED``, ignored otherwise.
+            verification: Bound accepted verification report; required
+                for ``CLOSED``, ignored otherwise.
 
         Returns:
-            A new frozen aggregate with ``status`` set to ``target``.
+            A new frozen aggregate with ``status`` set to ``target`` (and,
+            for ``CLOSED``, ``verification`` and ``closed_at`` stored).
 
         Raises:
             ValueError: If ``target`` is not reachable from the current
-                status under the allowed-transition table (this covers
-                every banned move: execution without approval, close
-                without ``EXECUTION_VERIFIED``, and any exit from a
-                terminal state).
+                status under the canonical table, or any enforced gate
+                on the path refuses.
         """
-        allowed = _ALLOWED_TRANSITIONS[self.status.value]
-        if target.value not in allowed:
-            raise ValueError(
-                f"Transition {self.status.value} -> {target.value} is not "
-                f"allowed; permitted targets are {sorted(allowed)}."
+        assert_transition_allowed(self.status, target)
+        if target is SituationStatus.PROPOSED:
+            require_evidence_for_proposal(self)
+            updated = self.model_copy(update={"status": target})
+        elif target is SituationStatus.APPROVED:
+            require_decider_authority_for_approval(self)
+            updated = self.model_copy(update={"status": target})
+        elif target is SituationStatus.CLOSED:
+            tolerance = CompanyConfiguration().tolerance_minor
+            require_verification_for_close(self, verification, at, tolerance)
+            assert verification is not None
+            assert at is not None
+            updated = self.model_copy(
+                update={"status": target, "verification": verification, "closed_at": at}
             )
-        return self.model_copy(update={"status": target})
+        else:
+            updated = self.model_copy(update={"status": target})
+        require_proposal_frozen(updated, self)
+        return updated
