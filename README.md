@@ -1,247 +1,920 @@
-# FinSight — Meridian Finance Resolution Agent
+# FinSight
 
-> **Frozen boundary:** Single-company internal system for **Meridian Commerce Pvt Ltd** (B2B commerce, ~1,500 merchants, 20k daily payments). FinSight is NOT generic SaaS, not multi-tenant product, not workflow builder, not plugin platform, not generic CFO. It does one job: **detect → investigate → explain → propose → execute (under authorization) → verify** financial discrepancy resolution for Meridian.
+### Agentic Financial Operations for a Realistic Legacy Enterprise
 
-FinSight closes **FinancialSituations**, not transactions. Deterministic engines own every number; agents only gather evidence and draft proposals. No autonomous writes. Every close is evidence-backed, policy-gated, human-approved when required, and post-verified.
+> **An internal financial resolution system built for a single hypothetical company — Meridian Commerce Pvt. Ltd. — that investigates settlement discrepancies across fragmented financial systems and drives them to an evidence-backed, authorized, and deterministically verified outcome.**
 
-## 1. Meridian Commerce Dossier — Frozen
+FinSight is a portfolio implementation of how a **Forward-Deployed Engineer (FDE)** can enter an existing company's environment, understand its business process and system constraints, integrate with heterogeneous systems, and build a narrowly scoped AI solution around the company's actual operational problem.
 
-| Attribute | Value |
-|-----------|-------|
-| **Company** | Meridian Commerce Pvt Ltd — B2B commerce platform |
-| **Scale** | ~250 employees, ~1,500 active merchants, ~20,000 payments/day |
-| **Finance team** | 8 finance, 3 payment-ops, Finance Manager + Director |
-| **Systems of record** | **Razorpay** (provider state), **QuickBooks** (accounting), **COBOL** legacy settlement ledger, **Google Sheets** (expected settlement), **Gmail** (context), **Slack** (approvals) |
+It is deliberately **not a generic AI CFO, accounting SaaS, or autonomous financial agent**.
 
-### Environment Diagram (frozen)
+---
 
-```
-                         Meridian Commerce Pvt Ltd
-                                  │
-        ┌─────────────┬───────────┼───────────┬──────────────┬──────────────┐
-        │             │           │           │              │              │
-   Razorpay (Payments) QuickBooks (Accounting) COBOL Legacy  Sheets      Gmail/Slack
-   - payout, fees,    - Journal entries      - Fixed-width  - Expected   - Context / Approvals
-     refunds,           (debits==credits)      batch file     settlement   (human)
-     adjustments      - Accounting period      NO HTTP        (10,00,000)  (Slack: Approve/Reject)
-                        open/closed            via S3 transport            (Gmail: search_finance_email)
-                                    │
-                                    ▼
-                          FinSight Core (Reconciliation / Evidence / Business Rules)
-                                    │
-                          AI Investigator (cognitive tools only)
-                                    │
-                          Resolution Case (FinancialSituation)
-                                    │
-                     ┌──────────────┼──────────────┐
-                Policy Gate      Auto / HITL      Action Engine
-                (thresholds)     (Slack)          → External / Legacy → Verify → Close
-```
+## The Problem
 
-**COBOL ledger constraint:** Fixed-width batch file `CORRECTION_YYYYMMDD_XXX.DAT` (500 records), no HTTP, transported via S3. Result file returns accepted/rejected per record. FinSight owns reasoning state; **existing systems own facts**.
+Meridian Commerce is a hypothetical Indian B2B commerce/payment-enabled company.
 
-## 2. Business Problem — Not Missing ERP
+Its finance operation already has the software it needs:
 
-Meridian does not lack an ERP. It lacks **continuous reasoning across 6 systems**. Daily settlement reconciliation is manual across **13 steps**:
+```text
+                    MERIDIAN COMMERCE
 
-1. Razorpay payout received → 2. Fees/refunds/adjustments extracted → 3. Expected sheet looked up → 4. QuickBooks entries checked → 5. Legacy batch checked → 6. Variance computed → 7. Gmail context searched → 8. Hypotheses formed → 9. Legacy rejections inspected → 10. Case history checked → 11. Proposal drafted → 12. Approval chased on Slack → 13. Correction file built, S3-uploaded, result polled, reverified.
-
-Mechanically 60-80% of 8-person finance team time; analytically starved; error-prone under month-end load.
-
-## 3. FinSight Job — Meridian Finance Resolution Agent
-
-> **Detect / Investigate / Explain / Propose / Execute-under-authorization / Verify** financial discrepancy resolution.
-
-| What FinSight owns (reasoning state) | What FinSight NEVER owns (facts) |
-|--------------------------------------|----------------------------------|
-| `FinancialSituation` (e.g. FS-2026-0916-00231, variance ₹10,000, INVESTIGATING) | Razorpay provider state, QuickBooks accounting truth, COBOL legacy ledger, Sheets expected, Gmail context |
-| `Investigation`, `Evidence` (hash-verified), `Hypothesis`, `ResolutionProposal`, `PolicyDecision`, `Approval`, `Execution`, `Verification`, `Audit` | Slack is approval channel, not authority; Policy engine is authority |
-
-**Central object:** `FinancialSituation` ≠ transaction. Example:
-
-```
-FS-2026-0916-00231
-  expected: 10,00,000 (Sheet)
-  razorpay: 9,72,500  (gross 10,00,000 - fee 7,500 - refund 2,500 - adjustment 10,000 - pending 7,500)
-  quickbooks: 9,82,500
-  legacy: 9,82,500
-  variance: 10,000  STATUS=INVESTIGATING
+      ┌─────────────┬─────────────┬──────────────┐
+      │             │             │              │
+      ▼             ▼             ▼              ▼
+  Razorpay      QuickBooks    Google Sheets    Gmail
+      │             │             │              │
+      └─────────────┴─────────────┴──────────────┘
+                         │
+                         ▼
+                   Finance Operations
+                         │
+                       Slack
+                         │
+                         ▼
+              ┌──────────────────────┐
+              │  LEGACY LEDGER       │
+              │  COBOL / Batch       │
+              │  Fixed-width files   │
+              │  No HTTP / Internet  │
+              └──────────────────────┘
 ```
 
-## 4. Cognitive Loop (frozen)
+The problem is not missing data.
 
-```
-Detect → Triage → Investigate → Correlate → Explain → Propose → Policy → Auto/HITL → Execute → Verify → Close
-   │        │          │            │           │         │        │          │          │       │
-   └─net_settlement  tools: get_*  compare_  create_  propose_  refund <5k  Slack    S3 batch  re-reconcile
-     debits==credits         + Gmail/Legacy financial_states hypothesis resolution auto?          file
-     period_open                          record_evidence          5k-50k Mgr
-     duplicate_action                                                  >50k Dir        → COBOL
-                                                                       legacy: always approval + valid
-                                                                       account code + balanced batch
-                                                                       closed period: NEVER modify
-```
+The problem is **fragmented reasoning**.
 
-**Deterministic vs LLM split (P3/P4 invariants preserved):**
+A single settlement can appear under different identifiers and in different representations across payment, accounting, operational, communication, and legacy systems. Finance staff must manually correlate those sources, determine whether a discrepancy is legitimate, investigate its cause, decide what correction is appropriate, obtain authorization, execute it, and verify that the financial state was actually fixed.
 
-| Deterministic (code, no LLM) | LLM (language only) |
-|------------------------------|---------------------|
-| `net_settlement = gross - fees - refunds - adjustments` | What is unusual about variance pattern? |
-| `debits == credits` | Which hypothesis to test next? |
-| `accounting_period_open(period_id)` | What to investigate? |
-| `duplicate_action(action_hash)` | Is evidence sufficient? |
-| `refund_threshold(amount)` → auto/manager/director | Narrative explanation for proposal |
+FinSight addresses that specific workflow.
 
-LLM never computes money, never approves, never executes.
+---
 
-## 5. Company-Specific Rules (MeridianBusinessRules)
+# What FinSight Does
 
-```python
-# finance/business_rules/meridian.py (frozen, not SaaS knob)
-REFUND_AUTO_THRESHOLD   = Decimal("5000")   # <5k auto if evidence complete
-REFUND_MANAGER_THRESHOLD = Decimal("50000")  # 5k-50k Finance Manager
-REFUND_DIRECTOR_THRESHOLD = Decimal("50000") # >50k Director
-LEGACY_CORRECTION_REQUIRES = ["approval", "valid_account_code", "balanced_batch"]
-CLOSED_PERIOD_RULE = "NEVER_MODIFY"
-BASE_CURRENCY = "INR"
-TOLERANCE_MINOR = Decimal("100")
-AUTO_APPROVAL_LIMIT = Decimal("500000")
-```
+FinSight takes a financial discrepancy from:
 
-Legacy correction **always** requires approval + valid account code + balanced batch. Closed period → hard block (`INVESTIGATING → EXECUTING` banned).
-
-## 6. Agent Tools — Allowlists Only
-
-**Read-only evidence tools (allowlisted):**
-`get_settlement`, `get_payment`, `get_quickbooks_entries`, `get_expected_settlement`, `search_finance_email`, `get_legacy_batch`, `get_legacy_rejections`, `get_case_history`
-
-**Cognitive tools:**
-`create_hypothesis`, `record_evidence`, `compare_financial_states`, `propose_resolution`
-
-**Banned (no `execute_sql`, `call_any_api`, `send_any_http`):**
-Raw SQL, arbitrary HTTP, unsanctioned tools. Enforcement: `CapabilityExecutor` closed allowlist + `tenant_id`/`case` scope re-check.
-
-## 7. Flagship Case FS-231 — End-to-End Trace
-
-| Step | System | Value / Artifact |
-|------|--------|------------------|
-| Expected | Sheet | 10,00,000 |
-| Razorpay | Provider | 9,72,500 (fee 7,500 + refund 2,500 + adjustment 10,000 = net 27,500) |
-| QuickBooks | Accounting | 9,82,500 |
-| Legacy | COBOL | 9,82,500 (mirrors QB) |
-| Variance | FinSight | **10,000** → FinancialSituation FS-231 INVESTIGATING |
-| Hypotheses | AI | H1 fee mismatch? H2 refund lag? H3 legacy rejection? (compare_financial_states) |
-| Evidence | Batch | `LEGACY-20260916-0042` — 500 records, **499 accepted, 1 rejected `INVALID_ACCOUNT_CODE 4812`** (₹10,000) |
-| Evidence chain | Recorded | `payment→settlement→qb→legacy→gmail→rejection→case_history` hashed + provenance |
-| Proposal | ResolutionProposal | Reprocess ₹10,000, account code corrected, **severity Medium, HITL required** |
-| Policy | MeridianBusinessRules | Legacy correction → approval needed → route to Slack |
-| Approval | Slack | **Approved** (Manager) — pinned to proposal hash |
-| Execution | S3 transport | `CORRECTION_20260916_231.DAT` (fixed-width, balanced, valid code) → COBOL |
-| Result | Legacy | **ACCEPTED** (1/1) |
-| Verification | Deterministic | Expected 10,00,000 vs (QB 9,82,500 + correction 10,000 + Razorpay pending 7,500) == 10,00,000? Recomputed net **9,92,500** ledger → **CLOSED** (verified) |
-
-All amounts `Decimal`, all writes idempotent, post-verify mandatory. Unsafe-actions = 0.
-
-## 8. Data Model — Simplification (frozen)
-
-**Removed (SaaS-generic):** `Tenant`, `TenantConfiguration`, `CustomWorkflow`, `CustomPolicy`, `Plugin`, `ConnectorRegistry`, `WorkflowBuilder`, `CustomSchema`
-
-**Replaced with (static, Meridian-specific):**
-
-| Model | Purpose | File |
-|-------|---------|------|
-| `Company` | Single row: Meridian Commerce Pvt Ltd | `finance/domain/company.py` |
-| `CompanyConfiguration` | `base_currency=INR`, `tolerance_minor=100`, `auto_approval=500000`, `legacy_correction_requires_approval=true` | `finance/domain/company.py` |
-| `MeridianBusinessRules` | Refund tiers, legacy, closed-period invariants | `finance/business_rules/meridian.py` |
-| `AccountMappings` | Razorpay ↔ QuickBooks ↔ COBOL codes (static) | `finance/domain/account_mappings.py` |
-| `FinancialOntology` | Canonical variance/exceptions for Meridian | `finance/domain/ontology.py` |
-| `IntegrationRegistry` | Fixed 6: Razorpay, QB, Sheets, Gmail, Slack, COBOL/S3 — not pluggable | `finance/integration/registry.py` |
-| `FinancialSituation` | Central object (replaces generic transaction/investigation root) | `finance/domain/financial_situation.py` |
-
-No per-tenant knobs at runtime. Config is code + migration, not UI.
-
-## 9. Architecture — Meridian Commerce → Payments/Accounting/Legacy → FinSight
-
-```
-Meridian Commerce (250 staff, 8 finance)
-      │
-      ├─ Payments: Razorpay (20k/day)
-      ├─ Accounting: QuickBooks + Sheets (expected)
-      └─ Legacy: COBOL batch (fixed-width, S3)
-                 │
-                 ▼
-         FinSight Core
-     ┌─────────────────────┐
-     │ Reconciliation (Decimal)  ── net_settlement, debits==credits, duplicate
-     │ Evidence (hash-chain)     ── EvidenceItem immutability
-     │ Business Rules (Meridian) ── refund tiers, legacy, closed period
-     └──────────┬──────────┘
-                │
-         AI Investigator (LLM, bounded)
-         create_hypothesis / compare_financial_states
-                │
-         Resolution Case (FinancialSituation FS-*)
-                │
-     ┌─────────┴─────────┐
-   Policy Gate        HITL (Slack)
-   Auto <5k           5k-50k Mgr, >50k Dir, legacy always
-                │
-          Action Engine (sandbox, idempotent)
-                │
-     External / Legacy (S3 fixed-width batch)
-                │
-            Verify (re-reconcile)
-                │
-             Close (Audit, immutable)
+```text
+DETECT
+   ↓
+RECONCILE
+   ↓
+INVESTIGATE
+   ↓
+CORRELATE EVIDENCE
+   ↓
+EXPLAIN SUPPORTED CAUSE
+   ↓
+PROPOSE RESOLUTION
+   ↓
+DETERMINISTIC VALIDATION
+   ↓
+POLICY DECISION
+   ↓
+HUMAN APPROVAL WHEN REQUIRED
+   ↓
+EXECUTE
+   ↓
+RECONCILE AGAIN
+   ↓
+AUTHORITATIVE VERIFICATION
+   ↓
+CLOSE
 ```
 
-Dependency rule preserved: `shared ← finance ← agents ← apps`. No reverse imports.
+The objective is not to make the LLM "good at finance."
 
-## 10. FDE Story — How Meridian Gets Live
+The objective is to make the **system capable of safely resolving a financial situation despite incomplete, heterogeneous, asynchronous, and partially unstructured evidence**.
 
-| Phase | What happens | Who |
-|-------|--------------|-----|
-| **Discovery (W1)** | Shadow 13-step manual flow, map 6 systems, freeze FS example, lock COBOL spec | FDE + Finance + Payment Ops |
-| **Solution Design (W2)** | FinancialSituation model, 11-stage loop, MeridianBusinessRules, IntegrationRegistry, S3 transport contract | Architect |
-| **Build (W3-5)** | Deterministic engines → agent tools → Slack HITL → S3 batch protocol → verifier → audit | Eng |
-| **Deploy (W6)** | `API Gateway → FastAPI (apps/api) → RDS PostgreSQL / SQS → Workers → Agent (LangGraph) → Legacy (S3)` — healthchecks, RLS/company boundary isolation, secrets via env | DevSecOps |
-| **Measure (W7+)** | Cases detected/resolved, exposure ₹, false-positive rate, LLM cost/call | FDE + Finance Lead |
+---
 
-**Measure gates:** `cases_detected`, `cases_resolved`, `exposure_value`, `false_positive_rate`, `llm_cost_per_case`, `verification_rate=100%`.
+# Core Thesis
 
-## 11. Safety Invariants (P3/P4 preserved, reinterpreted)
+## Financial systems contain facts.
 
-I1 Decimal-only. I2 Pure deterministic reconcile. I3 Evidence immutable. I4 LLM no writes. I5 Proposal needs `EVIDENCE_VERIFIED`. I6 Approval pinned to proposal hash, single-decision. I7 Idempotent execution. I8 Sandbox-only (S3 transport is the sandbox boundary for legacy). I9 Post-verify mandatory. I10 No close without terminal verification. **Boundary isolation = company/environment isolation** (not SaaS tenancy): every path carries `company_id=meridian` + `environment` scope.
+## FinSight determines what financial situation those facts create, what evidence explains the situation, and what safe resolution follows.
 
-## 12. Repo Map (updated)
+The architecture deliberately separates **cognition from financial authority**.
 
+```text
+┌───────────────────────────────────────────────┐
+│                 FINANCIAL TRUTH               │
+│                                               │
+│  Arithmetic · Matching · Policy · State      │
+│  Authorization · Execution · Verification    │
+│                                               │
+│              DETERMINISTIC CODE               │
+└───────────────────────┬───────────────────────┘
+                        │
+                        │ typed facts / capabilities
+                        ▼
+┌───────────────────────────────────────────────┐
+│                COGNITIVE LAYER                │
+│                                               │
+│  Interpretation · Investigation · Hypotheses │
+│  Evidence synthesis · Investigation planning │
+│  Resolution proposal                          │
+│                                               │
+│                    LLM                        │
+└───────────────────────┬───────────────────────┘
+                        │
+                        ▼
+              Deterministic validation
+                        │
+                        ▼
+                 Human authority
+                        │
+                        ▼
+                Controlled execution
+                        │
+                        ▼
+            Authoritative verification
 ```
-finance/domain/          → Company, CompanyConfiguration, FinancialSituation, AccountMappings, FinancialOntology
-finance/reconciliation/  → pure core: models, normalizer, matcher, tolerances, classifier, reconciler (Decimal)
-finance/business_rules/  → meridian.py (refund tiers, legacy, closed period)
-finance/integration/     → IntegrationRegistry (Razorpay/QB/Sheets/Gmail/Slack/COBOL/S3) static
-finance/evidence/        → EvidenceItem (hash, provenance, immutability)
-agents/investigation/    → allowlisted read-only + cognitive tools
-agents/verification/     → 6-stage verifier (claim→evidence→tenant/company→provenance→supported→VERIFIED)
-apps/api/                → ingest, evidence, approvals, close routes (FastAPI)
-tests/fixtures/reconciliation/ → FS-231 golden (10,00,000 / 9,72,500 / 9,82,500 / 10k)
+
+The LLM is a **bounded investigator**, not the financial authority.
+
+---
+
+# Why This Is an Agentic Problem
+
+The hard problem is not calculating a number.
+
+For example:
+
+```text
+What is the net settlement?
+        → deterministic
+
+Does ₹X equal ₹Y?
+        → deterministic
+
+Is the accounting period open?
+        → deterministic
+
+Why do the systems disagree?
+        → potentially agentic
+
+Which evidence should be investigated next?
+        → potentially agentic
+
+Which hypothesis best explains the available evidence?
+        → potentially agentic
+
+Is the available evidence sufficient to construct a proposal?
+        → agentic + deterministic verification
 ```
 
-Flow: `shared` ← `finance` ← `agents` ← `apps`. No reverse imports.
+The agent operates where the problem involves **semantic ambiguity, incomplete context, distributed evidence, and dynamic investigation paths**.
 
-## 13. Quickstart
+It does not replace deterministic computation or authorization.
 
-```bash
-uv sync
-uv run python -m pytest tests/unit/reconciliation -x -q
-uv run ruff check finance/reconciliation tests/unit/reconciliation
-uv run mypy finance/reconciliation
-# Flagship golden:
-uv run python -m pytest tests/golden/test_fs231 -xvs  # FS-2026-0916-00231
+---
+
+# The Meridian Environment
+
+| System        | Role                    | Authority                                                              |
+| ------------- | ----------------------- | ---------------------------------------------------------------------- |
+| Razorpay      | Payment provider        | Payments, refunds, settlements                                         |
+| QuickBooks    | Accounting              | Accounting entries and account state                                   |
+| Google Sheets | Operational intent      | Expected settlement and operational mappings                           |
+| Gmail         | Human/business context  | Communication/context                                                  |
+| Slack         | Human authority         | Approval and coordination                                              |
+| COBOL ledger  | Legacy financial system | Legacy postings and batch results                                      |
+| FinSight      | Reasoning/control layer | Cases, evidence, hypotheses, proposals, decisions, verification, audit |
+
+FinSight does **not** replace these systems.
+
+It operates across them as a reasoning and control layer.
+
+---
+
+# Flagship Case: FS-231
+
+The primary end-to-end case is a settlement discrepancy spanning modern and legacy systems.
+
+### Initial state
+
+```text
+Google Sheets expected       ₹10,00,000
+Razorpay settlement          ₹ 9,72,500
+QuickBooks                   ₹ 9,82,500
+Legacy ledger                ₹ 9,82,500
 ```
 
-## 14. Phases + Gates (frozen)
+The initial provider-to-accounting variance is:
 
-P0 frozen specs (this README/PRD). P1 pure `finance/reconciliation/` (stdlib + Decimal, no HTTP/DB/LLM). P2 Razorpay ingest. P3 QB mock + HITL + verify. P4 agent (thin SDKs: Groq/OpenRouter/Local via `LLMProvider`). P5 `make e2e` flagship FS-231. P6 chaos (duplicate/out-of-order/crash-after-execute/double-approve/lost-response). P7 promptfoo evals offline. P8 Go benchmark (criteria only). P9 hardening.
+```text
+₹9,82,500 − ₹9,72,500 = ₹10,000
+```
 
-`S3` is artifact + legacy transport only; PostgreSQL is financial/idempotency authority. No new AWS service without queue gate.
+FinSight must **not** interpret the larger expected-to-provider difference as a missing amount. The provider settlement must first be decomposed into its financial components and correlated with downstream records.
+
+Investigation identifies:
+
+```text
+Razorpay
+├── Gross                  ₹10,00,000
+├── Processing fee         ₹  7,500
+├── Refund                 ₹  2,500
+└── Settlement adjustment  ₹ 10,000
+
+QuickBooks
+├── Fee                    PRESENT
+├── Refund                 PRESENT
+└── Adjustment             ABSENT
+
+Legacy batch
+└── Adjustment             REJECTED
+                           INVALID_ACCOUNT_CODE
+```
+
+The supported cause is:
+
+> The ₹10,000 settlement adjustment was not posted downstream because the legacy batch rejected it.
+
+FinSight then constructs a typed resolution proposal, passes it through deterministic validation and policy, obtains human authorization where required, executes through the controlled legacy boundary, and verifies the resulting authoritative state before closure.
+
+---
+
+# The Legacy Constraint
+
+The legacy system is intentionally not a fake REST service.
+
+It represents a realistic integration boundary:
+
+```text
+FinSight
+   │
+   ▼
+Fixed-width outbound batch
+   │
+   ▼
+Controlled transfer boundary
+   │
+   ▼
+COBOL batch processor
+   │
+   ├── accepted records
+   └── rejected records
+   │
+   ▼
+Result files
+   │
+   ▼
+FinSight ingestion
+   │
+   ▼
+Canonical LegacyBatch / LegacyRecord
+```
+
+The modern application acts as an **anti-corruption boundary** around the legacy system.
+
+It handles:
+
+* fixed-width serialization
+* schema validation
+* control totals
+* batch identity
+* idempotency
+* structured errors
+* accepted/rejected records
+* result ingestion
+
+The agent never receives raw legacy file syntax as a domain capability.
+
+---
+
+# Architecture
+
+```text
+                         MERIDIAN SYSTEMS
+                              │
+        ┌───────────┬─────────┼─────────┬───────────┐
+        ▼           ▼         ▼         ▼           ▼
+    Razorpay    QuickBooks  Sheets    Gmail       Slack
+        │           │         │         │           │
+        └───────────┴─────────┴─────────┴───────────┘
+                              │
+                              ▼
+                  ┌─────────────────────┐
+                  │     FinSight Core    │
+                  │                     │
+                  │ Canonical Domain     │
+                  │ Reconciliation      │
+                  │ FinancialSituation  │
+                  │ Evidence            │
+                  │ Policy              │
+                  │ Audit               │
+                  └──────────┬──────────┘
+                             │
+                             ▼
+                  ┌─────────────────────┐
+                  │ Cognitive Runtime   │
+                  │                     │
+                  │ Investigation       │
+                  │ Hypotheses          │
+                  │ Evidence synthesis  │
+                  │ Resolution proposal │
+                  └──────────┬──────────┘
+                             │
+                             ▼
+                  Deterministic Verifier
+                             │
+                             ▼
+                     Human Authority
+                             │
+                             ▼
+                    Controlled Actions
+                       │           │
+                       ▼           ▼
+                  Financial     Legacy
+                    APIs        Batch
+                       │           │
+                       └─────┬─────┘
+                             ▼
+                    Authoritative Readback
+                             │
+                             ▼
+                     Reconciliation
+                             │
+                             ▼
+                           CLOSE
+```
+
+---
+
+# FinancialSituation
+
+The central domain object is not a payment.
+
+It is the **FinancialSituation**: the operational representation of a financial discrepancy and its lifecycle.
+
+This lets the system reason about:
+
+* what happened
+* what systems disagree
+* what evidence exists
+* what hypotheses have been considered
+* what resolution has been proposed
+* what authorization exists
+* what action occurred
+* whether the resulting financial state is actually correct
+
+The lifecycle is deterministic.
+
+```text
+DETECTED
+   ↓
+TRIAGED
+   ↓
+INVESTIGATING
+   ↓
+EVIDENCE_READY
+   ↓
+EVIDENCE_VERIFIED
+   ↓
+PROPOSED
+   ↓
+AWAITING_APPROVAL
+   ↓
+APPROVED
+   ↓
+EXECUTING
+   ↓
+POST_VERIFYING
+   ↓
+EXECUTION_VERIFIED
+   ↓
+CLOSED
+```
+
+Escalation and failure paths are first-class states/transitions rather than exceptional afterthoughts.
+
+---
+
+# Business-Outcome-First Engineering
+
+FinSight does not treat a green test suite as proof that the business model is correct.
+
+The engineering sequence is:
+
+```text
+Business outcome
+       ↓
+Business invariant
+       ↓
+Business state semantics
+       ↓
+Allowed / forbidden outcomes
+       ↓
+Acceptance scenarios
+       ↓
+Tests
+       ↓
+Implementation
+```
+
+Tests therefore exist to encode the **business contract**, not to justify an implementation that was written first.
+
+For example:
+
+> "A situation reached `CLOSED`."
+
+is not a sufficient acceptance criterion.
+
+The meaningful question is:
+
+> **"Is the financial discrepancy actually resolved, and can the system prove why closure is justified?"**
+
+This distinction is particularly important for financial workflows where a numerically plausible result can still represent an incorrect business outcome.
+
+---
+
+# Deterministic vs. Probabilistic Boundary
+
+FinSight deliberately keeps the deterministic core large.
+
+### Deterministic
+
+* Money arithmetic
+* Decimal handling
+* Normalization
+* Entity matching
+* Reconciliation
+* Financial state
+* State transitions
+* Business rules
+* Authorization
+* Policy evaluation
+* Idempotency
+* Action execution
+* Post-action verification
+* Auditability
+
+### Agentic / probabilistic
+
+* Interpretation of ambiguous business context
+* Hypothesis generation
+* Investigation planning
+* Selecting the next bounded investigation
+* Evidence synthesis
+* Resolution proposal generation
+
+The agent's output is **typed candidate data**, not authorization.
+
+The deterministic control plane decides whether that candidate can proceed.
+
+---
+
+# Security and Trust Model
+
+FinSight treats external content as **data, not instructions**.
+
+Evidence can originate from:
+
+* emails
+* spreadsheets
+* payment metadata
+* accounting records
+* legacy outputs
+* operational notes
+
+Untrusted content cannot modify:
+
+* actor identity
+* authorization
+* capabilities
+* tenant/company scope
+* policy
+* financial state
+* tool permissions
+
+The system maintains explicit boundaries between:
+
+```text
+Authenticated actor
+        ↓
+RBAC
+        ↓
+Case / evidence scope
+        ↓
+Business policy
+        ↓
+Approval
+        ↓
+Execution
+```
+
+Additional controls include:
+
+* immutable evidence provenance
+* content hashing
+* deterministic grounding verification
+* prompt-injection defenses
+* secret/PII redaction
+* idempotency
+* concurrency protection
+* audit lineage
+* fail-closed behavior
+* mandatory post-execution verification
+
+---
+
+# Human-in-the-Loop
+
+Human approval is not a fallback for an unreliable AI.
+
+It is an **authority boundary**.
+
+The system prepares a decision-ready case containing:
+
+```text
+Financial situation
+      +
+Verified evidence
+      +
+Supported explanation
+      +
+Resolution proposal
+      +
+Deterministic validation
+      +
+Policy result
+      +
+Risk / authorization requirements
+```
+
+The human supplies:
+
+* authority
+* accountability
+* business judgment
+
+The system supplies the investigation and preparation work.
+
+Consequential actions cannot be authorized merely because the model is confident.
+
+---
+
+# Failure Is Part of the Design
+
+Financial systems cannot assume that distributed operations succeed cleanly.
+
+FinSight explicitly models cases such as:
+
+| Failure                               | Required behavior                              |
+| ------------------------------------- | ---------------------------------------------- |
+| Duplicate webhook                     | Deduplicate by provider event ID               |
+| Provider timeout after action request | Mark `UNKNOWN`, query provider before retry    |
+| Duplicate legacy batch                | Reject through idempotency/hash/control record |
+| Partial legacy batch                  | Preserve per-record results                    |
+| Late legacy result                    | Keep situation open until result arrives       |
+| Conflicting authoritative records     | Escalate; do not guess                         |
+| Unsupported account code              | Block legacy submission                        |
+| Closed accounting period              | Block correction                               |
+| Already-refunded payment              | Block second refund                            |
+| Insufficient evidence                 | Escalate without executable proposal           |
+| Unsupported model claim               | Prevent progression to verified state          |
+
+These are business outcomes, not merely technical exceptions.
+
+---
+
+# Current Engineering Milestones
+
+## P1 — Deterministic Reconciliation Core
+
+**Complete**
+
+Frozen generic reconciliation primitives provide the deterministic foundation.
+
+---
+
+## P4 — Bounded Agent Boundary
+
+**Complete**
+
+The LLM is constrained to:
+
+* interpretation
+* hypothesis generation
+* investigation planning
+* bounded capability selection
+* evidence synthesis
+
+The agent cannot directly mutate financial state.
+
+---
+
+## P5 — Trust & Security
+
+**Complete**
+
+Checkpoint:
+
+```text
+finsight-p5-security
+071589b5460429700b9a75783d1ebbe8d0709b32
+```
+
+P5 established the trust, grounding, isolation, prompt-injection, secret-handling, trajectory, observability, legacy-protocol, and regression boundaries.
+
+---
+
+## P6-01 — Meridian Domain Contract
+
+**Merged**
+
+Defined:
+
+* Meridian process model
+* canonical domain concepts
+* FinancialSituation aggregate
+* reconciliation contract
+* company-specific business rules
+* integration contract matrix
+* FS-231 fixtures
+
+The implementation deliberately wraps the frozen P1 core rather than modifying it.
+
+---
+
+## P6-02 — Deterministic FinancialSituation Lifecycle
+
+**In progress**
+
+Scope:
+
+* business-state semantics
+* deterministic transitions
+* lifecycle invariants
+* persistence and aggregate behavior
+* audit events
+* invalid-transition handling
+* concurrency semantics
+* FS-231 lifecycle outcomes
+
+Explicitly outside this slice:
+
+* new LLM behavior
+* AWS infrastructure
+* new security abstractions
+* financial mutations
+
+The lifecycle is being evaluated from **business outcomes first**, with tests serving as executable business contracts.
+
+---
+
+# Planned Build Sequence
+
+```text
+P6-02
+Deterministic FinancialSituation lifecycle
+        ↓
+P6-03
+Reconciliation / discrepancy engine
+        ↓
+P6-04
+Integration contracts + realistic adapters
+        ↓
+P6-05
+Evidence-driven investigation
+        ↓
+P6-06
+FS-231 complete investigation path
+        ↓
+P6-07
+Controlled proposal / approval / execution
+        ↓
+P6-08
+Legacy end-to-end execution
+        ↓
+P6-09
+Failure / recovery / adversarial E2E
+        ↓
+P6-10
+AWS production-shaped deployment
+```
+
+The exact phase boundaries may evolve as the business model is validated.
+
+---
+
+# Technology Direction
+
+The implementation intentionally favors boring, explicit engineering where financial correctness matters.
+
+### Core
+
+* Python
+* FastAPI
+* Pydantic
+* PostgreSQL
+* Decimal-based financial representation
+* deterministic domain services
+* repository / adapter boundaries
+
+### Agentic layer
+
+* bounded LLM provider abstraction
+* structured outputs
+* constrained investigation plans
+* typed capability registry
+* evidence-grounded verification
+* bounded replanning
+
+### Legacy
+
+* COBOL-style batch simulation
+* fixed-width protocol
+* controlled file boundary
+* accepted/rejected records
+* batch control totals
+* idempotency and correlation
+
+### Infrastructure
+
+The production target is AWS.
+
+Local infrastructure contracts are validated before introducing managed AWS dependencies.
+
+---
+
+# Observability
+
+FinSight separates application instrumentation from observability vendors.
+
+```text
+Application
+    ↓
+FinSight TracerProtocol
+    ↓
+OpenTelemetry
+    ↓
+Observability backend
+```
+
+The observability layer must never determine financial outcomes.
+
+If the tracing backend disappears:
+
+```text
+Financial result = unchanged
+Authorization     = unchanged
+Execution         = unchanged
+State transition  = unchanged
+```
+
+Observability is evidence about system behavior, not part of the financial control path.
+
+---
+
+# What FinSight Is Not
+
+FinSight is deliberately **not**:
+
+* an accounting system
+* a general ledger
+* an ERP
+* a payment gateway
+* a generic AI CFO
+* a financial chatbot
+* a generic autonomous agent with unrestricted API access
+* a forecasting platform
+* an OCR/document-processing platform
+* a configurable SaaS workflow builder
+* a replacement for human financial authority
+
+The project intentionally solves one bounded enterprise problem rather than creating a configurable platform.
+
+---
+
+# Why This Is an FDE Portfolio Project
+
+The reusable artifact is not a generic SaaS product.
+
+The reusable artifact is the **engineering approach**:
+
+```text
+Understand the company
+        ↓
+Understand the business process
+        ↓
+Map existing systems
+        ↓
+Identify authoritative sources
+        ↓
+Define the ontology
+        ↓
+Find the actual operational bottleneck
+        ↓
+Design around existing constraints
+        ↓
+Build deterministic foundations
+        ↓
+Introduce AI only where ambiguity exists
+        ↓
+Integrate with existing systems
+        ↓
+Control authority and risk
+        ↓
+Measure business outcomes
+```
+
+A different customer would not simply configure FinSight with dozens of switches.
+
+An FDE would perform discovery again and build the appropriate solution around that customer's actual systems and process.
+
+That is intentional.
+
+---
+
+# Success Metrics
+
+FinSight is evaluated on **business outcomes**, not arbitrary AI activity metrics.
+
+Primary metrics include:
+
+* exception auto-resolution rate
+* human touch rate
+* median detection-to-verified-resolution time
+* financial exposure resolved
+* false resolution rate
+* duplicate action rate
+* verification success rate
+* LLM calls per resolved case
+* deterministic execution ratio
+
+The primary proof is:
+
+> **Did the financial situation reach the correct verified business outcome?**
+
+Not:
+
+> "Did the model produce a convincing answer?"
+
+---
+
+# Repository Philosophy
+
+FinSight follows several engineering principles:
+
+### 1. Business truth before implementation
+
+Define the business outcome and invariants before writing the test or implementation.
+
+### 2. Deterministic by default
+
+If a rule can be expressed explicitly, encode it explicitly.
+
+### 3. Probabilistic only where necessary
+
+Use the LLM for ambiguity and investigation, not arithmetic or authority.
+
+### 4. Evidence before claims
+
+Material claims must be grounded in source-backed evidence.
+
+### 5. Proposal is not authorization
+
+An agent-generated proposal remains a candidate until deterministic validation and the required authority boundary are satisfied.
+
+### 6. Execution is not verification
+
+An external API or batch reporting success is not itself proof that financial state is correct.
+
+### 7. Closure requires proof
+
+A situation is closed only after its required business outcome has been independently verified.
+
+### 8. Failure is a state
+
+Timeouts, partial processing, conflicts, retries, and late results must have explicit semantics.
+
+### 9. Existing systems remain authoritative
+
+FinSight coordinates and reasons across systems; it does not silently replace their authority.
+
+### 10. Narrow systems are easier to trust
+
+The system is intentionally bounded to one company, one primary workflow, finite entities, finite capabilities, and finite policies.
+
+---
+
+# Project Status
+
+**Current milestone: P6 — Domain → Deterministic Financial Execution**
+
+```text
+P1  Deterministic Core             ✓
+P4  Bounded Agent Boundary         ✓
+P5  Trust & Security               ✓
+P6-01 Meridian Domain Contract     ✓
+P6-02 FinancialSituation Lifecycle → In progress
+```
+
+---
+
+## The One-Sentence Definition
+
+> **FinSight is a single-company agentic financial operations system that investigates fragmented settlement discrepancies and turns them into evidence-backed, policy-controlled, human-authorized when necessary, and deterministically verified financial outcomes — without giving the LLM authority over financial truth.**
