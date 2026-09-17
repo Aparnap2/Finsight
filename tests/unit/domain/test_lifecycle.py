@@ -54,8 +54,8 @@ def _fs231(**overrides: object) -> FinancialSituation:
 def test_canonical_chain_covers_spec_section_2() -> None:
     """Every spec section 2.1 row is present in the canonical table."""
     assert {
-        "DETECTED": frozenset({"TRIAGED"}),
-        "TRIAGED": frozenset({"INVESTIGATING"}),
+        "DETECTED": frozenset({"TRIAGED", "ESCALATED"}),
+        "TRIAGED": frozenset({"INVESTIGATING", "ESCALATED"}),
         "INVESTIGATING": frozenset({"CORRELATED", "ESCALATED"}),
         "CORRELATED": frozenset({"EXPLAINED", "ESCALATED"}),
         "EXPLAINED": frozenset({"PROPOSED", "ESCALATED"}),

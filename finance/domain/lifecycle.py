@@ -30,8 +30,8 @@ StateLike = str | StrEnum
 """A lifecycle state given as its name or as a ``StrEnum`` member."""
 
 ALLOWED_TRANSITIONS: dict[str, frozenset[str]] = {
-    "DETECTED": frozenset({"TRIAGED"}),
-    "TRIAGED": frozenset({"INVESTIGATING"}),
+    "DETECTED": frozenset({"TRIAGED", "ESCALATED"}),
+    "TRIAGED": frozenset({"INVESTIGATING", "ESCALATED"}),
     "INVESTIGATING": frozenset({"CORRELATED", "ESCALATED"}),
     "CORRELATED": frozenset({"EXPLAINED", "ESCALATED"}),
     "EXPLAINED": frozenset({"PROPOSED", "ESCALATED"}),
