@@ -120,6 +120,8 @@ Rules:
 - **Linear stays lean.** Each issue answers: slice, why, contract link, acceptance criteria, dependencies, status, outcome. Detailed artifacts live in the repo, never in Linear.
 - **Pull before building.** At slice start, read the Linear issue (`linear_get_issue`) for contract + acceptance; the repo spec doc remains the normative technical source if they ever disagree — flag the divergence instead of guessing.
 - **Update after merging.** Move the issue through Todo → In Progress → In Review → Done with this audit trail: contract commit, implementation commit(s), PR URL, merge commit, test gate numbers, important adjudications, known pre-existing failures, next dependency.
+- **Update without being asked.** Every slice moves Linear on its own: pull the issue at slice start and set status to reality; post lean progress comments at milestones (contract done / engine done / PR open); full audit-trail comment at merge → Done.
+- **Done means pushed.** Never report a branch/commit as done while it exists only locally. Every slice report states remote state explicitly (branch + SHA resolvable on GitHub). Push first, then report.
 - **Workspace facts.** Project `FinSight`, team key `APA`. Statuses `Todo/In Progress/In Review/Done` exist — use them, don't invent states.
 - **History backfill** (P6-01 → P6-05 slices as Linear issues) is the human's cleanup pass, not this agent's job unless explicitly asked.
 
