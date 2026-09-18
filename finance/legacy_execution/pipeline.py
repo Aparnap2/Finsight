@@ -41,7 +41,7 @@ from finance.legacy_execution.observation import (
     observe_legacy_result,
 )
 from finance.legacy_execution.record import ExecutionRecord, ExecutionRecordStore
-from finance.legacy_execution.reservation import ReservationStore
+from finance.legacy_execution.reservation import TERMINAL_STATES, ReservationStore
 
 STAGE_RESERVATION = "E1-reservation"
 STAGE_INTENT = "E2-intent"
@@ -373,6 +373,11 @@ def run_execution(
                     code="AUTHORIZATION_REPLAYED", refused_stage=None,
                     outcome=replayed_outcome, handoff=None, audit=tuple(log),
                 )
+            return refuse(STAGE_RESERVATION, "DURABLE_OUTCOME_CORRUPT")
+        if durable is not None and (
+            durable.state in TERMINAL_STATES or durable.outcome is not None
+        ):
+            return refuse(STAGE_RESERVATION, "DURABLE_OUTCOME_CORRUPT")
         note(
             STAGE_RESERVATION,
             _digest(STAGE_RESERVATION, ctx.execution_id, "resume-no-outcome"),

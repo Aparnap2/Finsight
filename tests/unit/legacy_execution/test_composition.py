@@ -13,6 +13,8 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from decimal import Decimal
 
+import pytest
+
 from finance.approval.decision import (
     ApprovalDecision,
     DecisionOutcome,
@@ -567,3 +569,35 @@ def test_restart_replay_reads_durable_outcome(tmp_path) -> None:
     assert [e.stage for e in second.audit] == ["E1-reservation", "E1-reservation"]
     assert [e.code for e in second.audit] == ["PERMIT", "AUTHORIZATION_REPLAYED"]
     assert second_ran == ["reservation"]
+
+
+@pytest.mark.parametrize("payload", ["not-json{{{", None])
+def test_corrupt_terminal_outcome_refuses_no_effect(payload) -> None:
+    """Terminal row with unreadable proof refuses; E2+ never run, 0 PUTs."""
+    from finance.legacy_execution.reservation import ReservationStore
+
+    reservations = ReservationStore()
+    reservations.claim_execution(
+        KEY,
+        {
+            "binding_digest": _mint_token().binding_digest,
+            "company_id": COMPANY,
+            "situation_id": SITUATION,
+        },
+    )
+    reservations.bind_batch(KEY, BATCH)
+    reservations.record_outcome(KEY, "ACCEPTED", payload=payload)
+    records = ExecutionRecordStore()
+    outbound = _CountingS3(COMPANY)
+
+    result, ran = _full_real_run(
+        reservations=reservations, records=records, outbound=outbound,
+        result_bytes=_accepted_result_bytes(),
+    )
+    assert result.permitted is False
+    assert result.code == "DURABLE_OUTCOME_CORRUPT"
+    assert result.refused_stage == "E1-reservation"
+    assert result.handoff is None
+    assert ran == ["reservation"]
+    assert [e.stage for e in result.audit] == ["E1-reservation", "E1-reservation"]
+    assert outbound.puts == 0
