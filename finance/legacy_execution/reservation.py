@@ -180,6 +180,13 @@ class ReservationStore:
         with self._lock:
             existing = self._rows.get(execution_id)
             if existing is not None:
+                if existing.binding_digest != bound.binding_digest:
+                    raise ApprovalRefused(
+                        RefusalCode.CROSS_CASE_REFUSED,
+                        "E1",
+                        "Pre-existing row carries a foreign authorization "
+                        "binding; escalate, never merge.",
+                    )
                 return ClaimResult(
                     status="REPLAY",
                     reservation=existing,

@@ -357,3 +357,167 @@ def test_derive_batch_id_shape() -> None:
     left = derive_batch_id(KEY, "20260916")
     assert left == derive_batch_id(KEY, "20260916")
     assert left != derive_batch_id("idem-other", "20260916")
+
+
+class _CountingS3(FakeS3):
+    """Real FakeS3 that counts PUTs (no behavior change)."""
+
+    def __init__(self, tenant_id: str) -> None:
+        super().__init__(tenant_id)
+        self.puts = 0
+
+    def put_object(
+        self, key: str, data: bytes, content_type: str = "application/octet-stream"
+    ) -> object:
+        self.puts += 1
+        return super().put_object(key, data, content_type)
+
+
+def _full_real_run(
+    *,
+    reservations: ReservationStore,
+    records: ExecutionRecordStore,
+    outbound: FakeS3,
+    result_bytes: bytes,
+) -> tuple[object, list[str]]:
+    """Run the pipeline with every stage real; return (result, ran)."""
+    from finance.legacy_execution.intent import derive_intent
+
+    token = _mint_token()
+    ran: list[str] = []
+
+    def reservation(ctx: ExecutionContext) -> ReservationGrant:
+        ran.append("reservation")
+        claim = reservations.claim_execution(
+            ctx.execution_id,
+            {
+                "binding_digest": ctx.binding_digest,
+                "company_id": ctx.company_id,
+                "situation_id": ctx.situation_id,
+            },
+        )
+        return ReservationGrant(
+            execution_id=ctx.execution_id, batch_id=BATCH,
+            company_id=ctx.company_id, situation_id=ctx.situation_id,
+            authorization_id=ctx.authorization_id,
+            proposal_hash=ctx.proposal_hash,
+            proposal_version=ctx.proposal_version,
+            binding_digest=ctx.binding_digest, expires_at=ctx.expires_at,
+            replayed=claim.status == "REPLAY",
+        )
+
+    def intent(grant: ReservationGrant) -> IntentView:
+        ran.append("intent")
+        assert grant.execution_id == token.idempotency_key
+        produced = derive_intent(token)
+        return IntentView(
+            execution_id=produced.execution_id, action=produced.action,
+            amount_exact=produced.amount_exact,
+            account_code=produced.account_code,
+            company_id=produced.company_id,
+            situation_id=produced.situation_id, batch_id=BATCH,
+        )
+
+    def artifact(intent_view: IntentView) -> ArtifactView:
+        ran.append("artifact")
+        t2 = T2Intent.model_validate({
+            **intent_view.model_dump(),
+            "idempotency_key": intent_view.execution_id,
+            "proposal_hash": PROPOSAL_HASH,
+            "proposal_version": 1,
+        })
+        built = build_artifact(t2, batch_id=intent_view.batch_id,
+                               processing_date="20260916")
+        return ArtifactView(**built.model_dump())
+
+    def transport(artifact_view: ArtifactView) -> ReceiptView:
+        ran.append("transport")
+        made = put_verified(
+            outbound, artifact_view, company_id=COMPANY,
+            bucket_outbound=OUTBOUND_BUCKET, now=T_PUT,
+        )
+        return ReceiptView(**made.model_dump())
+
+    class _Results:
+        def read_result(self, key: str) -> bytes | None:
+            assert key == f"{COMPANY}/{BATCH}/RESULT_20260916_231.DAT"
+            return result_bytes
+
+    ctx = ExecutionContext(
+        execution_id=KEY, company_id=COMPANY, situation_id=SITUATION,
+        authorization_id=token.authorization_id,
+        proposal_hash=PROPOSAL_HASH, proposal_version=1,
+        binding_digest=token.binding_digest, expires_at=T_EXPIRES,
+        now=T_NOW, window_start=T0,
+        result_key=f"{COMPANY}/{BATCH}/RESULT_20260916_231.DAT",
+    )
+    result = run_execution(
+        ctx, reservation=reservation, intent=intent, artifact=artifact,
+        transport=transport, reservation_store=reservations,
+        record_store=records, result_store=_Results(),
+    )
+    return result, ran
+
+
+def _accepted_result_bytes() -> bytes:
+    """Single-AC RESULT bytes for the FS-231 correction batch."""
+    return (
+        "\n".join([_result_line(1, "AC", "POSTED")]) + "\n"
+    ).encode("ascii")
+
+
+def test_second_presentation_skips_everything_after_e1() -> None:
+    """Replay: E1 identifies, outcome returns, nothing else runs."""
+    reservations = ReservationStore()
+    records = ExecutionRecordStore()
+    outbound = _CountingS3(COMPANY)
+    first, first_ran = _full_real_run(
+        reservations=reservations, records=records, outbound=outbound,
+        result_bytes=_accepted_result_bytes(),
+    )
+    assert first.permitted is True
+    assert first.handoff is not None
+    assert outbound.puts == 1
+
+    second, second_ran = _full_real_run(
+        reservations=reservations, records=records, outbound=outbound,
+        result_bytes=_accepted_result_bytes(),
+    )
+    assert second.permitted is True
+    assert second.code == "AUTHORIZATION_REPLAYED"
+    assert second.handoff is None
+    assert second.outcome == first.outcome
+    assert [e.stage for e in second.audit] == ["E1-reservation", "E1-reservation"]
+    assert [e.code for e in second.audit] == ["PERMIT", "AUTHORIZATION_REPLAYED"]
+    assert second_ran == ["reservation"]
+    assert outbound.puts == 1
+
+
+def test_replay_without_outcome_resumes_recovery() -> None:
+    """Claim with no outcome (crash) resumes the chain instead of stalling."""
+    reservations = ReservationStore()
+    reservations.claim_execution(
+        KEY,
+        {
+            "binding_digest": _mint_token().binding_digest,
+            "company_id": COMPANY,
+            "situation_id": SITUATION,
+        },
+    )
+    records = ExecutionRecordStore()
+    outbound = _CountingS3(COMPANY)
+    result, ran = _full_real_run(
+        reservations=reservations, records=records, outbound=outbound,
+        result_bytes=_accepted_result_bytes(),
+    )
+    assert result.permitted is True
+    assert result.handoff is not None
+    assert result.handoff.outcome == "ACCEPTED"
+    stages = [e.stage for e in result.audit]
+    assert stages == [
+        "E1-reservation", "E1-reservation", "E2-intent", "E3-artifact",
+        "E4-transport", "E5-observation", "E6-ingestion", "E6-record",
+        "handoff",
+    ]
+    assert [e.code for e in result.audit][1] == "RESUME"
+    assert outbound.puts == 1

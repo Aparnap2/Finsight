@@ -338,6 +338,25 @@ def run_execution(
         True, "PERMIT",
     )
 
+    if grant.replayed:
+        prior = store.claimed(ctx.execution_id)
+        if prior is not None and prior.outcome is not None:
+            note(
+                STAGE_RESERVATION,
+                _digest(STAGE_RESERVATION, ctx.execution_id, "replay-read"),
+                True, "AUTHORIZATION_REPLAYED",
+            )
+            return PipelineResult(
+                execution_id=ctx.execution_id, permitted=True,
+                code="AUTHORIZATION_REPLAYED", refused_stage=None,
+                outcome=prior.outcome, handoff=None, audit=tuple(log),
+            )
+        note(
+            STAGE_RESERVATION,
+            _digest(STAGE_RESERVATION, ctx.execution_id, "resume-no-outcome"),
+            True, "RESUME",
+        )
+
     try:
         intent_view = intent(grant)
     except PipelineRefused as exc:
