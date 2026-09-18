@@ -37,6 +37,9 @@ from finance.approval import (
 from finance.business_rules.meridian import RefundAuthority
 from finance.domain.financial_situation import FinancialSituation
 
+TEST_SEAL = b"p6-06-test-seal-key-231"
+"""TEST-ONLY seal key (never production; never logged or persisted)."""
+
 FS231 = "FS-2026-0916-00231"
 FS232 = "FS-2026-0916-00232"
 ACTION = "REPROCESS_LEGACY_RECORD"
@@ -134,6 +137,7 @@ def _mint(
         account_code=snapshot.account_code,
         issued_at=ISSUED_AT,
         expires_at=EXPIRES_AT,
+        seal_key=TEST_SEAL,
         scope_batch=batch,
         proposal=snapshot,
     )
@@ -159,6 +163,7 @@ def _verify(
         account_code=ACCOUNT,
         scope_batch=batch,
         at=at,
+        seal_key=TEST_SEAL,
     )
 
 
@@ -235,6 +240,7 @@ def test_r3_stale_version_authorization_void() -> None:
             account_code=ACCOUNT,
             scope_batch=None,
             at=ISSUED_AT,
+            seal_key=TEST_SEAL,
         )
     assert exc_info.value.code is RefusalCode.PROPOSAL_VERSION_SWAPPED
 
@@ -402,6 +408,7 @@ def test_pin_skew_same_version_hash_mismatch_refused() -> None:
             account_code=ACCOUNT,
             scope_batch=None,
             at=ISSUED_AT,
+            seal_key=TEST_SEAL,
         )
     assert exc_info.value.code is RefusalCode.PIN_SKEW_HASH
 
@@ -446,6 +453,7 @@ def test_negative_path_policy_no_mints_no_token() -> None:
             account_code=ACCOUNT,
             issued_at=ISSUED_AT,
             expires_at=EXPIRES_AT,
+            seal_key=TEST_SEAL,
         )
     assert exc_info.value.code is RefusalCode.DECISION_REJECTED
     assert exc_info.value.gate == "G7"
@@ -530,4 +538,111 @@ def test_mint_rejects_inverted_expiry_window() -> None:
             account_code=ACCOUNT,
             issued_at=ISSUED_AT,
             expires_at=ISSUED_AT,
+            seal_key=TEST_SEAL,
+        )
+
+
+def test_fabricated_token_from_scratch_rejected() -> None:
+    """No minted token: recomputing the public digest still fails verify.
+
+    The attacker knows every bound field and the digest algorithm, but
+    not the server-held seal key. Authenticity (MAC) rejects what
+    integrity (digest) alone cannot distinguish.
+    """
+    from finance.approval import binding_digest_for
+
+    forged = AuthorizationToken(
+        authorization_id="authz_attacker",
+        proposal_hash=_hash_for(),
+        proposal_version=1,
+        company_id="meridian",
+        situation_id=FS231,
+        action=ACTION,
+        amount_exact=Decimal("10000"),
+        account_code=ACCOUNT,
+        idempotency_key="idem-attacker",
+        issued_at=ISSUED_AT,
+        expires_at=EXPIRES_AT,
+        amount_ceiling=Decimal("10000"),
+        scope_batch=None,
+        binding_digest=binding_digest_for(
+            authorization_id="authz_attacker",
+            company_id="meridian",
+            situation_id=FS231,
+            proposal_hash=_hash_for(),
+            proposal_version=1,
+            action=ACTION,
+            amount_exact=Decimal("10000"),
+            account_code=ACCOUNT,
+            idempotency_key="idem-attacker",
+            issued_at=ISSUED_AT,
+            expires_at=EXPIRES_AT,
+            scope_batch=None,
+        ),
+        auth_mac="0" * 64,
+    )
+    with pytest.raises(ApprovalRefused) as exc_info:
+        verify_authorization(
+            forged,
+            company_id="meridian",
+            situation_id=FS231,
+            proposal_hash=_hash_for(),
+            proposal_version=1,
+            action=ACTION,
+            amount_exact=Decimal("10000"),
+            account_code=ACCOUNT,
+            scope_batch=None,
+            at=ISSUED_AT,
+            seal_key=TEST_SEAL,
+        )
+    assert exc_info.value.code is RefusalCode.TOKEN_FORGED
+
+
+def test_wrong_seal_key_rejected() -> None:
+    """A token sealed under another key fails with the true seal."""
+    token = _mint(_decide(_snapshot()), _snapshot())
+    with pytest.raises(ApprovalRefused) as exc_info:
+        verify_authorization(
+            token,
+            company_id="meridian",
+            situation_id=FS231,
+            proposal_hash=token.proposal_hash,
+            proposal_version=token.proposal_version,
+            action=ACTION,
+            amount_exact=Decimal("10000"),
+            account_code=ACCOUNT,
+            scope_batch=None,
+            at=ISSUED_AT,
+            seal_key=b"wrong-seal-key-000",
+        )
+    assert exc_info.value.code is RefusalCode.TOKEN_FORGED
+
+
+def test_empty_seal_key_refused() -> None:
+    """Minting or verifying without a secret is refused, never silent."""
+    decision = _decide(_snapshot())
+    with pytest.raises(ValueError, match="seal_key"):
+        mint_authorization(
+            decision,
+            action=ACTION,
+            amount_exact=Decimal("10000"),
+            account_code=ACCOUNT,
+            issued_at=ISSUED_AT,
+            expires_at=EXPIRES_AT,
+            seal_key=b"",
+        )
+    token = _mint(decision, _snapshot())
+    with pytest.raises(ValueError, match="seal_key"):
+        verify_authorization(
+            token,
+            company_id="meridian",
+            situation_id=FS231,
+            proposal_hash=token.proposal_hash,
+            proposal_version=token.proposal_version,
+            action=ACTION,
+            amount_exact=Decimal("10000"),
+            account_code=ACCOUNT,
+            scope_batch=None,
+            at=ISSUED_AT,
+            seal_key=b"",
         )

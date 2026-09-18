@@ -2,20 +2,28 @@
 
 ``mint_authorization`` binds exactly one approved proposal version to one
 execution identity (action, exact amount, account code, scope) plus the
-P6-07 idempotency key and a caller-supplied expiry window. Minting is
-deterministic: identical inputs yield byte-identical tokens, so replays
-never create a second authorization (A16). No lifecycle transition runs
-here and no execution is performed; effect deduplication belongs to P6-07.
+P6-07 idempotency key and a caller-supplied expiry window, then seals
+the binding with an HMAC keyed by a server-held secret. Minting is
+deterministic: identical inputs plus the same seal key yield
+byte-identical tokens, so replays never create a second authorization
+(A16). No lifecycle transition runs here and no execution is performed;
+effect deduplication belongs to P6-07.
 
-``verify_authorization`` is a pure predicate: it checks binding digest
-integrity, case binding, hash/version pin, expiry, and scope without
-mutating anything. Check order is fixed: integrity, case, pin, expiry,
-scope; the first failure wins.
+``verify_authorization`` is a pure predicate: it checks seal
+authenticity first (a public-digest recomputation alone never passes),
+then binding digest integrity, case binding, hash/version pin, expiry,
+and scope without mutating anything. The seal key is held by the
+hosting runtime (environment/secret manager in production) and is
+never a token field, never logged, never persisted here.
+
+``verify_authorization`` check order is fixed: authenticity, integrity,
+case, pin, expiry, scope; the first failure wins.
 """
 
 from __future__ import annotations
 
 import hashlib
+import hmac
 from datetime import datetime
 from decimal import Decimal
 
@@ -33,6 +41,66 @@ from finance.approval.refusals import ApprovalRefused, RefusalCode
 def _digest(canonical: str) -> str:
     """Return the sha256 hex digest of a canonical encoding."""
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _require_seal_key(seal_key: bytes) -> bytes:
+    """Require a non-empty server-held seal key (never defaulted)."""
+    if not isinstance(seal_key, bytes) or not seal_key:
+        raise ValueError(
+            "Field 'seal_key' must be non-empty bytes held by the "
+            "hosting runtime; minting or verifying without a secret "
+            "is refused."
+        )
+    return seal_key
+
+
+def _canonical_binding(
+    *,
+    authorization_id: str,
+    company_id: str,
+    situation_id: str,
+    proposal_hash: str,
+    proposal_version: int,
+    action: str,
+    amount_exact: Decimal,
+    account_code: str,
+    idempotency_key: str,
+    issued_at: datetime,
+    expires_at: datetime,
+    scope_batch: str | None,
+) -> str:
+    """Return the canonical string every binding seal covers."""
+    return "|".join(
+        [
+            authorization_id,
+            company_id,
+            situation_id,
+            proposal_hash,
+            str(proposal_version),
+            action,
+            canonical_amount(amount_exact),
+            account_code,
+            idempotency_key,
+            issued_at.isoformat(),
+            expires_at.isoformat(),
+            scope_batch or "",
+        ]
+    )
+
+
+def seal_binding(canonical: str, *, seal_key: bytes) -> str:
+    """Return the HMAC-SHA256 hex seal over a canonical binding.
+
+    Args:
+        canonical: The canonical payload from ``_canonical_binding``.
+        seal_key: Non-empty server-held secret (never a token field).
+
+    Returns:
+        Lowercase hex MAC; unforgeable without the seal key.
+    """
+    return hmac.new(
+        _require_seal_key(seal_key), canonical.encode("utf-8"), hashlib.sha256
+    ).hexdigest()
 
 
 def _require_tz_aware(field_name: str, value: datetime) -> datetime:
@@ -78,21 +146,19 @@ def binding_digest_for(
     Returns:
         Lowercase sha256 hex digest; any bound-field tamper breaks it.
     """
-    canonical = "|".join(
-        [
-            authorization_id,
-            company_id,
-            situation_id,
-            proposal_hash,
-            str(proposal_version),
-            action,
-            canonical_amount(amount_exact),
-            account_code,
-            idempotency_key,
-            issued_at.isoformat(),
-            expires_at.isoformat(),
-            scope_batch or "",
-        ]
+    canonical = _canonical_binding(
+        authorization_id=authorization_id,
+        company_id=company_id,
+        situation_id=situation_id,
+        proposal_hash=proposal_hash,
+        proposal_version=proposal_version,
+        action=action,
+        amount_exact=amount_exact,
+        account_code=account_code,
+        idempotency_key=idempotency_key,
+        issued_at=issued_at,
+        expires_at=expires_at,
+        scope_batch=scope_batch,
     )
     return _digest(canonical)
 
@@ -144,6 +210,13 @@ class AuthorizationToken(BaseModel):
     binding_digest: str = ""
     """Tamper-evident digest over every bound field (A17 integrity)."""
 
+    auth_mac: str = ""
+    """HMAC-SHA256 seal over the canonical binding (G7 authenticity).
+
+    Computable only with the server-held seal key: recomputing the
+    public digest is never sufficient to pass verification.
+    """
+
     @field_validator("issued_at", "expires_at")
     @classmethod
     def _check_tz(cls, value: datetime) -> datetime:
@@ -159,6 +232,7 @@ def mint_authorization(
     account_code: str,
     issued_at: datetime,
     expires_at: datetime,
+    seal_key: bytes,
     scope_batch: str | None = None,
     proposal: ProposalSnapshot | None = None,
 ) -> AuthorizationToken:
@@ -171,20 +245,25 @@ def mint_authorization(
         account_code: Account code bound into the token.
         issued_at: Caller-supplied tz-aware issue time (no clock read).
         expires_at: Caller-supplied tz-aware expiry (must be after issue).
+        seal_key: Non-empty server-held secret sealing the token. No
+            default exists by design: minting without a secret is
+            refused rather than silently producing a forgeable token.
         scope_batch: Optional batch/window scope bound into the token.
         proposal: Optional snapshot cross-checked against the decision pin
             and the execution identity (hash, version, case, amount,
             account must all agree).
 
     Returns:
-        The frozen token; identical inputs yield byte-identical tokens.
+        The frozen token; identical inputs plus the same seal key yield
+        byte-identical tokens.
 
     Raises:
         ApprovalRefused: ``DECISION_REJECTED`` when the outcome is not
             APPROVE (policy-NO mints nothing); ``PROPOSAL_VERSION_SWAPPED``,
             ``CROSS_CASE_REFUSED``, or ``PROPOSAL_DRIFT_REFUSED`` when the
             optional proposal cross-check disagrees.
-        ValueError: When the expiry window is not forward.
+        ValueError: When the expiry window is not forward, or the seal
+            key is empty.
     """
     if decision.outcome is not DecisionOutcome.APPROVE:
         raise ApprovalRefused(
@@ -242,6 +321,21 @@ def mint_authorization(
         scope_batch=scope_batch,
         binding_digest="",
     )
+    key = _require_seal_key(seal_key)
+    canonical = _canonical_binding(
+        authorization_id=token.authorization_id,
+        company_id=token.company_id,
+        situation_id=token.situation_id,
+        proposal_hash=token.proposal_hash,
+        proposal_version=token.proposal_version,
+        action=token.action,
+        amount_exact=token.amount_exact,
+        account_code=token.account_code,
+        idempotency_key=token.idempotency_key,
+        issued_at=token.issued_at,
+        expires_at=token.expires_at,
+        scope_batch=token.scope_batch,
+    )
     digest = binding_digest_for(
         authorization_id=token.authorization_id,
         company_id=token.company_id,
@@ -256,7 +350,9 @@ def mint_authorization(
         expires_at=token.expires_at,
         scope_batch=token.scope_batch,
     )
-    return token.model_copy(update={"binding_digest": digest})
+    return token.model_copy(
+        update={"binding_digest": digest, "auth_mac": seal_binding(canonical, seal_key=key)}
+    )
 
 
 def verify_authorization(
@@ -271,11 +367,15 @@ def verify_authorization(
     account_code: str,
     scope_batch: str | None,
     at: datetime,
+    seal_key: bytes,
 ) -> None:
     """Verify a token against the presented execution context (A18).
 
-    Fixed check order: integrity, case, pin, expiry, scope. Pure predicate:
-    permits return None, refusals raise, nothing mutates.
+    Fixed check order: authenticity, integrity, case, pin, expiry,
+    scope. Pure predicate: permits return None, refusals raise,
+    nothing mutates. Authenticity comes first: a token whose MAC was
+    not sealed with the server-held key is forged even when its
+    public digest recomputes cleanly.
 
     Args:
         token: The authorization token presented for use.
@@ -288,17 +388,44 @@ def verify_authorization(
         account_code: Presented account code.
         scope_batch: Presented batch/window scope.
         at: Caller-supplied tz-aware use time (no clock read).
+        seal_key: Non-empty server-held secret (no default by design).
 
     Returns:
         None when every binding holds.
 
     Raises:
-        ApprovalRefused: ``TOKEN_FORGED`` (digest break), ``CROSS_CASE_REFUSED``
-            (case/company escape), ``PROPOSAL_VERSION_SWAPPED`` (version swap),
-            ``PIN_SKEW_HASH`` (same-version hash skew), ``AUTHORIZATION_EXPIRED``
-            (past expiry), or ``AUTHORIZATION_SCOPE_ESCAPE`` (scope escape).
-        ValueError: When ``at`` is naive.
+        ApprovalRefused: ``TOKEN_FORGED`` (seal or digest break),
+            ``CROSS_CASE_REFUSED`` (case/company escape),
+            ``PROPOSAL_VERSION_SWAPPED`` (version swap),
+            ``PIN_SKEW_HASH`` (same-version hash skew),
+            ``AUTHORIZATION_EXPIRED`` (past expiry), or
+            ``AUTHORIZATION_SCOPE_ESCAPE`` (scope escape).
+        ValueError: When ``at`` is naive or the seal key is empty.
     """
+    key = _require_seal_key(seal_key)
+    expected_mac = seal_binding(
+        _canonical_binding(
+            authorization_id=token.authorization_id,
+            company_id=token.company_id,
+            situation_id=token.situation_id,
+            proposal_hash=token.proposal_hash,
+            proposal_version=token.proposal_version,
+            action=token.action,
+            amount_exact=token.amount_exact,
+            account_code=token.account_code,
+            idempotency_key=token.idempotency_key,
+            issued_at=token.issued_at,
+            expires_at=token.expires_at,
+            scope_batch=token.scope_batch,
+        ),
+        seal_key=key,
+    )
+    if not hmac.compare_digest(expected_mac, token.auth_mac):
+        raise ApprovalRefused(
+            RefusalCode.TOKEN_FORGED,
+            "G7",
+            "Token seal fails verification: not minted with this runtime.",
+        )
     expected_digest = binding_digest_for(
         authorization_id=token.authorization_id,
         company_id=token.company_id,
