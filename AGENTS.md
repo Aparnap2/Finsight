@@ -104,3 +104,31 @@ Confirm all pass before submitting.
 - `openspec/project.md` — Project conventions and evidence
 - `openspec/evaluation.md` — Evaluation impact template for AI-system changes
 - `docs/09-platform/*.md` — Detailed platform layer documentation
+
+## Linear Workflow (Solo-Agent Engineering Loop)
+
+Linear, GitHub, and OpenCode each own exactly one authority. Never blur them.
+
+| System | Authority |
+|--------|-----------|
+| **Linear** | What we're building and why (slice, contract, acceptance, status) |
+| **GitHub** | What actually changed and was reviewed (diff, CI, merge) |
+| **OpenCode** | Implementation executor (this agent) |
+
+Rules:
+- **Neither Linear nor any LLM declares code correct.** Only GitHub/CI + human review does.
+- **Linear stays lean.** Each issue answers: slice, why, contract link, acceptance criteria, dependencies, status, outcome. Detailed artifacts live in the repo, never in Linear.
+- **Pull before building.** At slice start, read the Linear issue (`linear_get_issue`) for contract + acceptance; the repo spec doc remains the normative technical source if they ever disagree — flag the divergence instead of guessing.
+- **Update after merging.** Move the issue through Todo → In Progress → In Review → Done with this audit trail: contract commit, implementation commit(s), PR URL, merge commit, test gate numbers, important adjudications, known pre-existing failures, next dependency.
+- **Workspace facts.** Project `FinSight`, team key `APA`. Statuses `Todo/In Progress/In Review/Done` exist — use them, don't invent states.
+- **History backfill** (P6-01 → P6-05 slices as Linear issues) is the human's cleanup pass, not this agent's job unless explicitly asked.
+
+## PR Creation Checklist (GitHub Boxes)
+
+Fill every box at creation time, not after:
+- **Assignees:** `@Aparnap2`
+- **Reviewers:** request review per standing instruction (CodeRabbit auto-reviews; add human reviewer when asked)
+- **Labels:** apply the repo's workstream label for the slice
+- **Projects:** add to the FinSight project board
+- **Milestone:** set the active milestone when one exists
+- **Development:** link the Linear issue (e.g. `APA-5`) in the PR body so merge state syncs
