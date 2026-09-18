@@ -24,7 +24,7 @@ from enum import StrEnum
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import Column, Engine, MetaData, String, Table
+from sqlalchemy import Column, Engine, MetaData, String, Table, Text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -48,6 +48,7 @@ reservation_table = Table(
     Column("batch_id", String, nullable=True),
     Column("state", String, nullable=False),
     Column("outcome", String, nullable=True),
+    Column("outcome_payload", Text, nullable=True),
 )
 """Durable reservation table (conditional insert-or-read, A2).
 
@@ -115,6 +116,13 @@ class Reservation(BaseModel):
 
     outcome: str | None = None
     """Recorded outcome pointer served on replay-reads; null until set."""
+
+    outcome_payload: str | None = None
+    """Canonical outcome JSON served on durable replay-reads.
+
+    Present exactly when ``outcome`` is terminal: a restarted process
+    replays from this payload without re-entering any effect path.
+    """
 
     batch_id: str | None = None
     """Bound logical batch id, set once (A2/X21); null until bound."""
@@ -213,12 +221,18 @@ class ReservationStore:
             batch_id=row["batch_id"],
             state=ReservationState(row["state"]),
             outcome=row["outcome"],
+            outcome_payload=row.get("outcome_payload"),
         )
 
     def _claim_sql(
         self, execution_id: str, bound: ReservationBinding
     ) -> ClaimResult:
-        """Claim via conditional insert; losers read the winner's row."""
+        """Claim via conditional insert; losers read the winner's row.
+
+        Creatorship comes from the INSERT outcome itself, never from
+        the row state: a replayed fresh row (RESERVED, no outcome) is
+        still a replay, not a second claim.
+        """
         assert self._engine is not None
         with Session(self._engine) as session:
             try:
@@ -234,8 +248,10 @@ class ReservationStore:
                     )
                 )
                 session.commit()
+                created = True
             except IntegrityError:
                 session.rollback()
+                created = False
             winner = session.execute(
                 reservation_table.select().where(
                     reservation_table.c.execution_id == execution_id
@@ -251,9 +267,6 @@ class ReservationStore:
                     "Pre-existing row carries a foreign authorization "
                     "binding; escalate, never merge.",
                 )
-            created = (
-                row.state is ReservationState.RESERVED and row.outcome is None
-            )
             return ClaimResult(
                 status="CLAIMED" if created else "REPLAY",
                 reservation=row,
@@ -390,12 +403,16 @@ class ReservationStore:
             self._rows[execution_id] = advanced
             return advanced
 
-    def record_outcome(self, execution_id: str, outcome: str) -> Reservation:
+    def record_outcome(
+        self, execution_id: str, outcome: str, *, payload: str | None = None
+    ) -> Reservation:
         """Record the terminal outcome pointer served on later replays.
 
         Args:
             execution_id: Token ``idempotency_key`` whose outcome landed.
             outcome: Terminal outcome label (e.g. ``ACCEPTED``).
+            payload: Canonical outcome JSON replayed byte-identically
+                after a restart (None keeps label-only rows working).
 
         Returns:
             The row carrying the recorded outcome pointer.
@@ -417,6 +434,7 @@ class ReservationStore:
                         {
                             reservation_table.c.state: state.value,
                             reservation_table.c.outcome: outcome,
+                            reservation_table.c.outcome_payload: payload,
                         },
                         synchronize_session="fetch",
                     )
@@ -429,6 +447,8 @@ class ReservationStore:
                 return current
         with self._lock:
             row = self._rows[execution_id]
-            recorded = row.model_copy(update={"state": state, "outcome": outcome})
+            recorded = row.model_copy(
+                update={"state": state, "outcome": outcome, "outcome_payload": payload}
+            )
             self._rows[execution_id] = recorded
             return recorded

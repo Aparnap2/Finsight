@@ -375,9 +375,9 @@ class _CountingS3(FakeS3):
 
 def _full_real_run(
     *,
-    reservations: ReservationStore,
-    records: ExecutionRecordStore,
-    outbound: FakeS3,
+    reservations: ReservationStore | None = None,
+    records: ExecutionRecordStore | None = None,
+    outbound: FakeS3 | None = None,
     result_bytes: bytes,
 ) -> tuple[object, list[str]]:
     """Run the pipeline with every stage real; return (result, ran)."""
@@ -385,6 +385,12 @@ def _full_real_run(
 
     token = _mint_token()
     ran: list[str] = []
+    if reservations is None:
+        reservations = ReservationStore()
+    if records is None:
+        records = ExecutionRecordStore()
+    if outbound is None:
+        outbound = FakeS3(COMPANY)
 
     def reservation(ctx: ExecutionContext) -> ReservationGrant:
         ran.append("reservation")
@@ -521,3 +527,43 @@ def test_replay_without_outcome_resumes_recovery() -> None:
     ]
     assert [e.code for e in result.audit][1] == "RESUME"
     assert outbound.puts == 1
+
+
+def test_restart_replay_reads_durable_outcome(tmp_path) -> None:
+    """Crash after completion: fresh process replays from durable row.
+
+    Process A runs the full chain (one PUT, outcome persisted
+    durably). Process B starts with empty memory everywhere except
+    the same reservation database file: E1 detects the recorded
+    outcome, returns it identically, and never executes E2+.
+    """
+    from sqlalchemy import create_engine as _create_engine
+
+    from finance.legacy_execution.reservation import ReservationStore as _Store
+
+    url = f"sqlite:///{tmp_path}/durable.db"
+    outbound_a = _CountingS3(COMPANY)
+    first, _ = _full_real_run(
+        reservations=_Store(_create_engine(url)),
+        records=__import__(
+            "finance.legacy_execution.record", fromlist=["ExecutionRecordStore"]
+        ).ExecutionRecordStore(),
+        outbound=outbound_a,
+        result_bytes=_accepted_result_bytes(),
+    )
+    assert first.permitted is True
+    assert first.handoff is not None
+    assert outbound_a.puts == 1
+
+    del outbound_a
+    second, second_ran = _full_real_run(
+        reservations=_Store(_create_engine(url)),
+        result_bytes=_accepted_result_bytes(),
+    )
+    assert second.permitted is True
+    assert second.code == "AUTHORIZATION_REPLAYED"
+    assert second.handoff is None
+    assert second.outcome == first.outcome
+    assert [e.stage for e in second.audit] == ["E1-reservation", "E1-reservation"]
+    assert [e.code for e in second.audit] == ["PERMIT", "AUTHORIZATION_REPLAYED"]
+    assert second_ran == ["reservation"]

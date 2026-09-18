@@ -351,6 +351,28 @@ def run_execution(
                 code="AUTHORIZATION_REPLAYED", refused_stage=None,
                 outcome=prior.outcome, handoff=None, audit=tuple(log),
             )
+        durable = bindings.receipt_status(ctx.execution_id)
+        if durable is not None and durable.outcome_payload:
+            try:
+                replayed_outcome = IngestionOutcome.model_validate_json(
+                    durable.outcome_payload
+                )
+            except ValueError:
+                replayed_outcome = None
+            if replayed_outcome is not None:
+                note(
+                    STAGE_RESERVATION,
+                    _digest(
+                        STAGE_RESERVATION, ctx.execution_id,
+                        "replay-read-durable",
+                    ),
+                    True, "AUTHORIZATION_REPLAYED",
+                )
+                return PipelineResult(
+                    execution_id=ctx.execution_id, permitted=True,
+                    code="AUTHORIZATION_REPLAYED", refused_stage=None,
+                    outcome=replayed_outcome, handoff=None, audit=tuple(log),
+                )
         note(
             STAGE_RESERVATION,
             _digest(STAGE_RESERVATION, ctx.execution_id, "resume-no-outcome"),
@@ -450,6 +472,12 @@ def run_execution(
         return refuse(STAGE_RECORD, exc.code, outcome)
     except ApprovalRefused as exc:
         return refuse(STAGE_RECORD, exc.code.value, outcome)
+    if bindings.receipt_status(ctx.execution_id) is not None:
+        bindings.record_outcome(
+            ctx.execution_id,
+            outcome.outcome.value,
+            payload=outcome.model_dump_json(),
+        )
     note(
         STAGE_RECORD,
         _digest(STAGE_RECORD, record_row.execution_id,

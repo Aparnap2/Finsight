@@ -200,6 +200,22 @@ def _receipt_for(artifact: Any, key: str, now: datetime) -> TransportReceipt:
 # ---------------------------------------------------------------------------
 
 
+def _probe_present(store: _StorePort, key: str) -> bytes | None:
+    """Return the stored bytes at ``key``, or None when absent (A2 probe).
+
+    A present object lets the caller recover a receipt with zero PUTs;
+    absence authorizes exactly one PUT cycle. Tenant errors refuse;
+    other S3 failures propagate to the retry loop.
+    """
+    try:
+        present, _meta = store.get_object(key)
+    except ObjectNotFoundError:
+        return None
+    except (TenantIsolationError, CompanyIsolationError) as exc:
+        raise PrefixEscapeError(str(exc)) from exc
+    return present
+
+
 def put_verified(
     store: _StorePort,
     artifact: Any,
@@ -232,6 +248,14 @@ def put_verified(
 
     payload: bytes = bytes(artifact.file_bytes)
     want = artifact.outbound_sha256
+    probed = _probe_present(store, key)
+    if probed is not None:
+        if probed != payload or hashlib.sha256(probed).hexdigest() != want:
+            raise HashMismatchError(
+                f"probe collision for {key!r}: stored bytes differ from "
+                f"{want_short(artifact)}"
+            )
+        return _receipt_for(artifact, key, now)
     last_error: Exception | None = None
     for attempt in range(1, max_attempts + 1):
         try:
