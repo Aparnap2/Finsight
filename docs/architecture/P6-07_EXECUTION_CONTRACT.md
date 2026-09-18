@@ -792,12 +792,27 @@ those contracts.
   path (`AUTHORIZATION_REPLAYED` recorded, never
   re-executed). A crash between `RESERVED` and a
   recorded receipt recovers by resuming from the
-  row: re-drive PUT only when no receipt exists
-  for this `execution_id`, never a second effect.
-  The row uses existing persistence patterns
-  (conditional insert-or-read, predicated UPDATE
-  on `(execution_id, state)`); no queues,
-  Temporal, workers, or new infrastructure. State
+  row, but a missing receipt alone never
+  authorizes a re-PUT: the outbound key is
+  deterministic, so recovery first performs a
+  bounded S3 read of that exact key (existing
+  read capability; no `HeadObject`, no new
+  infrastructure). If the object exists and its
+  bytes hash exactly to `outbound_sha256`, the
+  transport receipt is durably recorded from the
+  observation and NO second PUT occurs. If the
+  object is absent, PUT the exact E3 bytes once.
+  If the object exists with differing bytes,
+  refuse (integrity/collision semantics win over
+  retransmission) and escalate; no recovery path
+  may reserialize. This closes the crash window
+  between a completed external PUT and the
+  persisted receipt, preserving X41's "at most
+  one OUTBOUND PUT" literally. The row uses
+  existing persistence patterns (conditional
+  insert-or-read, predicated UPDATE on
+  `(execution_id, state)`); no queues, Temporal,
+  workers, or new infrastructure. State
   transitions on the row (`RESERVED` → receipt →
   terminal outcome) are recorded, never edited.
 - **A3. Where DU may legitimately enter.** Three
@@ -813,14 +828,18 @@ those contracts.
   resolves to the original outcome, no FinSight
   re-PUT (nothing left to PUT). (c)
   Pre-existing batch collision — our `batch_id`
-  collides with a legacy-side batch predating us,
-  so the first PUT already returns `DU`: record
+  collides with a legacy-side batch predating us:
+  S3 transport succeeds (PUT is not the DU
+  source), then legacy observes the already-known
+  batch and its RESULT reports `DU`. E5/E6 record
   the `DU` outcome and escalate per policy; never
   auto-retry under a new id (X21 forbids a second
   `batch_id` for one key; a new id needs a new
   authorization cycle). X43 covers (b); X56/D5
   covers (b)-style observation and (c); the
   forbidden (a)-as-PUT path is closed by A2.
+  `DU` is a legacy observation vocabulary item,
+  never an S3 transport response.
 - **A4. Retry budget frozen.** One initial
   attempt plus up to three retries: at most four
   PUT+read-back-verify cycles per execution, with
