@@ -1,9 +1,11 @@
 """P6-07 T2 outbound artifact writer — stage E3 (artifact build).
 
-Builds the fixed-width OUTBOUND batch that stage E4 uploads byte-for-byte.
+Builds the fixed-width OUTBOUND batch that stage E4 uploads byte-for-byte:
+exactly one type-01 record derived solely from the permitted intent, so
+E3 cannot obtain financial meaning from outside the authorization.
 Serialization failures refuse before any transport with
-``EXEC_ARTIFACT_REFUSED``; a second batch id for one execution key refuses
-with ``AUTHORIZATION_REPLAYED`` (X21/X32).
+``EXEC_ARTIFACT_REFUSED``. Key→batch binding lives on the durable
+reservation row (A2), never in module state.
 
 Type-01 payload layout — the E2→E3 landing for (amount_exact,
 account_code). The 52-char wire record field (cols 25–76) is the 2-char
@@ -62,7 +64,6 @@ from finance.legacy.protocol import (
 # ---------------------------------------------------------------------------
 
 ARTIFACT_REFUSED_CODE = "EXEC_ARTIFACT_REFUSED"
-BINDING_REFUSED_CODE = "AUTHORIZATION_REPLAYED"
 
 AMOUNT_FIELD_WIDTH = 20
 ACCOUNT_FIELD_WIDTH = 10
@@ -76,8 +77,6 @@ ALLOWED_OUTBOUND_TYPES = frozenset({DATA_RECORD_TYPE, CONTROL_RECORD_TYPE})
 
 BATCH_ID_RE = re.compile(r"^LEGACY-\d{8}-\d{4}$")
 PROCESSING_DATE_RE = re.compile(r"^\d{8}$")
-
-DEFAULT_MAX_DATA_RECORDS = 100_000
 
 _TWO_DP = Decimal("0.01")
 
@@ -97,15 +96,6 @@ class ArtifactRefusedError(Exception):
 
     def __init__(self, detail: str) -> None:
         super().__init__(f"{ARTIFACT_REFUSED_CODE}: {detail}")
-
-
-class ArtifactBindingError(Exception):
-    """Second batch id for one execution key (``AUTHORIZATION_REPLAYED``)."""
-
-    code = BINDING_REFUSED_CODE
-
-    def __init__(self, detail: str) -> None:
-        super().__init__(f"{BINDING_REFUSED_CODE}: {detail}")
 
 
 # ---------------------------------------------------------------------------
@@ -134,15 +124,6 @@ class ExecutionIntent(BaseModel):
     proposal_version: int
 
 
-class CorrectionRecordSpec(BaseModel):
-    """One data-record spec: amount plus account code (Decimal-only)."""
-
-    model_config = ConfigDict(frozen=True, strict=True)
-
-    amount: Decimal
-    account_code: str = Field(..., min_length=1)
-
-
 class OutboundArtifact(BaseModel):
     """E3 permit output — the exact bytes E4 uploads (X23).
 
@@ -164,20 +145,27 @@ class OutboundArtifact(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Execution-key -> batch-id binding (X21: same key, same batch id)
+# A5 naming + X17 deterministic batch derivation
 # ---------------------------------------------------------------------------
 
-_EXECUTION_BATCH_BINDINGS: dict[str, str] = {}
 
+def derive_batch_id(idempotency_key: str, processing_date: str) -> str:
+    """Derive the logical batch id deterministically (X17/X21).
 
-def clear_artifact_bindings() -> None:
-    """Reset the execution->batch binding registry (test isolation only)."""
-    _EXECUTION_BATCH_BINDINGS.clear()
-
-
-# ---------------------------------------------------------------------------
-# A5 naming
-# ---------------------------------------------------------------------------
+    ``LEGACY-<YYYYMMDD>-<NNNN>`` with the date from ``processing_date``
+    and the sequence from ``sha256(idempotency_key) mod 10000``. Same
+    key plus same date always yields the same id; the durable binding
+    (reservation row) still wins once recorded — derivation never
+    overrides a bound id.
+    """
+    if not PROCESSING_DATE_RE.match(processing_date):
+        raise ArtifactRefusedError(f"bad processing_date {processing_date!r}")
+    if not idempotency_key.strip():
+        raise ArtifactRefusedError("idempotency_key must be non-blank.")
+    seq = int(hashlib.sha256(idempotency_key.encode("utf-8")).hexdigest(), 16) % 10000
+    batch_id = f"LEGACY-{processing_date}-{seq:04d}"
+    assert BATCH_ID_RE.match(batch_id)
+    return batch_id
 
 
 def derive_file_seq(situation_id: str) -> str:
@@ -339,56 +327,41 @@ def verify_outbound_lines(
 
 
 def _coerce_intent(intent: ExecutionIntent | Mapping[str, Any]) -> ExecutionIntent:
-    """Accept the frozen intent model or an equivalent mapping (T1 seam)."""
+    """Accept the frozen intent model or an equivalent mapping (T1 seam).
+
+    T1's producer model is accepted field-for-field through strict
+    validation (no silent reconstruction: every field is checked, and
+    unknown shapes refuse).
+    """
+    from finance.legacy_execution.intent import ExecutionIntent as ProducerIntent
+
     if isinstance(intent, ExecutionIntent):
         return intent
+    if isinstance(intent, ProducerIntent):
+        return ExecutionIntent.model_validate(intent.model_dump(mode="json"))
     if isinstance(intent, Mapping):
         return ExecutionIntent(**dict(intent))
     raise ArtifactRefusedError(f"intent must be a mapping, got {type(intent).__name__}")
 
 
-def _normalize_specs(
-    intent: ExecutionIntent, records: Sequence[Any] | None
-) -> list[CorrectionRecordSpec]:
-    """Normalize the records-spec to data-record specs (default: intent)."""
-    if records is None:
-        return [
-            CorrectionRecordSpec(
-                amount=intent.amount_exact, account_code=intent.account_code
-            )
-        ]
-    specs: list[CorrectionRecordSpec] = []
-    for index, item in enumerate(records, start=1):
-        if isinstance(item, CorrectionRecordSpec):
-            specs.append(item)
-        elif isinstance(item, Decimal):
-            specs.append(
-                CorrectionRecordSpec(amount=item, account_code=intent.account_code)
-            )
-        elif isinstance(item, Mapping):
-            account = item.get("account_code", intent.account_code)
-            specs.append(
-                CorrectionRecordSpec(amount=item["amount"], account_code=account)
-            )
-        else:
-            raise ArtifactRefusedError(f"record {index}: bad spec {item!r}")
-    return specs
-
-
 def build_artifact(
     intent: ExecutionIntent | Mapping[str, Any],
-    records: Sequence[Any] | None,
     *,
     batch_id: str,
     processing_date: str,
     file_seq: str | None = None,
-    max_records: int = DEFAULT_MAX_DATA_RECORDS,
 ) -> OutboundArtifact:
     """Build the OUTBOUND artifact: exact bytes plus envelope (X18-X23).
 
+    The single type-01 data record derives SOLELY from the permitted
+    intent (amount_exact, account_code) — there is no caller-supplied
+    records path, so E3 cannot obtain financial meaning from outside
+    the authorized intent (HOLD-2). Key→batch binding lives on the
+    durable reservation row (A2), never in module state.
+
     Order: intent hygiene (execution/idempotency match, scope pin) →
-    batch binding (same key → same id) → line build via the frozen codec →
-    self-verify → whole-file SHA-256 seal.
+    line build via the frozen codec → self-verify → whole-file
+    SHA-256 seal.
     """
     coerced = _coerce_intent(intent)
     if coerced.execution_id != coerced.idempotency_key:
@@ -400,50 +373,29 @@ def build_artifact(
     if not BATCH_ID_RE.match(batch_id):
         raise ArtifactRefusedError(f"bad batch_id {batch_id!r}")
 
-    bound = _EXECUTION_BATCH_BINDINGS.get(coerced.execution_id)
-    if bound is not None and bound != batch_id:
-        raise ArtifactBindingError(
-            f"execution {coerced.execution_id!r} bound to {bound!r}, "
-            f"refusing second id {batch_id!r}"
-        )
-
-    specs = _normalize_specs(coerced, records)
-    if len(specs) == 0:
-        raise ArtifactRefusedError("empty batch: zero data records")
-    if len(specs) > max_records:
-        raise ArtifactRefusedError(
-            f"oversized batch: {len(specs)} records above ceiling {max_records}"
-        )
-
     file_name = derive_file_name(processing_date, coerced.situation_id, file_seq)
     # Key-shape check via the frozen tenant validator (no network here).
     validate_s3_key_tenant(
         f"{coerced.company_id}/{batch_id}/{file_name}", coerced.company_id
     )
 
-    control_total = Decimal("0")
-    lines: list[str] = []
-    for sequence, spec in enumerate(specs, start=1):
-        amount = _quantize_or_refuse(spec.amount, f"record {sequence} amount")
-        control_total += amount
-        payload = build_type01_payload(amount, spec.account_code)
-        lines.append(
-            make_record_line(
-                batch_id=batch_id,
-                sequence=sequence,
-                record_type=DATA_RECORD_TYPE,
-                record_payload=payload,
-            )
-        )
-    control_total = control_total.quantize(_TWO_DP)
-    lines.append(
+    amount = _quantize_or_refuse(coerced.amount_exact, "record 1 amount")
+    control_total = amount.quantize(_TWO_DP)
+    payload = build_type01_payload(amount, coerced.account_code)
+    lines = [
         make_record_line(
             batch_id=batch_id,
-            sequence=len(specs) + 1,
+            sequence=1,
+            record_type=DATA_RECORD_TYPE,
+            record_payload=payload,
+        ),
+        make_record_line(
+            batch_id=batch_id,
+            sequence=2,
             record_type=CONTROL_RECORD_TYPE,
             record_payload=build_control_payload(control_total),
-        )
-    )
+        ),
+    ]
 
     verify_outbound_lines(lines, batch_id=batch_id, control_total=control_total)
 
@@ -453,16 +405,14 @@ def build_artifact(
     _batch_id_to_compact(batch_id)
     _compact_to_batch_id(_batch_id_to_compact(batch_id))
 
-    artifact = OutboundArtifact(
+    return OutboundArtifact(
         execution_id=coerced.execution_id,
         batch_id=batch_id,
         company_id=coerced.company_id,
         situation_id=coerced.situation_id,
         file_name=file_name,
-        record_count=len(specs),
+        record_count=1,
         control_total=control_total,
         file_bytes=file_bytes,
         outbound_sha256=outbound_sha256,
     )
-    _EXECUTION_BATCH_BINDINGS[coerced.execution_id] = batch_id
-    return artifact

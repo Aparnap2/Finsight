@@ -25,15 +25,14 @@ from finance.legacy.protocol import (
     _batch_id_to_compact,
 )
 from finance.legacy_execution.artifact import (
-    ArtifactBindingError,
+    BATCH_ID_RE,
     ArtifactRefusedError,
-    CorrectionRecordSpec,
     ExecutionIntent,
     OutboundArtifact,
     build_artifact,
     build_control_payload,
     build_type01_payload,
-    clear_artifact_bindings,
+    derive_batch_id,
     derive_file_name,
     derive_file_seq,
     verify_outbound_lines,
@@ -61,9 +60,7 @@ EXECUTION_ID = "idem-fs231 correction-0001"
 @pytest.fixture(autouse=True)
 def _isolated_bindings() -> Any:
     """Reset the execution->batch binding registry between tests."""
-    clear_artifact_bindings()
     yield
-    clear_artifact_bindings()
 
 
 def _fs231_intent(**overrides: Any) -> ExecutionIntent:
@@ -165,7 +162,7 @@ class _TamperPut(_Journal):
 def test_fs231_artifact_shape() -> None:
     """FS-231: single 10000.00/4812 correction + control, 80-char lines."""
     artifact = build_artifact(
-        _fs231_intent(), None, batch_id=BATCH, processing_date="20260916"
+        _fs231_intent(), batch_id=BATCH, processing_date="20260916"
     )
     assert artifact.execution_id == EXECUTION_ID
     assert artifact.batch_id == BATCH
@@ -205,7 +202,7 @@ def test_type01_payload_layout_explicit() -> None:
 def test_wire_21char_id_refused() -> None:
     """A line carrying the 21-char logical id on the wire refuses."""
     artifact = build_artifact(
-        _fs231_intent(), None, batch_id=BATCH, processing_date="20260916"
+        _fs231_intent(), batch_id=BATCH, processing_date="20260916"
     )
     good = _file_lines(artifact)[0]
     # Stuff the 21-char logical id into the 14-char wire window (cols 3-16).
@@ -217,55 +214,43 @@ def test_wire_21char_id_refused() -> None:
         )
 
 
-def test_empty_batch_refused() -> None:
-    """Zero data records refuse before transport."""
-    with pytest.raises(ArtifactRefusedError, match="EXEC_ARTIFACT_REFUSED"):
-        build_artifact(_fs231_intent(), [], batch_id=BATCH, processing_date="20260916")
+def test_single_record_invariant() -> None:
+    """Intent-only build always yields exactly one data record (HOLD-2).
 
-
-def test_oversized_batch_refused() -> None:
-    """Record count above the configured ceiling refuses naming the count."""
-    specs = [CorrectionRecordSpec(amount=Decimal("1.00"), account_code="4812")] * 3
-    with pytest.raises(ArtifactRefusedError, match="EXEC_ARTIFACT_REFUSED"):
-        build_artifact(
-            _fs231_intent(),
-            specs,
-            batch_id=BATCH,
-            processing_date="20260916",
-            max_records=2,
-        )
+    Empty and oversized batches are unrepresentable: E3 derives the
+    single type-01 record solely from the permitted intent, so the
+    records-override path that enabled them no longer exists.
+    """
+    artifact = build_artifact(_fs231_intent(), batch_id=BATCH, processing_date="20260916")
+    assert artifact.record_count == 1
+    assert len(_file_lines(artifact)) == 2
 
 
 def test_non_2dp_amount_refused() -> None:
     """Amounts with more than 2 dp refuse (Decimal-only, cent-pinned)."""
-    specs = [CorrectionRecordSpec(amount=Decimal("10.001"), account_code="4812")]
     with pytest.raises(ArtifactRefusedError, match="EXEC_ARTIFACT_REFUSED"):
         build_artifact(
-            _fs231_intent(), specs, batch_id=BATCH, processing_date="20260916"
+            _fs231_intent(amount_exact=Decimal("10.001")),
+            batch_id=BATCH,
+            processing_date="20260916",
         )
 
 
 def test_sequence_gap_refused() -> None:
     """A gap in the wire sequence refuses on self-verify."""
-    artifact = build_artifact(
-        _fs231_intent(),
-        [Decimal("60.00"), Decimal("40.00")],
-        batch_id=BATCH,
-        processing_date="20260916",
-    )
+    artifact = build_artifact(_fs231_intent(), batch_id=BATCH, processing_date="20260916")
     lines = _file_lines(artifact)
-    assert len(lines) == 3
-    gap = [lines[0], lines[2]]  # drop sequence 2
+    assert len(lines) == 2
     with pytest.raises(ArtifactRefusedError, match="EXEC_ARTIFACT_REFUSED"):
         verify_outbound_lines(
-            gap, batch_id=BATCH, control_total=Decimal("100.00")
+            [lines[1]], batch_id=BATCH, control_total=Decimal("10000.00")
         )
 
 
 def test_sequence_duplicate_refused() -> None:
     """A duplicated wire sequence refuses on self-verify."""
     artifact = build_artifact(
-        _fs231_intent(), None, batch_id=BATCH, processing_date="20260916"
+        _fs231_intent(), batch_id=BATCH, processing_date="20260916"
     )
     lines = _file_lines(artifact)
     with pytest.raises(ArtifactRefusedError, match="EXEC_ARTIFACT_REFUSED"):
@@ -277,7 +262,7 @@ def test_sequence_duplicate_refused() -> None:
 def test_checksum_failure_refused() -> None:
     """A flipped checksum nibble refuses naming the first bad line."""
     artifact = build_artifact(
-        _fs231_intent(), None, batch_id=BATCH, processing_date="20260916"
+        _fs231_intent(), batch_id=BATCH, processing_date="20260916"
     )
     lines = _file_lines(artifact)
     bad_first = lines[0][:-1] + ("0" if lines[0][-1] != "0" else "1")
@@ -290,24 +275,36 @@ def test_checksum_failure_refused() -> None:
 def test_control_mismatch_refused() -> None:
     """A control total that does not match the Decimal sum refuses."""
     artifact = build_artifact(
-        _fs231_intent(), None, batch_id=BATCH, processing_date="20260916"
+        _fs231_intent(), batch_id=BATCH, processing_date="20260916"
     )
     lines = _file_lines(artifact)
     with pytest.raises(ArtifactRefusedError, match="EXEC_ARTIFACT_REFUSED"):
         verify_outbound_lines(lines, batch_id=BATCH, control_total=Decimal("1.00"))
 
 
-def test_batch_binding_second_id_forbidden() -> None:
-    """Same execution key always resolves to the same batch id (X21)."""
-    build_artifact(_fs231_intent(), None, batch_id=BATCH, processing_date="20260916")
-    build_artifact(_fs231_intent(), None, batch_id=BATCH, processing_date="20260916")
-    with pytest.raises(ArtifactBindingError, match="AUTHORIZATION_REPLAYED"):
-        build_artifact(
-            _fs231_intent(),
-            None,
-            batch_id="LEGACY-20260916-0044",
-            processing_date="20260916",
-        )
+def test_batch_build_is_pure_no_module_state() -> None:
+    """Artifact build holds no binding state (binding lives on the row).
+
+    Same intent plus different batch ids builds independently both
+    times; the second-id-forbidden rule now lives on the durable
+    reservation row (A2), not in module state.
+    """
+    first = build_artifact(_fs231_intent(), batch_id=BATCH, processing_date="20260916")
+    second = build_artifact(
+        _fs231_intent(), batch_id="LEGACY-20260916-0044", processing_date="20260916"
+    )
+    assert first.batch_id == BATCH
+    assert second.batch_id == "LEGACY-20260916-0044"
+    assert first.outbound_sha256 != second.outbound_sha256
+
+
+def test_derive_batch_id_deterministic() -> None:
+    """X17 derivation: same key+date always yields the same batch id."""
+    left = derive_batch_id(EXECUTION_ID, "20260916")
+    right = derive_batch_id(EXECUTION_ID, "20260916")
+    assert left == right
+    assert BATCH_ID_RE.match(left) is not None
+    assert derive_batch_id("idem-other-case", "20260916") != left
 
 
 # ---------------------------------------------------------------------------
@@ -318,7 +315,7 @@ def test_batch_binding_second_id_forbidden() -> None:
 def test_put_verified_success_receipt() -> None:
     """PUT + read-back match yields a receipt bound to execution + batch."""
     artifact = build_artifact(
-        _fs231_intent(), None, batch_id=BATCH, processing_date="20260916"
+        _fs231_intent(), batch_id=BATCH, processing_date="20260916"
     )
     store = _Journal(FakeS3(COMPANY))
     receipt = put_verified(
@@ -337,7 +334,7 @@ def test_put_verified_success_receipt() -> None:
 def test_tampered_bytes_readback_refused() -> None:
     """D4: bytes altered in flight refuse; the object is left for triage."""
     artifact = build_artifact(
-        _fs231_intent(), None, batch_id=BATCH, processing_date="20260916"
+        _fs231_intent(), batch_id=BATCH, processing_date="20260916"
     )
     store = _TamperPut(FakeS3(COMPANY))
     with pytest.raises(HashMismatchError, match="EXEC_HASH_MISMATCH"):
@@ -350,7 +347,7 @@ def test_tampered_bytes_readback_refused() -> None:
 def test_prefix_escape_before_network() -> None:
     """D10: cross-company keys refuse before any network call (0 PUTs)."""
     artifact = build_artifact(
-        _fs231_intent(), None, batch_id=BATCH, processing_date="20260916"
+        _fs231_intent(), batch_id=BATCH, processing_date="20260916"
     )
     store = _Journal(FakeS3(COMPANY))
     with pytest.raises(PrefixEscapeError, match="EXEC_PREFIX_ESCAPE"):
@@ -364,7 +361,7 @@ def test_prefix_escape_before_network() -> None:
 def test_retry_then_success_identical_bytes() -> None:
     """Two injected failures then success: 3 PUTs, byte-identical retries."""
     artifact = build_artifact(
-        _fs231_intent(), None, batch_id=BATCH, processing_date="20260916"
+        _fs231_intent(), batch_id=BATCH, processing_date="20260916"
     )
     store = _FlakyPut(FakeS3(COMPANY), failures=2)
     receipt = put_verified(
@@ -378,7 +375,7 @@ def test_retry_then_success_identical_bytes() -> None:
 def test_retry_exhaustion_refuses_identical_bytes() -> None:
     """Persistent S3 failure exhausts 1+3 attempts with identical bytes."""
     artifact = build_artifact(
-        _fs231_intent(), None, batch_id=BATCH, processing_date="20260916"
+        _fs231_intent(), batch_id=BATCH, processing_date="20260916"
     )
     store = _AlwaysFail(FakeS3(COMPANY))
     with pytest.raises(TransportRefusedError, match="EXEC_TRANSPORT_REFUSED"):
@@ -398,7 +395,7 @@ def test_retry_exhaustion_refuses_identical_bytes() -> None:
 def test_recovery_present_match_zero_puts() -> None:
     """Object present with matching hash: receipt recorded, 0 PUTs."""
     artifact = build_artifact(
-        _fs231_intent(), None, batch_id=BATCH, processing_date="20260916"
+        _fs231_intent(), batch_id=BATCH, processing_date="20260916"
     )
     inner = FakeS3(COMPANY)
     key = derive_outbound_key(COMPANY, BATCH, artifact.file_name)
@@ -415,7 +412,7 @@ def test_recovery_present_match_zero_puts() -> None:
 def test_recovery_absent_single_put() -> None:
     """Object absent: exactly one PUT+verify cycle on the probe path."""
     artifact = build_artifact(
-        _fs231_intent(), None, batch_id=BATCH, processing_date="20260916"
+        _fs231_intent(), batch_id=BATCH, processing_date="20260916"
     )
     store = _Journal(FakeS3(COMPANY))
     receipt = recover_receipt(
@@ -428,7 +425,7 @@ def test_recovery_absent_single_put() -> None:
 def test_recovery_differs_refuses_no_reserialize() -> None:
     """Object present with differing bytes: refuse, never reserialize."""
     artifact = build_artifact(
-        _fs231_intent(), None, batch_id=BATCH, processing_date="20260916"
+        _fs231_intent(), batch_id=BATCH, processing_date="20260916"
     )
     inner = FakeS3(COMPANY)
     key = derive_outbound_key(COMPANY, BATCH, artifact.file_name)
@@ -446,7 +443,7 @@ def test_recovery_differs_refuses_no_reserialize() -> None:
 def test_recovery_absent_propagates_transport_refusal() -> None:
     """Absent object + failing PUT on the probe path refuses after 1 try."""
     artifact = build_artifact(
-        _fs231_intent(), None, batch_id=BATCH, processing_date="20260916"
+        _fs231_intent(), batch_id=BATCH, processing_date="20260916"
     )
     store = _AlwaysFail(FakeS3(COMPANY))
     with pytest.raises(TransportRefusedError, match="EXEC_TRANSPORT_REFUSED"):
@@ -484,7 +481,7 @@ def test_a5_filename_flows_into_artifact_and_key() -> None:
         execution_id="idem-fs042-0001",
         idempotency_key="idem-fs042-0001",
     )
-    artifact = build_artifact(intent, None, batch_id=BATCH, processing_date="20260916")
+    artifact = build_artifact(intent, batch_id=BATCH, processing_date="20260916")
     assert artifact.file_name == "CORRECTION_20260916_042.DAT"
     assert "231" not in artifact.file_name
     key = derive_outbound_key(COMPANY, BATCH, artifact.file_name)
@@ -501,7 +498,7 @@ def test_absent_probe_key_raises_not_found() -> None:
 def test_receipt_timestamp_must_be_tz_aware() -> None:
     """Naive caller-supplied timestamps are rejected as input hygiene."""
     artifact = build_artifact(
-        _fs231_intent(), None, batch_id=BATCH, processing_date="20260916"
+        _fs231_intent(), batch_id=BATCH, processing_date="20260916"
     )
     store = _Journal(FakeS3(COMPANY))
     with pytest.raises(ValueError, match="tz-aware"):
@@ -518,7 +515,7 @@ def test_receipt_timestamp_must_be_tz_aware() -> None:
 def test_wire_lines_sequence_types() -> None:
     """Helper contract: verify accepts any sequence of 80-char lines."""
     artifact = build_artifact(
-        _fs231_intent(), None, batch_id=BATCH, processing_date="20260916"
+        _fs231_intent(), batch_id=BATCH, processing_date="20260916"
     )
     lines: Sequence[str] = tuple(_file_lines(artifact))
     verify_outbound_lines(lines, batch_id=BATCH, control_total=Decimal("10000.00"))

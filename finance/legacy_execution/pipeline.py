@@ -1,12 +1,16 @@
 """T3 pipeline orchestration for P6-07 deterministic execution (X5-X6).
 
-Runs reservation -> intent -> artifact -> transport -> ingestion -> record
--> handoff in fixed order with one audit entry per stage (stage id, input
-digests, permit/refuse plus code, artifact hashes). The first stage that
-refuses stops the chain; later stages never run. T1/T2 stages arrive as
-injected callables against minimal local protocols; T3 stages default to
-the real ingestion, record, and handoff implementations. The pipeline
-itself writes no store beyond ``record.py``.
+Runs reservation -> intent -> artifact -> transport -> observation ->
+ingestion -> record -> handoff in fixed order with one audit entry per
+stage (stage id, input digests, permit/refuse plus code, artifact
+hashes). E5 observation (verbatim ledger parse) and E6 ingestion
+(cross-checks, recording, UNKNOWN) are distinct audited stages. The
+first stage that refuses stops the chain; later stages never run.
+T1/T2 stages arrive as injected callables against minimal local
+protocols; observation, ingestion, record, and handoff default to the
+real implementations. Key→batch binding is enforced on the injected
+reservation store (durable authority) between intent and artifact. The
+pipeline itself writes no store beyond ``record.py``.
 """
 
 from __future__ import annotations
@@ -27,20 +31,28 @@ from finance.legacy_execution.ingestion import (
     ReceiptView,
     _require_two_dp,
     _require_tz_aware,
-    ingest_result,
+    _result_key_for,
+    ingest_observed,
     outcome_fingerprint,
 )
+from finance.legacy_execution.observation import (
+    ObservationRefused,
+    ObservedBatch,
+    observe_legacy_result,
+)
 from finance.legacy_execution.record import ExecutionRecord, ExecutionRecordStore
+from finance.legacy_execution.reservation import ReservationStore
 
 STAGE_RESERVATION = "E1-reservation"
 STAGE_INTENT = "E2-intent"
+STAGE_OBSERVATION = "E5-observation"
 STAGE_ARTIFACT = "E3-artifact"
 STAGE_TRANSPORT = "E4-transport"
 STAGE_INGESTION = "E6-ingestion"
 STAGE_RECORD = "E6-record"
 STAGE_HANDOFF = "handoff"
-# E5 ledger observation is folded into E6-ingestion: the RESULT file read is
-# the observation of what the ledger reported, verified before recording.
+# E5 ledger observation is an explicit stage: the RESULT file read and
+# verbatim parse happen here, verified cross-checks happen at E6-ingestion.
 
 
 class ExecutionContext(BaseModel):
@@ -152,7 +164,10 @@ ReservationStage = Callable[[ExecutionContext], ReservationGrant]
 IntentStage = Callable[[ReservationGrant], IntentView]
 ArtifactStage = Callable[[IntentView], ArtifactView]
 TransportStage = Callable[[ArtifactView], ReceiptView]
-IngestionStage = Callable[[ArtifactView, ReceiptView], IngestionOutcome]
+ObservationStage = Callable[[ArtifactView, ReceiptView], ObservedBatch | None]
+IngestionStage = Callable[
+    [ArtifactView, ReceiptView, "ObservedBatch | None"], IngestionOutcome
+]
 RecordStage = Callable[[ReceiptView, IngestionOutcome], ExecutionRecord]
 HandoffStage = Callable[[ExecutionRecord, IngestionOutcome], ExecutionHandoff]
 
@@ -174,10 +189,12 @@ def run_execution(
     intent: IntentStage,
     artifact: ArtifactStage,
     transport: TransportStage,
+    observation: ObservationStage | None = None,
     ingestion: IngestionStage | None = None,
     record: RecordStage | None = None,
     handoff: HandoffStage | None = None,
     record_store: ExecutionRecordStore | None = None,
+    reservation_store: ReservationStore | None = None,
     result_store: object | None = None,
     audit: list[AuditEntry] | None = None,
 ) -> PipelineResult:
@@ -189,13 +206,19 @@ def run_execution(
         intent: T1 E2 stage (projection or raise refusal).
         artifact: T2 E3 stage (OUTBOUND bytes or raise refusal).
         transport: T2 E4 stage (receipt or raise refusal).
+        observation: E5 observation stage; defaults to reading the
+            RESULT via ``result_store`` and parsing it verbatim
+            (absent RESULT yields None for E6 UNKNOWN).
         ingestion: E6 ingestion stage; defaults to the real T3 ingest
-            over ``result_store`` (must be a ResultReader then).
+            over the observed batch (must have ``result_store`` then).
         record: E6 record stage; defaults to claim/receipt/outcome via
             ``record_store`` (created ephemerally when None).
         handoff: Handoff stage; defaults to the real T3 §8 build.
         record_store: Execution record backing the default record stage.
-        result_store: RESULT bucket reader for the default ingest stage.
+        reservation_store: Durable key→batch binding authority used
+            between intent and artifact (defaults to an ephemeral
+            memory store; crash durability needs an engine-backed one).
+        result_store: RESULT bucket reader for the default observe stage.
         audit: Caller-owned list receiving append-only entries.
 
     Returns:
@@ -204,17 +227,44 @@ def run_execution(
     """
     log: list[AuditEntry] = audit if audit is not None else []
     store = record_store if record_store is not None else ExecutionRecordStore()
+    bindings = (
+        reservation_store if reservation_store is not None else ReservationStore()
+    )
+
+    def observe_default(
+        artifact_view: ArtifactView, receipt_view: ReceiptView
+    ) -> ObservedBatch | None:
+        del receipt_view
+        if result_store is None or not hasattr(result_store, "read_result"):
+            raise ValueError("Default observation needs a ResultReader result_store.")
+        key = _result_key_for(
+            ctx.company_id, artifact_view.batch_id, ctx.result_key
+        )
+        raw = result_store.read_result(key)  # type: ignore[union-attr]
+        if raw is None:
+            return None
+        return observe_legacy_result(
+            raw, batch_id=artifact_view.batch_id, company_id=ctx.company_id
+        )
 
     def ingest_default(
-        artifact_view: ArtifactView, receipt_view: ReceiptView
+        artifact_view: ArtifactView,
+        receipt_view: ReceiptView,
+        observed: ObservedBatch | None,
     ) -> IngestionOutcome:
-        if result_store is None or not hasattr(result_store, "read_result"):
-            raise ValueError("Default ingestion needs a ResultReader result_store.")
-        return ingest_result(
-            result_store,  # type: ignore[arg-type]
-            receipt_view, artifact=artifact_view, company_id=ctx.company_id,
-            result_key=ctx.result_key, now=ctx.now,
-            window_start=ctx.window_start, window_seconds=ctx.window_seconds,
+        key = _result_key_for(
+            ctx.company_id, artifact_view.batch_id, ctx.result_key
+        )
+        return ingest_observed(
+            observed,
+            artifact=artifact_view,
+            receipt=receipt_view,
+            company_id=ctx.company_id,
+            result_key=key,
+            result_sha256=observed.raw_sha256 if observed is not None else None,
+            now=ctx.now,
+            window_start=ctx.window_start,
+            window_seconds=ctx.window_seconds,
         )
 
     def record_default(
@@ -247,6 +297,7 @@ def run_execution(
             proposal_version=ctx.proposal_version, recorded_at=ctx.now,
         )
 
+    observe_fn = observation if observation is not None else observe_default
     ingest_fn = ingestion if ingestion is not None else ingest_default
     record_fn = record if record is not None else record_default
     handoff_fn = handoff if handoff is not None else handoff_default
@@ -302,6 +353,13 @@ def run_execution(
     )
 
     try:
+        bindings.bind_batch(ctx.execution_id, intent_view.batch_id)
+    except ApprovalRefused as exc:
+        return refuse(STAGE_ARTIFACT, exc.code.value)
+    except KeyError as exc:
+        return refuse(STAGE_ARTIFACT, f"missing reservation: {exc}")
+
+    try:
         artifact_view = artifact(intent_view)
     except PipelineRefused as exc:
         return refuse(exc.stage or STAGE_ARTIFACT, exc.code)
@@ -331,7 +389,29 @@ def run_execution(
     )
 
     try:
-        outcome = ingest_fn(artifact_view, receipt_view)
+        observed = observe_fn(artifact_view, receipt_view)
+    except (PipelineRefused, ObservationRefused) as exc:
+        return refuse(STAGE_OBSERVATION, exc.code)
+    except ApprovalRefused as exc:
+        return refuse(STAGE_OBSERVATION, exc.code.value)
+    if observed is None:
+        note(
+            STAGE_OBSERVATION,
+            _digest(STAGE_OBSERVATION, artifact_view.batch_id, "absent"),
+            True, "ABSENT",
+        )
+    else:
+        note(
+            STAGE_OBSERVATION,
+            _digest(
+                STAGE_OBSERVATION, artifact_view.batch_id,
+                str(len(observed.records)), observed.raw_sha256,
+            ),
+            True, "OBSERVED", (observed.raw_sha256,),
+        )
+
+    try:
+        outcome = ingest_fn(artifact_view, receipt_view, observed)
     except (PipelineRefused, IngestionRefused) as exc:
         return refuse(STAGE_INGESTION, exc.code)
     except ApprovalRefused as exc:

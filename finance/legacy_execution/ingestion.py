@@ -22,12 +22,11 @@ from typing import Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from finance.legacy.protocol import (
-    PROTOCOL_VERSION,
-    LegacyChecksumError,
-    LegacyParseError,
-    LegacyRecordResult,
-    build_result_key,
+from finance.legacy.protocol import PROTOCOL_VERSION, build_result_key
+from finance.legacy_execution.observation import (
+    ObservationRefused,
+    ObservedBatch,
+    observe_legacy_result,
 )
 
 logger = logging.getLogger(__name__)
@@ -279,11 +278,10 @@ def ingest_result(
 ) -> IngestionOutcome:
     """Ingest the RESULT file for one execution (X35-X39).
 
-    Verifies every line checksum first, checks version/batch/sequence shape
-    against the OUTBOUND artifact, then records per-sequence outcomes with
-    Decimal totals. A control-total mismatch records REJECTED in full (no
-    partial). A missing RESULT records UNKNOWN with the poll deadline.
-    Corrupt input raises :class:`IngestionRefused` and records nothing.
+    Composed entry: reads the RESULT, observes it via E5
+    (:func:`observation.observe_legacy_result`), then records via
+    :func:`ingest_observed` (E6). The pipeline audits both stages
+    separately; this composer exists for single-call unit coverage.
 
     Args:
         store: RESULT bucket reader (FakeS3 in tests; no network here).
@@ -326,48 +324,97 @@ def ingest_result(
     key = _result_key_for(company_id, artifact.batch_id, result_key)
     raw = store.read_result(key)
     if raw is None:
+        _require_tz_aware("now", now)
+        _require_tz_aware("window_start", window_start)
         return _unknown_outcome(
             artifact=artifact, company_id=company_id, now=now,
             window_start=window_start, window_seconds=window_seconds,
         )
-
     result_sha256 = hashlib.sha256(raw).hexdigest()
     try:
-        text = raw.decode("ascii")
-    except UnicodeDecodeError as exc:
-        logger.warning(
-            "Corrupt RESULT: non-ascii bytes key=%s sha=%s size=%d",
-            key, result_sha256, len(raw),
+        observed = observe_legacy_result(
+            raw, batch_id=artifact.batch_id, company_id=company_id
         )
+    except ObservationRefused as exc:
+        raise IngestionRefused(EXEC_RESULT_CORRUPT, str(exc)) from exc
+    return ingest_observed(
+        observed,
+        artifact=artifact,
+        receipt=receipt,
+        company_id=company_id,
+        result_key=key,
+        result_sha256=result_sha256,
+        now=now,
+        window_start=window_start,
+        window_seconds=window_seconds,
+    )
+
+
+def ingest_observed(
+    observed: ObservedBatch | None,
+    *,
+    artifact: ArtifactView,
+    receipt: ReceiptView,
+    company_id: str,
+    result_key: str,
+    result_sha256: str | None,
+    now: datetime,
+    window_start: datetime,
+    window_seconds: int = RESULT_POLL_WINDOW_SECONDS,
+) -> IngestionOutcome:
+    """Ingest one E5-observed batch: cross-checks, recording, UNKNOWN (E6).
+
+    Takes the verbatim observation (E5 output) instead of raw bytes, so
+    the parse layer and the agreement layer stay distinct stages with
+    distinct audit entries. A ``None`` observation (RESULT absent)
+    records UNKNOWN; anything else runs the full X35-X38 verification.
+
+    Args:
+        observed: The E5 observed batch, or None when the RESULT has
+            not landed.
+        artifact: T2 OUTBOUND artifact bound to this execution and batch.
+        receipt: T2 transport receipt bound to this execution and batch.
+        company_id: Bound company.
+        result_key: Explicit RESULT key (already derived by the caller).
+        result_sha256: SHA-256 over the observed bytes (None when absent).
+        now: Caller-supplied tz-aware observation time (no clock read).
+        window_start: Caller-supplied tz-aware poll window start.
+        window_seconds: Poll window length.
+
+    Returns:
+        The frozen recorded outcome (ACCEPTED, PARTIAL, REJECTED, UNKNOWN).
+
+    Raises:
+        IngestionRefused: EXEC_RESULT_CORRUPT on shape, version, batch,
+            sequence, or amount-mapping failures.
+    """
+    _require_tz_aware("now", now)
+    _require_tz_aware("window_start", window_start)
+    if receipt.execution_id != artifact.execution_id:
         raise IngestionRefused(
-            EXEC_RESULT_CORRUPT, f"RESULT bytes are not ascii: {key!r}."
-        ) from exc
-    lines = text.split("\n")
-    if lines and lines[-1] == "":
-        lines = lines[:-1]
-    for line in lines:
-        if len(line) != 80:
-            logger.warning(
-                "Corrupt RESULT: bad line width key=%s sha=%s lines=%d",
-                key, result_sha256, len(lines),
-            )
-            raise IngestionRefused(
-                EXEC_RESULT_CORRUPT,
-                f"RESULT line width != 80 in {key!r}; raw bytes logged.",
-            )
-    parsed: list[LegacyRecordResult] = []
-    for position, line in enumerate(lines, start=1):
-        try:
-            parsed.append(LegacyRecordResult.from_line(line))
-        except (LegacyChecksumError, LegacyParseError) as exc:
-            logger.warning(
-                "Corrupt RESULT: line %d unparseable key=%s sha=%s",
-                position, key, result_sha256,
-            )
-            raise IngestionRefused(
-                EXEC_RESULT_CORRUPT,
-                f"RESULT line {position} fails shape/checksum in {key!r}.",
-            ) from exc
+            EXEC_RESULT_CORRUPT,
+            "Artifact/receipt execution seam skew: "
+            f"{artifact.execution_id!r} vs {receipt.execution_id!r}.",
+        )
+    if receipt.batch_id != artifact.batch_id:
+        raise IngestionRefused(
+            EXEC_RESULT_CORRUPT,
+            "Artifact/receipt batch seam skew: "
+            f"{artifact.batch_id!r} vs {receipt.batch_id!r}.",
+        )
+    if hashlib.sha256(artifact.file_bytes).hexdigest() != artifact.outbound_sha256:
+        raise IngestionRefused(
+            EXEC_RESULT_CORRUPT,
+            "Artifact bytes do not hash to outbound_sha256 (input hygiene).",
+        )
+    if observed is None:
+        return _unknown_outcome(
+            artifact=artifact, company_id=company_id, now=now,
+            window_start=window_start, window_seconds=window_seconds,
+        )
+    key = result_key
+    parsed = observed.records
+    assert result_sha256 is not None
 
     for entry in parsed:
         if entry.version != PROTOCOL_VERSION:
@@ -391,7 +438,7 @@ def ingest_result(
 
     per_record = tuple(
         PerRecordOutcome(
-            sequence=entry.sequence, code=entry.result_code.value,
+            sequence=entry.sequence, code=entry.code,
             detail=entry.detail,
         )
         for entry in sorted(parsed, key=lambda e: e.sequence)
@@ -400,16 +447,19 @@ def ingest_result(
     rejected = tuple(r for r in per_record if r.code == "RJ")
     duplicates = tuple(r for r in per_record if r.code == "DU")
 
-    missing = sorted(
-        seq for seq in sequences if seq not in artifact.amounts_by_sequence
-    )
+    if artifact.amounts_by_sequence:
+        amounts = dict(artifact.amounts_by_sequence)
+    elif artifact.record_count == 1:
+        amounts = {1: artifact.control_total}
+    else:
+        amounts = {}
+    missing = sorted(seq for seq in sequences if seq not in amounts)
     if missing:
         raise IngestionRefused(
             EXEC_RESULT_CORRUPT,
             f"Amount mapping missing sequences {missing}; "
             "control cross-check cannot run on assumed amounts.",
         )
-    amounts = artifact.amounts_by_sequence
     accepted_total = sum((amounts[r.sequence] for r in accepted), Decimal("0.00"))
     rejected_total = sum((amounts[r.sequence] for r in rejected), Decimal("0.00"))
     duplicate_total = sum((amounts[r.sequence] for r in duplicates), Decimal("0.00"))

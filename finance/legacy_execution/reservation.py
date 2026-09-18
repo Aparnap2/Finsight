@@ -21,10 +21,14 @@ from __future__ import annotations
 import threading
 from collections.abc import Mapping
 from enum import StrEnum
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import Column, MetaData, String, Table
+from sqlalchemy import Column, Engine, MetaData, String, Table
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
+
+from finance.approval.refusals import ApprovalRefused, RefusalCode
 
 #: Audit code recorded when a replay-read serves an outcome (X42). It is
 #: recorded as the reason no second effect ran, never raised as an error
@@ -41,6 +45,7 @@ reservation_table = Table(
     Column("binding_digest", String, nullable=False),
     Column("company_id", String, nullable=False),
     Column("situation_id", String, nullable=False),
+    Column("batch_id", String, nullable=True),
     Column("state", String, nullable=False),
     Column("outcome", String, nullable=True),
 )
@@ -111,6 +116,9 @@ class Reservation(BaseModel):
     outcome: str | None = None
     """Recorded outcome pointer served on replay-reads; null until set."""
 
+    batch_id: str | None = None
+    """Bound logical batch id, set once (A2/X21); null until bound."""
+
 
 class ClaimResult(BaseModel):
     """Outcome of one ``claim_execution`` attempt (X11/X12)."""
@@ -130,13 +138,19 @@ class ClaimResult(BaseModel):
 class ReservationStore:
     """Lock-guarded claim-if-absent store behind one backend-agnostic API.
 
-    The in-memory mapping is the unit-determinism backend; the durable
-    backend reuses ``reservation_table`` with the same claim-if-absent
-    semantics (single conditional insert, losers read the winner).
+    The in-memory mapping is the unit-determinism backend; pass a
+    SQLAlchemy ``Engine`` for the durable backend reusing
+    ``reservation_table`` with identical semantics (single conditional
+    insert, losers read the winner). The durable path is the A2/HOLD-3
+    authority: a process restart must consult it (same database), never
+    reconstruct bindings from scratch.
     """
 
-    def __init__(self) -> None:
-        """Create an empty store with its claim guard lock."""
+    def __init__(self, engine: Engine | None = None) -> None:
+        """Bind to ``engine`` (creating tables) or start empty memory."""
+        self._engine = engine
+        if engine is not None:
+            reservation_table.create(engine, checkfirst=True)
         self._lock = threading.Lock()
         self._rows: dict[str, Reservation] = {}
 
@@ -161,6 +175,8 @@ class ReservationStore:
             if isinstance(binding, ReservationBinding)
             else ReservationBinding.model_validate(dict(binding))
         )
+        if self._engine is not None:
+            return self._claim_sql(execution_id, bound)
         with self._lock:
             existing = self._rows.get(execution_id)
             if existing is not None:
@@ -180,6 +196,131 @@ class ReservationStore:
             self._rows[execution_id] = row
             return ClaimResult(status="CLAIMED", reservation=row, outcome=None)
 
+    def _row_to_reservation(self, row: Mapping[str, Any]) -> Reservation:
+        """Rebuild a SQL row mapping into the reservation model."""
+        return Reservation(
+            execution_id=row["execution_id"],
+            binding_digest=row["binding_digest"],
+            company_id=row["company_id"],
+            situation_id=row["situation_id"],
+            batch_id=row["batch_id"],
+            state=ReservationState(row["state"]),
+            outcome=row["outcome"],
+        )
+
+    def _claim_sql(
+        self, execution_id: str, bound: ReservationBinding
+    ) -> ClaimResult:
+        """Claim via conditional insert; losers read the winner's row."""
+        assert self._engine is not None
+        with Session(self._engine) as session:
+            try:
+                session.execute(
+                    reservation_table.insert().values(
+                        execution_id=execution_id,
+                        binding_digest=bound.binding_digest,
+                        company_id=bound.company_id,
+                        situation_id=bound.situation_id,
+                        batch_id=None,
+                        state=ReservationState.RESERVED.value,
+                        outcome=None,
+                    )
+                )
+                session.commit()
+            except IntegrityError:
+                session.rollback()
+            winner = session.execute(
+                reservation_table.select().where(
+                    reservation_table.c.execution_id == execution_id
+                )
+            ).mappings().first()
+            if winner is None:  # pragma: no cover - insert+select race guard
+                raise KeyError(f"No reservation row for {execution_id!r}.")
+            row = self._row_to_reservation(dict(winner))
+            if row.binding_digest != bound.binding_digest:
+                raise ApprovalRefused(
+                    RefusalCode.CROSS_CASE_REFUSED,
+                    "E1",
+                    "Pre-existing row carries a foreign authorization "
+                    "binding; escalate, never merge.",
+                )
+            created = (
+                row.state is ReservationState.RESERVED and row.outcome is None
+            )
+            return ClaimResult(
+                status="CLAIMED" if created else "REPLAY",
+                reservation=row,
+                outcome=row.outcome,
+            )
+
+    def bind_batch(self, execution_id: str, batch_id: str) -> Reservation:
+        """Bind the logical batch id once (X21/A2); later ids refuse.
+
+        The binding is set-once-or-verify on both backends: a second,
+        different batch id for one execution id refuses instead of
+        forking the execution identity.
+
+        Args:
+            execution_id: Token ``idempotency_key``.
+            batch_id: Logical batch id to bind (A1 logical form).
+
+        Returns:
+            The row carrying the binding.
+
+        Raises:
+            KeyError: When no claim exists for ``execution_id``.
+            ApprovalRefused: ``AUTHORIZATION_REPLAYED`` on a second,
+                different batch id for one key.
+        """
+        if self._engine is not None:
+            return self._bind_sql(execution_id, batch_id)
+        with self._lock:
+            row = self._rows[execution_id]
+            if row.batch_id is not None and row.batch_id != batch_id:
+                raise ApprovalRefused(
+                    RefusalCode.AUTHORIZATION_REPLAYED,
+                    "E3",
+                    f"Second batch {batch_id!r} for one execution id; "
+                    "a new id needs a new authorization cycle.",
+                )
+            if row.batch_id is None:
+                row = row.model_copy(update={"batch_id": batch_id})
+                self._rows[execution_id] = row
+            return row
+
+    def _bind_sql(self, execution_id: str, batch_id: str) -> Reservation:
+        """Predicated batch bind: set once, verify after, refuse forks."""
+        assert self._engine is not None
+        with Session(self._engine) as session:
+            updated = (
+                session.query(reservation_table)
+                .filter(
+                    reservation_table.c.execution_id == execution_id,
+                    reservation_table.c.batch_id.is_(None),
+                )
+                .update(
+                    {reservation_table.c.batch_id: batch_id},
+                    synchronize_session="fetch",
+                )
+            )
+            session.commit()
+            current = session.execute(
+                reservation_table.select().where(
+                    reservation_table.c.execution_id == execution_id
+                )
+            ).mappings().first()
+            if current is None:
+                raise KeyError(f"No reservation row for {execution_id!r}.")
+            row = self._row_to_reservation(dict(current))
+            if updated == 0 and row.batch_id != batch_id:
+                raise ApprovalRefused(
+                    RefusalCode.AUTHORIZATION_REPLAYED,
+                    "E3",
+                    f"Second batch {batch_id!r} for one execution id; "
+                    "a new id needs a new authorization cycle.",
+                )
+            return row
+
     def receipt_status(self, execution_id: str) -> Reservation | None:
         """Return the reservation row for crash-resume lookup (A2).
 
@@ -189,6 +330,14 @@ class ReservationStore:
         Returns:
             The recorded row, or null when no claim exists for the key.
         """
+        if self._engine is not None:
+            with Session(self._engine) as session:
+                found = session.execute(
+                    reservation_table.select().where(
+                        reservation_table.c.execution_id == execution_id
+                    )
+                ).mappings().first()
+                return self._row_to_reservation(dict(found)) if found else None
         with self._lock:
             return self._rows.get(execution_id)
 
@@ -204,6 +353,26 @@ class ReservationStore:
         Raises:
             KeyError: When no claim exists for ``execution_id``.
         """
+        if self._engine is not None:
+            with Session(self._engine) as session:
+                matched = (
+                    session.query(reservation_table)
+                    .filter(
+                        reservation_table.c.execution_id == execution_id,
+                        reservation_table.c.state == ReservationState.RESERVED.value,
+                    )
+                    .update(
+                        {reservation_table.c.state: ReservationState.RECEIPT_RECORDED.value},
+                        synchronize_session="fetch",
+                    )
+                )
+                session.commit()
+                current = self.receipt_status(execution_id)
+                if current is None:
+                    raise KeyError(f"No reservation row for {execution_id!r}.")
+                if matched == 0:
+                    return current
+                return current
         with self._lock:
             row = self._rows[execution_id]
             if row.state is not ReservationState.RESERVED:
@@ -227,13 +396,32 @@ class ReservationStore:
         Raises:
             KeyError: When no claim exists for ``execution_id``.
         """
+        state = (
+            ReservationState(outcome)
+            if outcome in ReservationState.__members__
+            else ReservationState.ACCEPTED
+        )
+        if self._engine is not None:
+            with Session(self._engine) as session:
+                matched = (
+                    session.query(reservation_table)
+                    .filter(reservation_table.c.execution_id == execution_id)
+                    .update(
+                        {
+                            reservation_table.c.state: state.value,
+                            reservation_table.c.outcome: outcome,
+                        },
+                        synchronize_session="fetch",
+                    )
+                )
+                session.commit()
+                if matched == 0:
+                    raise KeyError(f"No reservation row for {execution_id!r}.")
+                current = self.receipt_status(execution_id)
+                assert current is not None
+                return current
         with self._lock:
             row = self._rows[execution_id]
-            state = (
-                ReservationState(outcome)
-                if outcome in ReservationState.__members__
-                else ReservationState.ACCEPTED
-            )
             recorded = row.model_copy(update={"state": state, "outcome": outcome})
             self._rows[execution_id] = recorded
             return recorded

@@ -54,6 +54,7 @@ from finance.legacy_execution.record import (
     RecordCollision,
     RecordTransitionError,
 )
+from finance.legacy_execution.reservation import ReservationStore
 
 # ---------------------------------------------------------------------------
 # Fixed fixtures (no clock, no network)
@@ -600,6 +601,21 @@ def test_handoff_carries_both_hashes_and_no_verdict() -> None:
 # Pipeline: E1-E6 order, short-circuit, FS-231 golden (X5, X48-X51)
 # ---------------------------------------------------------------------------
 
+def claimed_store() -> ReservationStore:
+    """Reservation store with the golden execution pre-claimed (E1 done)."""
+    from finance.legacy_execution.reservation import ReservationBinding
+
+    store = ReservationStore()
+    store.claim_execution(
+        EXECUTION_ID,
+        ReservationBinding(
+            binding_digest=BINDING, company_id=COMPANY_ID,
+            situation_id=SITUATION_ID,
+        ),
+    )
+    return store
+
+
 
 def golden_stages(puts: list[str], ran: list[str]) -> dict[str, Any]:
     """T1/T2 stand-ins: deterministic reservation/intent/artifact/transport."""
@@ -639,6 +655,7 @@ def golden_stages(puts: list[str], ran: list[str]) -> dict[str, Any]:
     return {
         "reservation": reservation, "intent": intent,
         "artifact": artifact, "transport": transport,
+        "reservation_store": claimed_store(),
     }
 
 
@@ -679,7 +696,8 @@ def test_fs231_golden_end_to_end_accepted() -> None:
     assert ran == ["reservation", "intent", "artifact", "transport"]
     stages = [entry.stage for entry in result.audit]
     assert stages == ["E1-reservation", "E2-intent", "E3-artifact",
-                      "E4-transport", "E6-ingestion", "E6-record", "handoff"]
+                      "E4-transport", "E5-observation", "E6-ingestion",
+                      "E6-record", "handoff"]
     assert all(entry.permitted for entry in result.audit)
 
 
@@ -731,7 +749,7 @@ def test_sibling_refusals_propagate_unmodified(stage_name: str, code: str) -> No
 
 
 def test_pipeline_maps_ingestion_corrupt_to_refusal() -> None:
-    """D13 via pipeline: corrupt RESULT short-circuits at E6-ingestion."""
+    """D13 via pipeline: corrupt RESULT short-circuits at E5-observation."""
     bucket = FakeS3({result_key(): b"NOT-EIGHTY-CHARS\n"})
     puts: list[str] = []
     ran: list[str] = []
@@ -740,7 +758,7 @@ def test_pipeline_maps_ingestion_corrupt_to_refusal() -> None:
     )
     assert result.permitted is False
     assert result.code == EXEC_RESULT_CORRUPT
-    assert result.refused_stage == "E6-ingestion"
+    assert result.refused_stage == "E5-observation"
     assert result.handoff is None
     assert "record" not in ran
 
