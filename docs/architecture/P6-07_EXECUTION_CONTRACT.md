@@ -746,3 +746,104 @@ PUT, or no ledger reprocessing as applicable.
 *P6-07 deterministic execution and legacy boundary
 contract. Tokens authorize; stages execute once;
 hashes prove; UNKNOWN stays explicit; P6-08 verifies.*
+
+## 12. Contract adjudications, review round 1 (normative)
+
+Review of `eaca4fd` held the engine wave on five
+contract-level gaps. Each adjudication below is a
+frozen decision the engine must implement; where an
+adjudication narrows an X-item, the adjudication
+wins and the X-item is read through it. No frozen
+protocol, domain, or approval document is edited by
+this section — P6-07 pins its own consumption of
+those contracts.
+
+- **A1. Logical vs wire batch identity.** The
+  logical id `LEGACY-YYYYMMDD-NNNN` (21 chars)
+  cannot occupy wire cols 3–16 (`CHAR(14)`). The
+  legacy protocol's own codec resolves this:
+  wire form is the compact `LEGYYMMDD-NNNN`
+  (14 chars) via the existing
+  `_batch_id_to_compact` / `_compact_to_batch_id`
+  functions, which the engine wraps and never
+  reimplements (century prefix `20` is recorded
+  behavior, not engine logic). Frozen rule:
+  logical form everywhere except the 80-char
+  lines; compact form on the wire only. X18/X21
+  are read through this rule: "schema consumed
+  verbatim" means the compact id in cols 3–16,
+  and self-verify expands it back before any
+  comparison with logical ids (keys, records,
+  audit, handoff). A line carrying a 21-char id
+  in cols 3–16 refuses with
+  `EXEC_ARTIFACT_REFUSED`.
+- **A2. Durable execution reservation (CAS).**
+  Exactly-once effect requires a durable commit
+  point before any artifact work, or two workers
+  (and crash recovery) can both perform the
+  single PUT. Frozen order inside E1, after the
+  token checks pass: `atomic claim(execution_id)`
+  inserts a reservation row keyed by
+  `execution_id` (= `idempotency_key`) carrying
+  the authorization binding digest, company,
+  case, and state `RESERVED`. Exactly one
+  claimant wins; every concurrent loser reads
+  the winner's row and follows the replay-read
+  path (`AUTHORIZATION_REPLAYED` recorded, never
+  re-executed). A crash between `RESERVED` and a
+  recorded receipt recovers by resuming from the
+  row: re-drive PUT only when no receipt exists
+  for this `execution_id`, never a second effect.
+  The row uses existing persistence patterns
+  (conditional insert-or-read, predicated UPDATE
+  on `(execution_id, state)`); no queues,
+  Temporal, workers, or new infrastructure. State
+  transitions on the row (`RESERVED` → receipt →
+  terminal outcome) are recorded, never edited.
+- **A3. Where DU may legitimately enter.** Three
+  cases, only two of which are legal: (a)
+  FinSight replay — same execution presented
+  again: NO second PUT by construction (A2
+  reservation); the recorded outcome returns
+  (X42). A same-execution second PUT is a
+  contract violation, not a DU source. (b)
+  Ledger-side duplicate — the ledger processed
+  OUR batch twice on its side and reports `DU`
+  for already-seen sequences: recorded verbatim,
+  resolves to the original outcome, no FinSight
+  re-PUT (nothing left to PUT). (c)
+  Pre-existing batch collision — our `batch_id`
+  collides with a legacy-side batch predating us,
+  so the first PUT already returns `DU`: record
+  the `DU` outcome and escalate per policy; never
+  auto-retry under a new id (X21 forbids a second
+  `batch_id` for one key; a new id needs a new
+  authorization cycle). X43 covers (b); X56/D5
+  covers (b)-style observation and (c); the
+  forbidden (a)-as-PUT path is closed by A2.
+- **A4. Retry budget frozen.** One initial
+  attempt plus up to three retries: at most four
+  PUT+read-back-verify cycles per execution, with
+  backoffs 1s, 2s, 4s before retries 1, 2, 3.
+  Each cycle resends byte-identical E3 output;
+  re-serialization between cycles is forbidden.
+  Read timeout stays 10s per object. X26 is read
+  through this rule wherever it says "at most 3
+  times".
+- **A5. Generic artifact naming.** The rule is
+  `CORRECTION_<YYYYMMDD>_<SEQ>.DAT` where `SEQ`
+  is the last three digits of the owning
+  situation's sequence component (`FS-…-00231`
+  → `231`). `CORRECTION_20260916_231.DAT` is the
+  FS-231 instantiation, not the rule. The engine
+  derives `SEQ` from the situation id and must
+  never hard-code `231`; S3 key prefixes stay
+  batch-scoped (`{company_id}/{batch_id}/`) per
+  X24. X24/X49 examples are read as
+  instantiations of this rule.
+
+| A1 | §12 | Logical vs wire batch identity |
+| A2 | §12 | Durable reservation (CAS) |
+| A3 | §12 | DU entry points vs replay |
+| A4 | §12 | Retry budget: 1+3 attempts |
+| A5 | §12 | Generic artifact naming rule |
