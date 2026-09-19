@@ -59,8 +59,14 @@ class IncompleteRead(Exception):  # noqa: N818 -- contract signal, not an error
 
     Missing RESULT keys note VERIFY_RESULT_MISSING semantics; tenant or
     prefix violations note the VERIFY_PREFIX_ESCAPE engine mapping. The
-    run mints no report and zero-fills nothing.
+    run mints no report and zero-fills nothing. The orchestrator reads
+    ``code`` to route the signal into the audited incomplete path.
     """
+
+    def __init__(self, message: str, *, code: str = "VERIFY_RESULT_MISSING") -> None:
+        """Carry the message plus the machine code for boundary routing."""
+        super().__init__(message)
+        self.code = code
 
 
 class CorruptResultRead(Exception):  # noqa: N818 -- contract signal, not an error
@@ -252,7 +258,8 @@ def read_result_bytes(
     except TenantIsolationError as exc:
         raise IncompleteRead(
             f"VERIFY_PREFIX_ESCAPE mapping: tenant refused key {key!r}; "
-            "run incomplete, engine maps to the closest existing code."
+            "run incomplete, engine maps to the closest existing code.",
+            code="VERIFY_PREFIX_ESCAPE",
         ) from exc
     except ObjectStoreError as exc:
         raise IncompleteRead(

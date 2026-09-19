@@ -339,3 +339,82 @@ class TestIncompleteVsCorruptDistinction:
         assert corrupt_log.entries[0].outcome == "FAILED"
         assert corrupt_log.entries[0].reason_code == VERIFY_RESULT_MUTATED
         assert corrupt_store.lookup(EXECUTION) == corrupt_report
+
+
+class TestRealIncompleteReads:
+    """Real track-A readers normalize to INCOMPLETE at the boundary.
+
+    Regression proof for the review finding: real ``IncompleteRead``
+    (not just stub ``ReaderFailed``) is caught, coded, audited once,
+    and mints nothing.
+    """
+
+    def test_real_missing_r1_normalized(self) -> None:
+        """Arrange empty FakeS3; Act verify; Assert INCOMPLETE, one entry."""
+        # Arrange.
+        from finance.object_store.fake import FakeS3
+        from finance.verification.rereads import read_result_bytes
+
+        store, log = ReplayStore(), AuditLog()
+        bucket = FakeS3("meridian")
+
+        def _real_missing(handoff: ExecutionHandoff) -> R1Observation:
+            assert handoff.result_key is not None
+            read_result_bytes(bucket, handoff.result_key, observed_at=T_CHECK)
+            raise AssertionError("unreachable: missing key must raise")
+
+        # Act.
+        with pytest.raises(VerificationRefused) as exc_info:
+            _run(_handoff(), store, log, read_result=_real_missing)
+        # Assert.
+        _assert_incomplete_run(store, log, exc_info.value.code)
+
+    def test_real_missing_r2_normalized(self) -> None:
+        """Arrange port with no expected value; Act verify; Assert same."""
+        # Arrange.
+        from finance.verification.rereads import read_expected
+
+        store, log = ReplayStore(), AuditLog()
+
+        class _EmptyExpected:
+            def read_expected(
+                self, case_key: str
+            ) -> tuple[Decimal | None, datetime | None]:
+                assert case_key == SITUATION
+                return None, None
+
+        def _real_missing(handoff: ExecutionHandoff) -> R2Observation:
+            del handoff
+            read_expected(_EmptyExpected(), SITUATION, observed_at=T_CHECK)
+            raise AssertionError("unreachable: missing value must raise")
+
+        # Act.
+        with pytest.raises(VerificationRefused) as exc_info:
+            _run(_handoff(), store, log, read_legacy=_real_missing)
+        # Assert.
+        _assert_incomplete_run(store, log, exc_info.value.code)
+
+    def test_real_missing_r3_normalized(self) -> None:
+        """Arrange port with no pending value; Act verify; Assert same."""
+        # Arrange.
+        from finance.verification.rereads import read_pending
+
+        store, log = ReplayStore(), AuditLog()
+
+        class _EmptyPending:
+            def read_pending(
+                self, batch_key: str
+            ) -> tuple[Decimal | None, datetime | None]:
+                assert batch_key == BATCH
+                return None, None
+
+        def _real_missing(handoff: ExecutionHandoff) -> R3Observation:
+            del handoff
+            read_pending(_EmptyPending(), BATCH, observed_at=T_CHECK)
+            raise AssertionError("unreachable: missing value must raise")
+
+        # Act.
+        with pytest.raises(VerificationRefused) as exc_info:
+            _run(_handoff(), store, log, read_expectation=_real_missing)
+        # Assert.
+        _assert_incomplete_run(store, log, exc_info.value.code)

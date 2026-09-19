@@ -43,6 +43,7 @@ from finance.verification.reason_codes import (
     require_registered,
 )
 from finance.verification.replay import ReplayStore
+from finance.verification.rereads import IncompleteRead
 
 _COMPANY = "meridian"
 _ZERO = Decimal("0.00")
@@ -407,6 +408,8 @@ def verify_execution(
         r1 = read_result(handoff)
     except ReaderFailed as exc:
         r1_signal = exc.code
+    except IncompleteRead as exc:
+        r1_signal = exc.code
     if r1 is not None:
         # HOLD-A (F18/F22/F65): R1 digest agreement gates R2/R3 semantic
         # parsing. Bytes disagreeing with the handoff digest refuse here
@@ -431,11 +434,15 @@ def verify_execution(
         r2 = read_legacy(handoff)
     except ReaderFailed as exc:
         r2_signal = exc.code
+    except IncompleteRead as exc:
+        r2_signal = exc.code
     r3: R3Observation | None = None
     r3_signal: str | None = None
     try:
         r3 = read_expectation(handoff)
     except ReaderFailed as exc:
+        r3_signal = exc.code
+    except IncompleteRead as exc:
         r3_signal = exc.code
     digests = _reread_digests(r1, r2, r3)
 
