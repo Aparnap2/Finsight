@@ -551,9 +551,84 @@ established books/expectation reads (F25).
 | F61 | §8 | No new lifecycle states |
 | F62 | §8 | No frozen-contract edits |
 | F63 | §8 | No new infra |
+| F64 | §10 | Double-mint registry invariant |
+| F65 | §10 | R2 seam named, handoff-independent |
+| F66 | §10 | R3 seams named, handoff-independent |
 
 ---
 
 *P6-08 independent post-execution verification contract.
 Re-reads prove; handoffs claim; digests agree; residual
 decides; the D1 gate closes.*
+
+## 10. Pre-implementation adjudications (normative)
+
+Adjudication 1 and 2 below clear the contract into
+the engine-design gate. They add requirements
+(F64–F66); they change no frozen contract and no
+existing F-item.
+
+- **F64. Double-mint registry invariant.**
+`VERIFY_DOUBLE_MINT_REFUSED` joins the F28 reason
+registry as a frozen code (closed world: the
+minter emits no code outside the registry).
+Mint key is `execution_id`: a second mint with
+the same key and byte-identical report inputs
+returns the identical report (idempotent replay,
+mirroring the A6 handoff rule); the same key
+with any differing report content refuses with
+`VERIFY_DOUBLE_MINT_REFUSED`, first record
+stands, and no second verification identity is
+created. One execution holds at most one
+terminal verification identity. A deterministic
+test is required (same-key-different-report
+refuses; same-key-identical-report returns
+identical). No second terminal proof can ever
+exist for one execution.
+- **F65. R2 seam named (legacy total).** R2 reads
+no handoff value field, ever. Sources: (a) the
+RESULT object bytes from the same fresh S3 GET
+that serves R1 — R1 proves integrity (digest
+agreement) and R2 derives semantics (frozen
+codec parse → accepted sum, Decimal 2-dp) only
+from digest-verified bytes; handoff
+`accepted_total` is a comparison target, never
+an input. (b) The pre-correction legacy total
+(FS-231: `982500`) arrives as a caller-supplied
+run input tagged with its provenance (detection
+fact, never handoff — handoff carries no prior
+total). `legacy_total_after` = prior total +
+fresh accepted sum. Adapter: existing S3 read
+seam (`ObjectStorePort.get_object`) + frozen
+codec; no new port. Identity: handoff
+`result_key`. Normalization: codec parse,
+Decimal 2-dp, INR-only. Failure: missing bytes
+→ incomplete run (F36 family); digest/staleness
+handled at R1 first. Contradiction: derived sum
+vs handoff `accepted_total` mismatch →
+`VERIFY_COUNT_SKEW`; vs OUTBOUND control →
+`VERIFY_CONTROL_SKEW`.
+- **F66. R3 seams named (expectation + pending).**
+R3 reads no handoff value field, ever. Two
+minimal read ports, defined in the verification
+package before any re-reader is written (ports
+are interfaces; tests bind fakes; production
+adapters bind later; no new infrastructure):
+(a) expected-settlement read — source system
+per the P6-01 matrix (Sheets), case key,
+Decimal total, as-of timestamp; (b)
+provider-pending read — source system per the
+matrix (Razorpay), batch key, Decimal pending
+total, as-of timestamp. Residual =
+`expected - legacy_total_after - pending` in
+Decimal (FS-231: `1000000 - 992500 - 7500 =
+0`). Timestamps: `observed_at` is verify-run
+time; source as-of recorded when provided,
+staleness beyond the run window → incomplete.
+Normalization: Decimal 2-dp, INR-only.
+Failure: either source missing/unreadable →
+incomplete run (never FAILED, never zero-fill).
+Contradiction: residual beyond tolerance →
+`VERIFY_TOLERANCE_EXCEEDED`; currency mismatch
+→ `FAILED` under the closest existing code
+(engine maps, no new codes beyond F64).
