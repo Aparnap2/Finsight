@@ -259,8 +259,9 @@ def verify_execution(
     """Verify one handoff in a single pass and mint at most one report.
 
     Entry gates (F11-F17) refuse before any re-read; clock skew short-circuits
-    to FAILED with VERIFY_CLOCK_SKEW; R1/R2/R3 readers run once each with no
-    retries; computed cross-checks select the first failing code; the
+    to FAILED with VERIFY_CLOCK_SKEW; the R1 reader runs first and its
+    digest agreement (F22) gates the R2/R3 readers, which run at most once
+    each with no retries; computed cross-checks select the first failing code; the
     recomputed identity replays against the store (F40/F64); exactly one
     audit entry is appended on every path.
 
@@ -406,6 +407,24 @@ def verify_execution(
         r1 = read_result(handoff)
     except ReaderFailed as exc:
         r1_signal = exc.code
+    if r1 is not None:
+        # HOLD-A (F18/F22/F65): R1 digest agreement gates R2/R3 semantic
+        # parsing. Bytes disagreeing with the handoff digest refuse here
+        # as FAILED without invoking downstream readers; their uninvoked
+        # state reads as absent-downstream-of-failure, never as
+        # incomplete evidence. Zero totals carry no observation claim.
+        recomputed_r1 = sha256(r1.result_bytes).hexdigest()
+        if recomputed_r1 != handoff.result_sha256:
+            return _settle(
+                legacy_after=_ZERO,
+                variance_after=_ZERO,
+                verdict=VerificationVerdict.FAILED,
+                residual_ok=False,
+                digests_ok=False,
+                counts_ok=False,
+                code=VERIFY_DIGEST_MISMATCH,
+                digests=_reread_digests(r1, None, None),
+            )
     r2: R2Observation | None = None
     r2_signal: str | None = None
     try:
