@@ -860,9 +860,23 @@ those contracts.
   batch-scoped (`{company_id}/{batch_id}/`) per
   X24. X24/X49 examples are read as
   instantiations of this rule.
+- **A6. Replay returns the recorded outcome, not
+  a new handoff.** X41's "byte-identical
+  handoff" is clarified: the §8 handoff is
+  emitted exactly once, on the first presentation
+  that completes the chain. A replay presentation
+  returns the recorded outcome
+  (`IngestionOutcome`, byte-identical) with
+  `AUTHORIZATION_REPLAYED` audit and a null
+  handoff slot — re-emitting a handoff would
+  imply a new handoff event, which never
+  occurred. This preserves the fail-closed
+  decision not to fabricate handoffs during
+  replay; X41/X42 are read through this rule.
 
 | A1 | §12 | Logical vs wire batch identity |
 | A2 | §12 | Durable reservation (CAS) |
 | A3 | §12 | DU entry points vs replay |
 | A4 | §12 | Retry budget: 1+3 attempts |
 | A5 | §12 | Generic artifact naming rule |
+| A6 | §12 | Replay returns outcome, never a new handoff |
