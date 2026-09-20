@@ -8,7 +8,13 @@ import pytest
 
 from agents.authority.claims import AgentCapability, AuthorityBoundary
 from agents.authority.evidence import AuthorityError, EvidenceRecord, EvidenceRegistry
-from agents.runtime import AgentRuntime, RuntimeContext, RuntimeHandoff
+from agents.runtime import (
+    AgentRuntime,
+    RuntimeContext,
+    RuntimeFactory,
+    RuntimeHandoff,
+    RuntimeRequest,
+)
 
 NOW = datetime(2026, 9, 1, 12, 0, 0, tzinfo=UTC)
 DIGEST_A = "a" * 64
@@ -219,3 +225,70 @@ class TestRuntimeHandoffExplicit:
                     "status": "VERIFIED",
                 },
             )
+
+
+class TestDeterministicPreservation:
+    """Positive invariant: handoff remains bound to deterministic request."""
+
+    def test_model_output_preserves_deterministic_context_and_scope(self) -> None:
+        """Normal model output must preserve situation, company, capability, and scope."""
+        factory = RuntimeFactory()
+        reg = _registry()
+        boundary = AuthorityBoundary()
+        ctx = factory.create_context(
+            situation_id="sit-preserve-001",
+            now=NOW,
+            registry=reg,
+            boundary=boundary,
+        )
+        # Model contributes only advisory content, not context.
+        def normal_model(capability: AgentCapability, inputs: dict) -> dict:
+            return {
+                "proposal_type": "advisory_note",
+                "evidence_ids": ("ev-ledger-001",),
+                "uncertainty": "Model uncertainty — still advisory.",
+                "rationale": "Model rationale — based on deterministic evidence.",
+            }
+
+        rt = factory.create_runtime(ctx, model=normal_model)
+        handoff = rt.propose(
+            proposal_type="advisory_note",
+            evidence_ids=("ev-ledger-001",),
+            uncertainty="Original U",
+            rationale="Original R",
+        )
+        # Deterministic request context wins.
+        assert handoff.situation_id == "sit-preserve-001"
+        assert handoff.company_id == "meridian"
+        assert handoff.proposal.proposal_type == "advisory_note"
+        assert tuple(r.evidence_id for r in handoff.proposal.evidence_refs) == (
+            "ev-ledger-001",
+        )
+        # Model contributed content is present but context/scope unchanged.
+        assert "Model rationale" in handoff.proposal.rationale
+
+    def test_dispatch_request_preserves_typed_envelope(self) -> None:
+        """Dispatch via RuntimeRequest preserves typed envelope."""
+        factory = RuntimeFactory()
+        reg = _registry()
+        boundary = AuthorityBoundary()
+        ctx = factory.create_context(
+            situation_id="sit-req-001",
+            now=NOW,
+            registry=reg,
+            boundary=boundary,
+        )
+        rt = factory.create_runtime(ctx)
+        req = RuntimeRequest(
+            capability=AgentCapability.PROPOSE,
+            inputs={
+                "proposal_type": "flag_ambiguity",
+                "uncertainty": "U",
+                "rationale": "R",
+            },
+            evidence_ids=("ev-ledger-001",),
+        )
+        result = rt.dispatch_request(req)
+        assert isinstance(result, RuntimeHandoff)
+        assert result.situation_id == "sit-req-001"
+        assert result.proposal.proposal_type == "flag_ambiguity"

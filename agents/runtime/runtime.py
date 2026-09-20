@@ -20,7 +20,7 @@ from agents.authority.claims import (
     validate_proposal_dict,
 )
 from agents.authority.evidence import AuthorityError
-from agents.runtime.context import RuntimeContext
+from agents.runtime.context import RuntimeContext, RuntimeRequest
 from agents.runtime.handoff import RuntimeHandoff
 
 logger = logging.getLogger(__name__)
@@ -281,19 +281,17 @@ class AgentRuntime:
             raise AuthorityError("explain requires a RuntimeHandoff.")
         return explain_proposal(handoff.proposal)
 
-    def dispatch(
-        self, capability: AgentCapability, inputs: Mapping[str, Any]
-    ) -> Any:
-        """Generic capability-gated dispatch (typed, registry-bound)."""
-        if not isinstance(capability, AgentCapability):
-            # Allow string for test of denied capability, but still gate.
-            try:
-                capability = AgentCapability(str(capability))
-            except ValueError:
-                msg = f"Capability {capability!r} outside authority."
-                raise AuthorityError(msg) from None
-        # Request must never carry registry/boundary injection.
-        self._check_no_registry_injection(inputs)
+    def dispatch_request(self, request: RuntimeRequest) -> Any:
+        """Dispatch an already-validated ``RuntimeRequest``.
+
+        The request envelope is validated at construction (typed
+        ``AgentCapability``, non-blank evidence_ids, no registry
+        injection). This method consumes it without re-parsing
+        authority — it is not another parser boundary.
+        """
+        # Capability is already typed and validated at construction.
+        capability = request.capability
+        inputs = request.inputs
         # Also check for smuggled authoritative keys in generic dispatch.
         if capability == AgentCapability.PROPOSE:
             for k in ("status", "amount", "verdict", "decision"):
@@ -301,7 +299,6 @@ class AgentRuntime:
                     raise AuthorityError(
                         f"Proposal payload smuggles authoritative key {k!r}."
                     )
-            # Also check nested smuggling.
             for v in inputs.values():
                 if isinstance(v, Mapping):
                     for k in ("status", "amount", "verdict", "decision"):
@@ -310,19 +307,19 @@ class AgentRuntime:
                                 f"Proposal payload smuggles nested key {k!r}."
                             )
         if capability == AgentCapability.READ:
-            return self.read(tuple(inputs.get("evidence_ids", ())))
+            return self.read(request.evidence_ids)
         if capability == AgentCapability.CORRELATE:
-            return self.correlate(tuple(inputs.get("evidence_ids", ())))
+            return self.correlate(request.evidence_ids)
         if capability == AgentCapability.HYPOTHESIZE:
             return self.hypothesize(
                 text=str(inputs.get("text", "")),
-                evidence_ids=tuple(inputs.get("evidence_ids", ())),
+                evidence_ids=request.evidence_ids,
                 uncertainty=str(inputs.get("uncertainty", "")),
             )
         if capability == AgentCapability.PROPOSE:
             return self.propose(
                 proposal_type=str(inputs.get("proposal_type", inputs.get("action", ""))),
-                evidence_ids=tuple(inputs.get("evidence_ids", inputs.get("evidence_refs", ()))),
+                evidence_ids=request.evidence_ids,
                 uncertainty=str(inputs.get("uncertainty", "")),
                 rationale=str(inputs.get("rationale", "")),
                 target=inputs.get("target"),
@@ -333,3 +330,35 @@ class AgentRuntime:
                 raise AuthorityError("EXPLAIN requires handoff.")
             return self.explain(handoff)
         raise AuthorityError(f"Capability {capability!r} is not dispatchable.")
+
+    def dispatch(
+        self, capability: AgentCapability, inputs: Mapping[str, Any]
+    ) -> Any:
+        """Generic capability-gated dispatch (typed, registry-bound).
+
+        For backward compat, accepts ``AgentCapability`` or string;
+        internally it constructs a validated ``RuntimeRequest`` and
+        delegates to ``dispatch_request`` so the request envelope is
+        the single authority boundary.
+        """
+        if not isinstance(capability, AgentCapability):
+            # Allow string for test of denied capability, but still gate.
+            try:
+                capability = AgentCapability(str(capability))
+            except ValueError:
+                msg = f"Capability {capability!r} outside authority."
+                raise AuthorityError(msg) from None
+        # Request must never carry registry/boundary injection — checked
+        # at RuntimeRequest construction, but also check raw inputs early.
+        self._check_no_registry_injection(inputs)
+        # Build the typed request envelope — construction validates.
+        # Evidence_ids are taken from inputs if present, else from
+        # request.evidence_ids handling.
+        evidence_ids = tuple(inputs.get("evidence_ids", inputs.get("evidence_refs", ())))
+        # Validate each evidence_id is non-blank at request construction.
+        request = RuntimeRequest(
+            capability=capability,
+            inputs=inputs,
+            evidence_ids=evidence_ids,  # type: ignore[arg-type]
+        )
+        return self.dispatch_request(request)

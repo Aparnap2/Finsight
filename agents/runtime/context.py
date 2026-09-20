@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
-from agents.authority.claims import AuthorityBoundary
+from agents.authority.claims import AgentCapability, AuthorityBoundary
 from agents.authority.evidence import AuthorityError, EvidenceRegistry
 
 
@@ -131,25 +131,35 @@ class RuntimeRequest:
 
     ``capability`` is an ``AgentCapability`` value; ``inputs`` is a
     plain mapping that will be validated via P7-01 validators.
-    ``evidence_ids`` must be a subset of the registry's known ids;
-    the runtime resolves them via the registry — raw metadata never
-    becomes authority. The envelope never carries ``registry`` or
-    ``boundary`` — those are context-bound.
+    ``evidence_ids`` must be a tuple of non-blank strings and a
+    subset of the registry's known ids; the runtime resolves them via
+    the registry — raw metadata never becomes authority. The envelope
+    never carries ``registry`` or ``boundary`` — those are context-bound.
+    Construction-time validation ensures an invalid request object
+    cannot exist; dispatch then consumes the already-valid request.
     """
 
-    capability: str
+    capability: AgentCapability
     inputs: Mapping[str, Any]
     evidence_ids: tuple[str, ...]
 
     def __post_init__(self) -> None:
         """Validate envelope shape and reject registry injection."""
-        _require_non_blank(self.capability, "capability")
+        if not isinstance(self.capability, AgentCapability):
+            raise AuthorityError("capability must be an AgentCapability.")
         if not isinstance(self.inputs, Mapping):
             raise AuthorityError("inputs must be a mapping.")
         if not isinstance(self.evidence_ids, tuple):
             raise AuthorityError("evidence_ids must be a tuple.")
+        for eid in self.evidence_ids:
+            _require_non_blank(eid, "evidence_ids item")
         # The request must never carry registry or boundary — those are
         # context-bound and injected by the deterministic plane.
-        for forbidden in ("registry", "boundary", "evidence_registry"):
+        for forbidden in (
+            "registry",
+            "boundary",
+            "evidence_registry",
+            "authority_boundary",
+        ):
             if forbidden in self.inputs:
                 raise AuthorityError(f"Request must not carry {forbidden!r}.")

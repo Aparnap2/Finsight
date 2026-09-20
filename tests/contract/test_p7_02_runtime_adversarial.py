@@ -463,9 +463,37 @@ class TestRequestInjection:
 
         with pytest.raises(AuthorityError):
             RuntimeRequest(
-                capability="propose",
+                capability=AgentCapability.PROPOSE,
                 inputs={"registry": _registry()},
                 evidence_ids=("ev-ledger-001",),
+            )
+
+    def test_runtime_request_rejects_string_capability(self) -> None:
+        """Construction-time validation: capability must be AgentCapability, not str."""
+        from agents.runtime import RuntimeRequest
+
+        with pytest.raises(AuthorityError):
+            RuntimeRequest(
+                capability="propose",  # type: ignore[arg-type]
+                inputs={},
+                evidence_ids=("ev-ledger-001",),
+            )
+
+    def test_runtime_request_rejects_blank_evidence_id(self) -> None:
+        """Construction-time validation: every evidence_id must be non-blank."""
+        from agents.runtime import RuntimeRequest
+
+        with pytest.raises(AuthorityError):
+            RuntimeRequest(
+                capability=AgentCapability.READ,
+                inputs={},
+                evidence_ids=("",),
+            )
+        with pytest.raises(AuthorityError):
+            RuntimeRequest(
+                capability=AgentCapability.READ,
+                inputs={},
+                evidence_ids=("   ",),
             )
 
     def test_factory_issued_context_required_for_strict_runtime(self) -> None:
