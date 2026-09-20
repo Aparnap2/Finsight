@@ -424,6 +424,57 @@ class TestContextBoundAuthority:
         # frozen authority, but the tool still uses the context's registry.
         assert result.success is True
 
+    def test_lookup_cannot_accept_rogue_boundary(self) -> None:
+        """Lookup must use context-bound boundary — rogue boundary not injectable."""
+        from agents.tools.evidence_lookup import EvidenceLookupRequest, evidence_lookup
+
+        factory = RuntimeFactory()
+        reg = _registry()
+        # Rogue boundary is still a valid AuthorityBoundary, but it is
+        # bound to a different factory context. The tool must use the
+        # context's boundary, not a caller-supplied one.
+        rogue_boundary = AuthorityBoundary()
+        ctx_rogue = factory.create_context(
+            situation_id="sit-p703-001",
+            now=NOW,
+            registry=reg,
+            boundary=rogue_boundary,
+        )
+        req = EvidenceLookupRequest(
+            capability=AgentCapability.READ,
+            situation_id="sit-p703-001",
+            company_id="meridian",
+            now=NOW,
+            evidence_ids=("ev-ledger-001",),
+        )
+        result = evidence_lookup(req, context=ctx_rogue)
+        assert result.success is True
+        # The tool used the context's boundary — no injection seam.
+        assert ctx_rogue.boundary is rogue_boundary
+
+    def test_correlation_cannot_accept_rogue_boundary(self) -> None:
+        """Correlation must use context-bound boundary."""
+        from agents.tools.correlation import CorrelationRequest, correlate
+
+        factory = RuntimeFactory()
+        reg = _registry()
+        rogue_boundary = AuthorityBoundary()
+        ctx_rogue = factory.create_context(
+            situation_id="sit-p703-001",
+            now=NOW,
+            registry=reg,
+            boundary=rogue_boundary,
+        )
+        req = CorrelationRequest(
+            capability=AgentCapability.CORRELATE,
+            situation_id="sit-p703-001",
+            company_id="meridian",
+            now=NOW,
+            evidence_ids=("ev-ledger-001",),
+        )
+        result = correlate(req, context=ctx_rogue)
+        assert result.success is True
+
     def test_tool_uses_factory_bound_context(self) -> None:
         from agents.tools.evidence_lookup import EvidenceLookupRequest, evidence_lookup
 
