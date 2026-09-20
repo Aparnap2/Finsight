@@ -729,8 +729,13 @@ class TestOrchestratorFailed:
         assert report.verdict is VerificationVerdict.FAILED
         assert log.entries[0].reason_code == VERIFY_CLOCK_SKEW
 
-    def test_count_skew_reader_signal_without_totals_is_incomplete(self) -> None:
-        """Arrange R2 raising count skew; Act; Assert incomplete, code kept."""
+    def test_count_skew_reader_signal_without_totals_is_failed(self) -> None:
+        """Arrange R2 raising count skew; Act; Assert FAILED, code kept.
+
+        Adjudicated: completed-but-invalid evidence mints FAILED even
+        without totals (zero totals carry no observation claim); only
+        missing/unreadable evidence is INCOMPLETE.
+        """
         # Arrange.
         store, log = ReplayStore(), AuditLog()
 
@@ -738,12 +743,13 @@ class TestOrchestratorFailed:
             raise ReaderFailed(VERIFY_COUNT_SKEW, "lines do not reconcile")
 
         # Act.
-        with pytest.raises(VerificationRefused) as exc_info:
-            _run(_handoff(), store, log, read_legacy=_no_totals)
+        report = _run(_handoff(), store, log, read_legacy=_no_totals)
         # Assert.
-        assert exc_info.value.code == VERIFY_COUNT_SKEW
-        assert store.lookup(EXECUTION) is None
-        assert log.entries[0].outcome == "INCOMPLETE"
+        assert report.verdict is VerificationVerdict.FAILED
+        assert report.is_accepted(Decimal("100")) is False
+        assert log.entries[0].outcome == "FAILED"
+        assert log.entries[0].reason_code == VERIFY_COUNT_SKEW
+        assert store.lookup(EXECUTION) == report
 
 
 class TestOrchestratorIncomplete:
@@ -1072,3 +1078,59 @@ class TestSourceHygiene:
                         calls.add((receiver.id, node.func.attr))
             assert not (roots & self.BANNED_ROOTS), f"{name} imports {roots}"
             assert not (calls & self.BANNED_CALLS), f"{name} calls {calls}"
+
+
+class TestRealCorruptResult:
+    """Real-reader corruption mints FAILED (review HOLD)."""
+
+    def test_real_corrupt_result_mints_failed_not_incomplete(self) -> None:
+        """Arrange corrupt RESULT bytes via real readers; Act; Assert FAILED.
+
+        Regression proof: real ``CorruptResultRead`` normalizes to
+        FAILED with its code (one entry, no VERIFIED promotion) instead
+        of escaping uncaught or collapsing to INCOMPLETE.
+        """
+        # Arrange.
+        from finance.object_store.fake import FakeS3
+        from finance.verification.orchestrator import R1Observation
+        from finance.verification.rereads import (
+            derive_accepted_total,
+            read_result_bytes,
+        )
+
+        store, log = ReplayStore(), AuditLog()
+        raw = b"01LEG260916004300000001AC" + b"X" * 50 + b"ffff\n"
+        bucket = FakeS3("meridian")
+        key = "meridian/LEGACY-20260916-0043/RESULT_20260916_231.DAT"
+        bucket.put_object(key, raw)
+        digest = hashlib.sha256(raw).hexdigest()
+        handoff = _handoff(result_key=key, result_sha256=digest)
+
+        def _real_r1(handoff: ExecutionHandoff) -> R1Observation:
+            assert handoff.result_key is not None
+            fresh = read_result_bytes(bucket, handoff.result_key, observed_at=T_NOW)
+            return R1Observation(
+                result_bytes=fresh.data,
+                result_sha256=fresh.sha256,
+                observed_at=T_NOW,
+            )
+
+        def _real_r2_corrupt(handoff: ExecutionHandoff) -> R2Observation:
+            assert handoff.result_key is not None
+            fresh = read_result_bytes(bucket, handoff.result_key, observed_at=T_NOW)
+            derive_accepted_total(
+                fresh.data, batch_id="LEGACY-20260916-0043", observed_at=T_NOW
+            )
+            raise AssertionError("unreachable: corrupt bytes must raise")
+
+        # Act.
+        report = _run(
+            handoff, store, log, read_result=_real_r1, read_legacy=_real_r2_corrupt
+        )
+        # Assert.
+        assert report.verdict is VerificationVerdict.FAILED
+        assert report.is_accepted(Decimal("100")) is False
+        assert log.entries[0].outcome == "FAILED"
+        assert log.entries[0].reason_code == VERIFY_RESULT_MUTATED
+        assert len(log) == 1
+        assert store.lookup(EXECUTION) == report

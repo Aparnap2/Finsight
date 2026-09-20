@@ -72,13 +72,22 @@ class IncompleteRead(Exception):  # noqa: N818 -- contract signal, not an error
 class CorruptResultRead(Exception):  # noqa: N818 -- contract signal, not an error
     """RESULT bytes fail integrity or shape checks (VERIFY_RESULT_MUTATED)."""
 
+    code = "VERIFY_RESULT_MUTATED"
+    """Machine code the orchestration boundary routes to FAILED."""
+
 
 class WrongBatchRead(CorruptResultRead):  # noqa: N818 -- contract signal, not an error
     """RESULT header batch differs from the expected batch (VERIFY_BATCH_SKEW)."""
 
+    code = "VERIFY_BATCH_SKEW"
+    """Machine code the orchestration boundary routes to FAILED."""
+
 
 class CountSkewRead(CorruptResultRead):  # noqa: N818 -- contract signal, not an error
     """Version, sequence, or line-population skew (VERIFY_COUNT_SKEW)."""
+
+    code = "VERIFY_COUNT_SKEW"
+    """Machine code the orchestration boundary routes to FAILED."""
 
 
 class BoundaryRefused(Exception):  # noqa: N818 -- contract signal, not an error

@@ -29,6 +29,7 @@ from finance.verification.clock import assess_clock
 from finance.verification.minter import MintRefused, mint_report
 from finance.verification.reason_codes import (
     FAILED_CODES,
+    VERIFY_BATCH_SKEW,
     VERIFY_CASE_SKEW,
     VERIFY_CONTROL_SKEW,
     VERIFY_COUNT_SKEW,
@@ -37,16 +38,27 @@ from finance.verification.reason_codes import (
     VERIFY_HANDOFF_CORRUPT,
     VERIFY_PREFIX_ESCAPE,
     VERIFY_RESULT_MISSING,
+    VERIFY_RESULT_MUTATED,
     VERIFY_STALE_REPLAY,
     VERIFY_TOLERANCE_EXCEEDED,
     VERIFY_UNAUTHORIZED_EXECUTION,
     require_registered,
 )
 from finance.verification.replay import ReplayStore
-from finance.verification.rereads import IncompleteRead
+from finance.verification.rereads import CorruptResultRead, IncompleteRead
 
 _COMPANY = "meridian"
 _ZERO = Decimal("0.00")
+
+_CORRUPT_FAIL_CODES = frozenset(
+    {
+        VERIFY_RESULT_MUTATED,
+        VERIFY_BATCH_SKEW,
+        VERIFY_COUNT_SKEW,
+        VERIFY_CONTROL_SKEW,
+    }
+)
+"""Corrupt (not missing) evidence mints FAILED, never INCOMPLETE."""
 
 __all__ = [
     "R1Observation",
@@ -410,6 +422,8 @@ def verify_execution(
         r1_signal = exc.code
     except IncompleteRead as exc:
         r1_signal = exc.code
+    except CorruptResultRead as exc:
+        r1_signal = exc.code
     if r1 is not None:
         # HOLD-A (F18/F22/F65): R1 digest agreement gates R2/R3 semantic
         # parsing. Bytes disagreeing with the handoff digest refuse here
@@ -436,6 +450,8 @@ def verify_execution(
         r2_signal = exc.code
     except IncompleteRead as exc:
         r2_signal = exc.code
+    except CorruptResultRead as exc:
+        r2_signal = exc.code
     r3: R3Observation | None = None
     r3_signal: str | None = None
     try:
@@ -444,12 +460,28 @@ def verify_execution(
         r3_signal = exc.code
     except IncompleteRead as exc:
         r3_signal = exc.code
+    except CorruptResultRead as exc:
+        r3_signal = exc.code
     digests = _reread_digests(r1, r2, r3)
 
     if r2 is None or r3 is None:
-        # Totals unavailable: FAILED needs complete totals, so any R2/R3
-        # signal is incomplete with its code kept, never FAILED-as-verdict.
         signal = r2_signal if r2_signal is not None else r3_signal
+        if signal is not None and signal in _CORRUPT_FAIL_CODES:
+            # Completed-but-invalid evidence: FAILED with zero totals
+            # carrying no observation claim (HOLD-A precedent), never
+            # INCOMPLETE, never VERIFIED.
+            return _settle(
+                legacy_after=_ZERO,
+                variance_after=_ZERO,
+                verdict=VerificationVerdict.FAILED,
+                residual_ok=False,
+                digests_ok=False,
+                counts_ok=False,
+                code=signal,
+                digests=digests,
+            )
+        # Totals unavailable and nothing corrupt: incomplete with its
+        # code kept, never FAILED-as-verdict.
         _refuse(signal, f"legacy/expectation re-read signalled {signal}; incomplete.", digests)
     if r1 is None:
         if r1_signal is not None and r1_signal in FAILED_CODES:
