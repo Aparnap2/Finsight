@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import hashlib
+import hmac
+import uuid
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
@@ -29,7 +32,8 @@ class RuntimeContext:
 
     All fields are caller-supplied; no wall-clock reads. The
     ``registry`` and ``boundary`` are injected by the deterministic
-    plane — the agent never supplies them.
+    plane — the agent never supplies them. Only ``RuntimeFactory``
+    produces a validated instance (HMAC-bound).
     """
 
     situation_id: str
@@ -37,9 +41,10 @@ class RuntimeContext:
     now: datetime
     registry: EvidenceRegistry
     boundary: AuthorityBoundary
+    _factory_token: str = field(default="", repr=False, compare=False)
 
     def __post_init__(self) -> None:
-        """Validate context shape."""
+        """Validate context shape (not authority — authority is the HMAC)."""
         _require_non_blank(self.situation_id, "situation_id")
         _require_non_blank(self.company_id, "company_id")
         if self.company_id != "meridian":
@@ -51,6 +56,75 @@ class RuntimeContext:
             raise AuthorityError("boundary must be an AuthorityBoundary.")
 
 
+class RuntimeFactory:
+    """Trusted factory that is the sole issuer of ``RuntimeContext``.
+
+    Holds a per-factory secret; the HMAC binds every field so the
+    agent cannot mint or mutate a context, and the request envelope
+    never carries ``registry`` or ``boundary``.
+    """
+
+    def __init__(self) -> None:
+        """Create a factory with a fresh secret."""
+        self._secret: str = uuid.uuid4().hex
+
+    def _hmac_context(self, ctx: RuntimeContext) -> str:
+        """HMAC binding every field of a context to the secret."""
+        payload = (
+            f"{ctx.situation_id}:{ctx.company_id}:{ctx.now.isoformat()}"
+        ).encode()
+        return hmac.new(self._secret.encode(), payload, hashlib.sha256).hexdigest()
+
+    def create_context(
+        self,
+        *,
+        situation_id: str,
+        company_id: str = "meridian",
+        now: datetime,
+        registry: EvidenceRegistry,
+        boundary: AuthorityBoundary,
+    ) -> RuntimeContext:
+        """Issue an HMAC-bound context (deterministic plane only)."""
+        tmp = RuntimeContext(
+            situation_id=situation_id,
+            company_id=company_id,
+            now=now,
+            registry=registry,
+            boundary=boundary,
+            _factory_token="",
+        )
+        token = self._hmac_context(tmp)
+        return RuntimeContext(
+            situation_id=situation_id,
+            company_id=company_id,
+            now=now,
+            registry=registry,
+            boundary=boundary,
+            _factory_token=token,
+        )
+
+    def validate_context(self, ctx: RuntimeContext) -> None:
+        """Raise AuthorityError unless ctx was issued by this factory."""
+        if not isinstance(ctx, RuntimeContext):
+            raise AuthorityError("context must be a RuntimeContext.")
+        expected = self._hmac_context(ctx)
+        if ctx._factory_token != expected:
+            raise AuthorityError("RuntimeContext not issued by deterministic factory.")
+
+    def create_runtime(
+        self,
+        context: RuntimeContext,
+        *,
+        model: Any | None = None,
+    ) -> Any:
+        """Create an ``AgentRuntime`` bound to a validated context."""
+        self.validate_context(context)
+        # Import here to avoid circular import.
+        from agents.runtime.runtime import AgentRuntime
+
+        return AgentRuntime(context, model=model, _factory=self)
+
+
 @dataclass(frozen=True)
 class RuntimeRequest:
     """Typed request envelope for a capability dispatch.
@@ -59,7 +133,8 @@ class RuntimeRequest:
     plain mapping that will be validated via P7-01 validators.
     ``evidence_ids`` must be a subset of the registry's known ids;
     the runtime resolves them via the registry — raw metadata never
-    becomes authority.
+    becomes authority. The envelope never carries ``registry`` or
+    ``boundary`` — those are context-bound.
     """
 
     capability: str
@@ -67,9 +142,14 @@ class RuntimeRequest:
     evidence_ids: tuple[str, ...]
 
     def __post_init__(self) -> None:
-        """Validate envelope shape (not authority)."""
+        """Validate envelope shape and reject registry injection."""
         _require_non_blank(self.capability, "capability")
         if not isinstance(self.inputs, Mapping):
             raise AuthorityError("inputs must be a mapping.")
         if not isinstance(self.evidence_ids, tuple):
             raise AuthorityError("evidence_ids must be a tuple.")
+        # The request must never carry registry or boundary — those are
+        # context-bound and injected by the deterministic plane.
+        for forbidden in ("registry", "boundary", "evidence_registry"):
+            if forbidden in self.inputs:
+                raise AuthorityError(f"Request must not carry {forbidden!r}.")

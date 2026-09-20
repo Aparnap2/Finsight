@@ -41,14 +41,28 @@ class AgentRuntime:
         context: RuntimeContext,
         *,
         model: FakeModel | None = None,
+        _factory: Any | None = None,
     ) -> None:
         """Store context and optional fake model (injected, not created)."""
         if not isinstance(context, RuntimeContext):
             raise AuthorityError("context must be a RuntimeContext.")
+        # Enforce factory-issued context when a factory is present.
+        # Direct construction without a factory is allowed in tests via
+        # the factory helper, but a context with an empty token that
+        # was not validated is still considered unissued if a factory
+        # is supplied. For strict boundary, require token when factory
+        # is given.
+        if _factory is not None:
+            _factory.validate_context(context)
+        elif not getattr(context, "_factory_token", ""):
+            # If no factory is supplied, allow direct contexts for
+            # backward compat in existing tests, but log.
+            logger.debug("RuntimeContext without factory token — test path.")
         self._context = context
         self._model = model
         self._boundary = context.boundary
         self._registry = context.registry
+        self._factory = _factory
 
     @property
     def context(self) -> RuntimeContext:
@@ -87,6 +101,24 @@ class AgentRuntime:
         """Refuse any output that tries to smuggle a second authority model."""
         if hasattr(output, "to_authoritative") or hasattr(output, "to_fact"):
             raise AuthorityError("Second authority model is forbidden.")
+        # Also check mapping payloads for nested authoritative keys that
+        # might be smuggled as dict values.
+        if isinstance(output, Mapping):
+            for k in ("to_authoritative", "to_fact"):
+                if k in output:
+                    raise AuthorityError("Second authority model is forbidden.")
+                # Check nested dicts for authoritative smuggling
+                for v in output.values():
+                    if isinstance(v, Mapping) and k in v:  # type: ignore[no-redef]
+                        raise AuthorityError("Second authority model is forbidden.")
+                    if hasattr(v, "to_authoritative") or hasattr(v, "to_fact"):
+                        raise AuthorityError("Second authority model is forbidden.")
+
+    def _check_no_registry_injection(self, inputs: Mapping[str, Any]) -> None:
+        """Refuse any request that tries to inject registry or boundary."""
+        for forbidden in ("registry", "boundary", "evidence_registry", "authority_boundary"):
+            if forbidden in inputs:
+                raise AuthorityError(f"Request must not carry {forbidden!r}.")
 
     # --- Capability methods ---
 
@@ -142,8 +174,14 @@ class AgentRuntime:
 
         If a fake model is injected, its output is treated as plain data
         and re-validated through P7-01 — never trusted as authority.
+        Deterministic request context wins: model cannot expand evidence
+        scope, change situation/company/capability, or inject authority.
         """
         self._require_capability(AgentCapability.PROPOSE)
+        # Capture deterministic request envelope — model cannot redefine.
+        original_evidence_ids = tuple(evidence_ids)
+        original_situation = self._context.situation_id
+        original_company = self._context.company_id
         # Resolve via registry — never trust caller metadata.
         evidence_dicts = self._resolve_refs(evidence_ids)
 
@@ -165,17 +203,46 @@ class AgentRuntime:
                 raise AuthorityError(f"Model failed: {exc}") from exc
             if model_output is None:
                 raise AuthorityError("Model output unavailable; will not fabricate.")
+            # Model output is untrusted — validate as opaque object first.
+            self._validate_not_second_authority(model_output)
+            # Check for nested authoritative payload.
+            if isinstance(model_output, Mapping):
+                for v in model_output.values():
+                    if isinstance(v, Mapping):
+                        for k in ("status", "amount", "verdict", "decision"):
+                            if k in v:
+                                raise AuthorityError(
+                                    f"Model output smuggles nested key {k!r}."
+                                )
+            # Deterministic envelope wins: model cannot change case scope.
+            for forbidden in ("situation_id", "company_id", "capability"):
+                if forbidden in model_output and str(
+                    model_output[forbidden]
+                ) != str(
+                    {
+                        "situation_id": original_situation,
+                        "company_id": original_company,
+                        "capability": AgentCapability.PROPOSE.value,
+                    }.get(forbidden)
+                ):
+                    raise AuthorityError(
+                        f"Model must not redefine {forbidden!r}."
+                    )
+            # Model cannot expand evidence scope beyond the request.
+            model_eids_raw = model_output.get("evidence_ids", evidence_ids)
+            if isinstance(model_eids_raw, (list, tuple)):
+                model_eids = tuple(str(x) for x in model_eids_raw)
+                # Any new id outside original scope is a scope expansion.
+                if set(model_eids) - set(original_evidence_ids):
+                    raise AuthorityError("Model must not expand evidence scope.")
+                # Also reject if model tries to change evidence metadata
+                evidence_ids = model_eids
+                evidence_dicts = self._resolve_refs(evidence_ids)
             # Model output is plain data — re-validate, never trust.
-            # Use model_output's proposal_type if it tries to smuggle, it will be rejected.
             proposal_type = str(model_output.get("proposal_type", proposal_type))
             uncertainty = str(model_output.get("uncertainty", uncertainty))
             rationale = str(model_output.get("rationale", rationale))
             target = model_output.get("target", target)
-            # Evidence_ids from model are also re-resolved via registry.
-            model_eids = model_output.get("evidence_ids", evidence_ids)
-            if isinstance(model_eids, (list, tuple)):
-                evidence_ids = tuple(str(x) for x in model_eids)
-                evidence_dicts = self._resolve_refs(evidence_ids)
             # Preserve any smuggled keys so the P7-01 validator can refuse them.
             for k in ("status", "amount", "verdict", "decision"):
                 if k in model_output:
@@ -225,6 +292,23 @@ class AgentRuntime:
             except ValueError:
                 msg = f"Capability {capability!r} outside authority."
                 raise AuthorityError(msg) from None
+        # Request must never carry registry/boundary injection.
+        self._check_no_registry_injection(inputs)
+        # Also check for smuggled authoritative keys in generic dispatch.
+        if capability == AgentCapability.PROPOSE:
+            for k in ("status", "amount", "verdict", "decision"):
+                if k in inputs:
+                    raise AuthorityError(
+                        f"Proposal payload smuggles authoritative key {k!r}."
+                    )
+            # Also check nested smuggling.
+            for v in inputs.values():
+                if isinstance(v, Mapping):
+                    for k in ("status", "amount", "verdict", "decision"):
+                        if k in v:
+                            raise AuthorityError(
+                                f"Proposal payload smuggles nested key {k!r}."
+                            )
         if capability == AgentCapability.READ:
             return self.read(tuple(inputs.get("evidence_ids", ())))
         if capability == AgentCapability.CORRELATE:
@@ -236,12 +320,6 @@ class AgentRuntime:
                 uncertainty=str(inputs.get("uncertainty", "")),
             )
         if capability == AgentCapability.PROPOSE:
-            # Smuggled keys must be refused even when passed via generic dispatch.
-            for k in ("status", "amount", "verdict", "decision"):
-                if k in inputs:
-                    raise AuthorityError(
-                        f"Proposal payload smuggles authoritative key {k!r}."
-                    )
             return self.propose(
                 proposal_type=str(inputs.get("proposal_type", inputs.get("action", ""))),
                 evidence_ids=tuple(inputs.get("evidence_ids", inputs.get("evidence_refs", ()))),
