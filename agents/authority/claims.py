@@ -1,11 +1,13 @@
 """Advisory agent outputs plus the single authority choke point.
 
 Everything here is non-authoritative: observations, claims, hypotheses,
-and proposals cite evidence but never decide. The only path to action
-names runs through :class:`AuthorityBoundary`, whose allow-list carries
-the five advisory verbs and whose deny-list carries the thirteen
-forbidden verbs. Model outputs enter solely as plain mappings passed
-into the ``validate_*`` functions; no LLM calls, no network, and no
+and proposals cite evidence but never decide. Capabilities
+(``AgentCapability``) and advisory proposal intents are separate
+namespaces — a proposal's ``proposal_type`` is never a capability verb.
+The only path to a validated evidence citation runs through
+``EvidenceRegistry``; raw caller metadata never becomes authority.
+Model outputs enter solely as plain mappings passed into the
+``validate_*`` functions; no LLM calls, no network, and no
 wall-clock reads live in this module.
 """
 
@@ -15,9 +17,10 @@ import logging
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
+from enum import StrEnum
 from typing import Any
 
-from agents.authority.evidence import AuthorityError, EvidenceReference
+from agents.authority.evidence import AuthorityError, EvidenceReference, EvidenceRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +29,27 @@ _SMUGGLED_CLAIM_KEYS = frozenset({"status", "verdict", "decision"})
 
 _SMUGGLED_PROPOSAL_KEYS = frozenset({"status", "amount", "verdict", "decision"})
 """Keys that would smuggle authoritative state through a proposal."""
+
+_ADVISORY_PROPOSAL_TYPES: frozenset[str] = frozenset(
+    {
+        "request_investigation",
+        "flag_ambiguity",
+        "summarize_correlation",
+        "explain_reasoning",
+        "advisory_note",
+    }
+)
+"""Advisory, domain-neutral proposal intents — never financial execution."""
+
+
+class AgentCapability(StrEnum):
+    """Deterministic-plane capabilities the agent runtime may exercise."""
+
+    READ = "read"
+    CORRELATE = "correlate"
+    HYPOTHESIZE = "hypothesize"
+    PROPOSE = "propose"
+    EXPLAIN = "explain"
 
 
 def _require_non_blank(value: object, field_name: str) -> str:
@@ -65,27 +89,38 @@ def _parse_ref(
     raw: object,
     *,
     now: datetime,
-    known_source_ids: frozenset[str] | set[str],
-    accessible_source_ids: frozenset[str] | set[str],
+    registry: EvidenceRegistry,
 ) -> EvidenceReference:
-    """Parse one evidence pointer mapping, enforcing registry and freshness."""
+    """Parse one evidence pointer dict via the deterministic registry.
+
+    The dict must contain ``evidence_id``; any caller-asserted
+    ``source_id / captured_at / digest / provenance / ttl_seconds``
+    that disagrees with the registry's authoritative record is treated
+    as fabrication and refused. A validated, HMAC-bound reference is
+    then issued by the registry and checked for freshness.
+    """
     if not isinstance(raw, Mapping):
         raise AuthorityError("Each evidence ref must be a mapping.")
-    source_id = _require_non_blank(raw.get("source_id"), "source_id")
-    if source_id not in known_source_ids:
-        raise AuthorityError(f"Unknown evidence source {source_id!r}.")
-    if source_id not in accessible_source_ids:
-        raise AuthorityError(f"Inaccessible evidence source {source_id!r}.")
+    evidence_id = _require_non_blank(raw.get("evidence_id"), "evidence_id")
+    rec = registry.get_record(evidence_id)
+    if not registry.is_accessible(evidence_id):
+        raise AuthorityError(f"Inaccessible evidence {evidence_id!r}.")
+    # Any caller-supplied metadata must match the authoritative record.
+    for field_name in ("source_id", "digest", "provenance", "ttl_seconds"):
+        if field_name in raw and raw[field_name] != getattr(rec, field_name):
+            raise AuthorityError(
+                f"Evidence {evidence_id!r} metadata mismatch on {field_name!r}."
+            )
+    if "captured_at" in raw:
+        supplied = _parse_time(raw["captured_at"], "captured_at")
+        if supplied != rec.captured_at:
+            raise AuthorityError(
+                f"Evidence {evidence_id!r} captured_at mismatch — possible fabrication."
+            )
     if raw.get("digest_mismatch") is True:
-        raise AuthorityError(f"Evidence {source_id!r} failed integrity check.")
-    captured_at = _parse_time(raw.get("captured_at"), "captured_at")
-    ttl_raw = raw.get("ttl_seconds")
-    if isinstance(ttl_raw, bool) or not isinstance(ttl_raw, int):
-        raise AuthorityError("ttl_seconds must be an int.")
-    ref = EvidenceReference(
-        source_id=source_id, captured_at=captured_at, ttl_seconds=ttl_raw
-    )
-    ref.require_fresh(now)
+        raise AuthorityError(f"Evidence {evidence_id!r} failed integrity check.")
+    ref = registry.create_reference(evidence_id)
+    registry.validate_reference(ref, now)
     return ref
 
 
@@ -93,30 +128,27 @@ def _parse_refs(
     raw: object,
     *,
     now: datetime,
-    known_source_ids: frozenset[str] | set[str],
-    accessible_source_ids: frozenset[str] | set[str],
+    registry: EvidenceRegistry,
 ) -> tuple[EvidenceReference, ...]:
-    """Parse a non-empty evidence ref sequence, ignoring inert extra keys."""
+    """Parse a non-empty evidence ref sequence via the registry."""
     if not isinstance(raw, (list, tuple)) or len(raw) == 0:
         raise AuthorityError("evidence_refs must be a non-empty sequence.")
     return tuple(
-        _parse_ref(
-            item,
-            now=now,
-            known_source_ids=known_source_ids,
-            accessible_source_ids=accessible_source_ids,
-        )
-        for item in raw
+        _parse_ref(item, now=now, registry=registry) for item in raw
     )
 
 
 def _check_refs_fresh(
     refs: tuple[EvidenceReference, ...], moment: datetime, owner: str
 ) -> None:
-    """Raise AuthorityError when refs are empty or any ref is stale at moment."""
+    """Raise AuthorityError when refs are empty, unissued, or stale at moment."""
     if len(refs) == 0:
         raise AuthorityError(f"{owner} requires at least one evidence ref.")
     for ref in refs:
+        if not getattr(ref, "_token", ""):
+            raise AuthorityError(
+                f"{owner} cites an unissued EvidenceReference — not from deterministic accessor."
+            )
         ref.require_fresh(moment)
 
 
@@ -129,7 +161,7 @@ class AgentObservation:
     observed_at: datetime
 
     def __post_init__(self) -> None:
-        """Validate text, timestamp, and ref freshness."""
+        """Validate text, timestamp, and ref issuance + freshness."""
         _require_non_blank(self.text, "text")
         if self.observed_at.tzinfo is None or self.observed_at.utcoffset() is None:
             raise AuthorityError("observed_at must be timezone-aware.")
@@ -145,9 +177,9 @@ class AgentObservation:
 class AgentClaim:
     """An advisory claim: evidence refs plus sub-certain confidence.
 
-    The constructor rejects empty ref sets, stale refs (evaluated at
-    ``created_at``, a caller-supplied timestamp), and absolute
-    certainty. No promotion helper to facts exists by design.
+    The constructor rejects empty ref sets, unissued refs, stale refs
+    (evaluated at ``created_at``, a caller-supplied timestamp), and
+    absolute certainty. No promotion helper to facts exists by design.
     """
 
     text: str
@@ -156,9 +188,11 @@ class AgentClaim:
     created_at: datetime
 
     def __post_init__(self) -> None:
-        """Validate text, confidence, timestamp, and ref freshness."""
+        """Validate text, confidence, timestamp, and ref issuance + freshness."""
         _require_non_blank(self.text, "text")
-        if isinstance(self.confidence, bool) or not isinstance(self.confidence, (int, float)):
+        if isinstance(self.confidence, bool) or not isinstance(
+            self.confidence, (int, float)
+        ):
             raise AuthorityError("confidence must be a number.")
         if not 0.0 <= float(self.confidence) < 1.0:
             raise AuthorityError("confidence must lie in [0, 1); 1.0 is unsupported.")
@@ -182,7 +216,7 @@ class AgentHypothesis:
     created_at: datetime
 
     def __post_init__(self) -> None:
-        """Validate text, uncertainty, timestamp, and ref freshness."""
+        """Validate text, uncertainty, timestamp, and ref issuance + freshness."""
         _require_non_blank(self.text, "text")
         _require_non_blank(self.uncertainty, "uncertainty")
         if self.created_at.tzinfo is None or self.created_at.utcoffset() is None:
@@ -192,49 +226,74 @@ class AgentHypothesis:
 
 @dataclass(frozen=True)
 class AgentProposal:
-    """An advisory proposal: typed advisory action plus refs and uncertainty.
+    """An advisory proposal: typed advisory intent plus refs and uncertainty.
 
-    Carries no authoritative status field; any ``to_authoritative``-style
-    escape is intentionally absent.
+    ``proposal_type`` is an advisory intent (e.g. ``request_investigation``),
+    never a capability verb and never a financial execution intent. No
+    ``to_authoritative``-style escape exists.
     """
 
-    action: str
+    proposal_type: str
     evidence_refs: tuple[EvidenceReference, ...]
     uncertainty: str
     rationale: str
     created_at: datetime
+    target: str | None = None
 
     def __post_init__(self) -> None:
-        """Validate advisory action, text fields, timestamp, and freshness."""
-        _require_non_blank(self.action, "action")
-        if self.action not in AuthorityBoundary.ALLOWED_ACTIONS:
-            raise AuthorityError(f"Proposal action {self.action!r} is out of capability.")
+        """Validate advisory intent, text fields, timestamp, and freshness."""
+        _require_non_blank(self.proposal_type, "proposal_type")
+        if self.proposal_type not in _ADVISORY_PROPOSAL_TYPES:
+            raise AuthorityError(
+                f"Proposal type {self.proposal_type!r} is not an advisory intent."
+            )
+        # Capability verbs must never appear as business intent.
+        if self.proposal_type in {c.value for c in AgentCapability}:
+            raise AuthorityError(
+                f"Proposal type {self.proposal_type!r} is a capability verb, not a business intent."
+            )
         _require_non_blank(self.uncertainty, "uncertainty")
         _require_non_blank(self.rationale, "rationale")
         if self.created_at.tzinfo is None or self.created_at.utcoffset() is None:
             raise AuthorityError("created_at must be timezone-aware.")
+        if self.target is not None:
+            _require_non_blank(self.target, "target")
         _check_refs_fresh(self.evidence_refs, self.created_at, "AgentProposal")
 
     def to_dict(self) -> dict[str, Any]:
         """Return the advisory payload (never carries authoritative status)."""
-        return {
-            "action": self.action,
-            "evidence_source_ids": [ref.source_id for ref in self.evidence_refs],
+        payload: dict[str, Any] = {
+            "proposal_type": self.proposal_type,
+            "evidence_ids": [ref.evidence_id for ref in self.evidence_refs],
             "uncertainty": self.uncertainty,
             "rationale": self.rationale,
             "created_at": self.created_at.isoformat(),
             "tier": "proposal",
         }
+        if self.target is not None:
+            payload["target"] = self.target
+        return payload
 
 
 @dataclass
 class AuthorityBoundary:
-    """Single choke point separating advisory verbs from forbidden ones."""
+    """Single choke point separating advisory capabilities from forbidden ones."""
 
-    ALLOWED_ACTIONS: frozenset[str] = frozenset(
-        {"read", "correlate", "hypothesize", "propose", "explain"}
+    ALLOWED_CAPABILITIES: frozenset[AgentCapability] = frozenset(
+        {
+            AgentCapability.READ,
+            AgentCapability.CORRELATE,
+            AgentCapability.HYPOTHESIZE,
+            AgentCapability.PROPOSE,
+            AgentCapability.EXPLAIN,
+        }
     )
-    """Advisory verbs that succeed (read-only, non-authoritative)."""
+    """Advisory capabilities that succeed (read-only, non-authoritative)."""
+
+    # Back-compat alias — tests historically reference ALLOWED_ACTIONS.
+    ALLOWED_ACTIONS: frozenset[str] = frozenset(
+        {c.value for c in ALLOWED_CAPABILITIES}
+    )
 
     DENIED_ACTIONS: frozenset[str] = frozenset(
         {
@@ -259,11 +318,18 @@ class AuthorityBoundary:
     """Record of granted advisory attempts (denials record nothing)."""
 
     def attempt(self, action: str) -> None:
-        """Grant advisory verbs; raise AuthorityError for anything else."""
-        if action in self.DENIED_ACTIONS or action not in self.ALLOWED_ACTIONS:
+        """Grant advisory capability verbs; raise AuthorityError for anything else."""
+        # Proposal intents must not be granted as capabilities.
+        if action in self.DENIED_ACTIONS or action not in {
+            c.value for c in self.ALLOWED_CAPABILITIES
+        }:
             raise AuthorityError(f"Action {action!r} is outside agent authority.")
         self._allowed_log.append(action)
         logger.debug("Authority granted (advisory): %s", action)
+
+    def attempt_capability(self, capability: AgentCapability) -> None:
+        """Grant a typed capability; wrapper around ``attempt``."""
+        self.attempt(capability.value)
 
     def audit_log(self) -> tuple[str, ...]:
         """Return the granted-attempt log (denials leave it untouched)."""
@@ -285,8 +351,10 @@ def correlate_evidence(
     if len(refs) == 0:
         raise AuthorityError("correlate_evidence requires at least one ref.")
     for ref in refs:
+        if not getattr(ref, "_token", ""):
+            raise AuthorityError("correlate_evidence cites an unissued reference.")
         ref.require_fresh(now)
-    joined = ", ".join(ref.source_id for ref in refs)
+    joined = ", ".join(ref.evidence_id for ref in refs)
     return f"Advisory correlation (uncertain hypothesis, not a decision): {joined}."
 
 
@@ -320,7 +388,7 @@ def find_missing_info(
 def explain_proposal(proposal: AgentProposal) -> str:
     """Render a human-facing advisory explanation without authority language."""
     return (
-        f"This proposal ({proposal.action}) is advisory, not a decision. "
+        f"This proposal ({proposal.proposal_type}) is advisory, not a decision. "
         f"Uncertain: {proposal.uncertainty} Rationale: {proposal.rationale}"
     )
 
@@ -346,15 +414,21 @@ def validate_claim_dict(
     data: Mapping[str, Any],
     *,
     now: datetime,
-    known_source_ids: frozenset[str] | set[str],
-    accessible_source_ids: frozenset[str] | set[str],
+    registry: EvidenceRegistry,
 ) -> AgentClaim:
-    """Validate a plain-data claim payload into an advisory AgentClaim."""
+    """Validate a plain-data claim payload into an advisory AgentClaim.
+
+    Evidence refs are resolved through the deterministic ``registry`` —
+    caller-supplied metadata never becomes authority. Any mismatch
+    between caller-supplied fields and the registry's record is refused.
+    """
     if not isinstance(data, Mapping):
         raise AuthorityError("Claim payload must be a mapping.")
     for smuggled in _SMUGGLED_CLAIM_KEYS:
         if smuggled in data:
             raise AuthorityError(f"Claim payload carries authoritative key {smuggled!r}.")
+    # Adversarial fixtures below are examples of conflicting evidence that
+    # must remain conflicting and not be collapsed into a flat claim.
     if data.get("claims_both") is True:
         raise AuthorityError("Claim payload is self-contradictory.")
     if "ambiguous_values" in data:
@@ -368,12 +442,10 @@ def validate_claim_dict(
     text = _require_non_blank(data["text"], "text")
     confidence = _parse_confidence(data["confidence"])
     created_at = _parse_time(data["created_at"], "created_at")
-    refs = _parse_refs(
-        data["evidence_refs"],
-        now=now,
-        known_source_ids=known_source_ids,
-        accessible_source_ids=accessible_source_ids,
-    )
+    refs = _parse_refs(data["evidence_refs"], now=now, registry=registry)
+    # Enforce freshness at creation time via registry as well.
+    for ref in refs:
+        registry.validate_reference(ref, created_at)
     return AgentClaim(
         text=text, confidence=confidence, evidence_refs=refs, created_at=created_at
     )
@@ -383,11 +455,15 @@ def validate_proposal_dict(
     data: Mapping[str, Any],
     *,
     now: datetime,
-    known_source_ids: frozenset[str] | set[str],
-    accessible_source_ids: frozenset[str] | set[str],
+    registry: EvidenceRegistry,
     boundary: AuthorityBoundary | None = None,
 ) -> AgentProposal:
-    """Validate a plain-data proposal payload into an advisory AgentProposal."""
+    """Validate a plain-data proposal payload into an advisory AgentProposal.
+
+    ``proposal_type`` must be an advisory intent, never a capability verb
+    or financial execution verb. Evidence refs are resolved through the
+    deterministic ``registry``; smuggled authoritative keys are refused.
+    """
     if not isinstance(data, Mapping):
         raise AuthorityError("Proposal payload must be a mapping.")
     for smuggled in _SMUGGLED_PROPOSAL_KEYS:
@@ -395,33 +471,44 @@ def validate_proposal_dict(
             raise AuthorityError(
                 f"Proposal payload smuggles authoritative key {smuggled!r}."
             )
-    for key in ("action", "uncertainty", "rationale", "created_at", "evidence_refs"):
+    for key in ("proposal_type", "uncertainty", "rationale", "created_at", "evidence_refs"):
         if key not in data:
+            # Back-compat: older tests used ``action`` as proposal_type.
+            if key == "proposal_type" and "action" in data:
+                continue
             raise AuthorityError(f"Proposal payload is missing {key!r}.")
-    action = _require_non_blank(data["action"], "action")
-    if action not in AuthorityBoundary.ALLOWED_ACTIONS:
-        raise AuthorityError(f"Proposal action {action!r} is out of capability.")
+    raw_type = data.get("proposal_type", data.get("action"))
+    proposal_type = _require_non_blank(raw_type, "proposal_type")
+    if proposal_type not in _ADVISORY_PROPOSAL_TYPES:
+        raise AuthorityError(f"Proposal type {proposal_type!r} is not an advisory intent.")
+    if proposal_type in {c.value for c in AgentCapability}:
+        raise AuthorityError(
+            f"Proposal type {proposal_type!r} is a capability verb, not a business intent."
+        )
     if boundary is not None:
-        boundary.attempt(action)
+        # Proposing is a capability; check the boundary allows PROPOSE.
+        boundary.attempt(AgentCapability.PROPOSE.value)
     uncertainty = _require_non_blank(data["uncertainty"], "uncertainty")
     rationale = _require_non_blank(data["rationale"], "rationale")
     created_at = _parse_time(data["created_at"], "created_at")
-    refs = _parse_refs(
-        data["evidence_refs"],
-        now=now,
-        known_source_ids=known_source_ids,
-        accessible_source_ids=accessible_source_ids,
-    )
+    target = data.get("target")
+    if target is not None:
+        _require_non_blank(target, "target")
+    refs = _parse_refs(data["evidence_refs"], now=now, registry=registry)
+    for ref in refs:
+        registry.validate_reference(ref, created_at)
     return AgentProposal(
-        action=action,
+        proposal_type=proposal_type,
         evidence_refs=refs,
         uncertainty=uncertainty,
         rationale=rationale,
         created_at=created_at,
+        target=target if isinstance(target, str) else None,
     )
 
 
 __all__ = [
+    "AgentCapability",
     "AgentClaim",
     "AgentHypothesis",
     "AgentObservation",

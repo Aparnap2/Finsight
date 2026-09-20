@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from agents.authority.claims import (
+    AgentCapability,
     AgentClaim,
     AgentHypothesis,
     AgentObservation,
@@ -22,10 +23,13 @@ from agents.authority.claims import (
 from agents.authority.evidence import (
     AuthoritativeFact,
     AuthorityError,
+    EvidenceRecord,
     EvidenceReference,
+    EvidenceRegistry,
 )
 
 __all__ = [
+    "AgentCapability",
     "AgentClaim",
     "AgentHypothesis",
     "AgentObservation",
@@ -34,7 +38,9 @@ __all__ = [
     "AuthoritativeFact",
     "AuthorityBoundary",
     "AuthorityError",
+    "EvidenceRecord",
     "EvidenceReference",
+    "EvidenceRegistry",
     "correlate_evidence",
     "detect_ambiguity",
     "explain_proposal",

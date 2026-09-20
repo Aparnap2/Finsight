@@ -7,6 +7,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from agents.authority.claims import (
+    AgentCapability,
     AgentClaim,
     AgentHypothesis,
     AgentObservation,
@@ -21,37 +22,65 @@ from agents.authority.claims import (
 from agents.authority.evidence import (
     AuthoritativeFact,
     AuthorityError,
+    EvidenceRecord,
     EvidenceReference,
+    EvidenceRegistry,
 )
 
 NOW = datetime(2026, 9, 1, 12, 0, 0, tzinfo=UTC)
 """Caller-supplied frozen clock; no wall-clock reads in tests."""
 
+DIGEST_A = "a" * 64
+DIGEST_B = "b" * 64
 
-def _fresh_ref(source_id: str = "src-ledger-001") -> EvidenceReference:
-    """Build a fresh evidence pointer valid at NOW."""
-    return EvidenceReference(
-        source_id=source_id,
+
+def _registry() -> EvidenceRegistry:
+    """Deterministic accessor with two records; only ev-001 is accessible."""
+    rec_a = EvidenceRecord(
+        source_id="src-ledger-001",
+        evidence_id="ev-ledger-001",
         captured_at=NOW - timedelta(seconds=60),
+        digest=DIGEST_A,
+        provenance="p6_evidence_store",
         ttl_seconds=3600,
+    )
+    rec_b = EvidenceRecord(
+        source_id="src-ledger-002",
+        evidence_id="ev-ledger-002",
+        captured_at=NOW - timedelta(seconds=60),
+        digest=DIGEST_B,
+        provenance="p6_evidence_store",
+        ttl_seconds=3600,
+    )
+    return EvidenceRegistry(
+        {"ev-ledger-001": rec_a, "ev-ledger-002": rec_b},
+        accessible_ids={"ev-ledger-001"},
     )
 
 
-def _claim() -> AgentClaim:
+def _fresh_ref(registry: EvidenceRegistry | None = None) -> EvidenceReference:
+    """Build a fresh, HMAC-bound evidence pointer valid at NOW."""
+    reg = registry or _registry()
+    return reg.create_reference("ev-ledger-001")
+
+
+def _claim(registry: EvidenceRegistry | None = None) -> AgentClaim:
     """Build a minimal valid advisory claim for positive-path tests."""
+    reg = registry or _registry()
     return AgentClaim(
         text="Revenue dip correlates with refund spike.",
         confidence=0.6,
-        evidence_refs=(_fresh_ref(),),
+        evidence_refs=(_fresh_ref(reg),),
         created_at=NOW,
     )
 
 
-def _proposal() -> AgentProposal:
+def _proposal(registry: EvidenceRegistry | None = None) -> AgentProposal:
     """Build a minimal valid advisory proposal for positive-path tests."""
+    reg = registry or _registry()
     return AgentProposal(
-        action="propose",
-        evidence_refs=(_fresh_ref(),),
+        proposal_type="advisory_note",
+        evidence_refs=(_fresh_ref(reg),),
         uncertainty="Refund causation unconfirmed; needs ledger drill-down.",
         rationale="Refund spike overlaps the dip window.",
         created_at=NOW,
@@ -93,6 +122,26 @@ class TestForbiddenAuthority:
         assert len(AuthorityBoundary.DENIED_ACTIONS) == 13
         assert set(FORBIDDEN_ACTIONS) == set(AuthorityBoundary.DENIED_ACTIONS)
 
+    def test_capability_verbs_are_not_proposal_intents(self) -> None:
+        """A proposal whose type is a capability verb must be refused."""
+        reg = _registry()
+        with pytest.raises(AuthorityError):
+            AgentProposal(
+                proposal_type="read",
+                evidence_refs=(_fresh_ref(reg),),
+                uncertainty="x",
+                rationale="y",
+                created_at=NOW,
+            )
+        with pytest.raises(AuthorityError):
+            AgentProposal(
+                proposal_type="propose",
+                evidence_refs=(_fresh_ref(reg),),
+                uncertainty="x",
+                rationale="y",
+                created_at=NOW,
+            )
+
     def test_claim_cannot_convert_to_authoritative_fact(self) -> None:
         """A claim must never expose a promotion path into an AuthoritativeFact."""
         claim = _claim()
@@ -116,20 +165,48 @@ class TestForbiddenAuthority:
         assert "status" not in proposal.to_dict()
         assert "VERIFIED" not in str(proposal.to_dict())
 
+    def test_capability_and_proposal_namespaces_are_disjoint(self) -> None:
+        """Capability verbs and advisory intents must be disjoint sets."""
+        caps = {c.value for c in AgentCapability}
+        # Advisory intents are the only valid proposal_type values.
+        from agents.authority.claims import _ADVISORY_PROPOSAL_TYPES
+
+        assert caps.isdisjoint(_ADVISORY_PROPOSAL_TYPES)
+
 
 class TestPositiveCapabilities:
     """Advisory capabilities must succeed without granting authority."""
 
     def test_read_authorized_case_evidence(self) -> None:
-        """Fresh evidence pointers satisfy the freshness guard."""
-        ref = _fresh_ref()
-        ref.require_fresh(NOW)
+        """Fresh evidence pointers satisfy the freshness guard via registry."""
+        reg = _registry()
+        ref = _fresh_ref(reg)
+        reg.validate_reference(ref, NOW)
         assert not ref.is_stale(NOW)
 
     def test_correlate_evidence(self) -> None:
         """Correlating two refs returns an advisory summary, never a decision."""
-        summary = correlate_evidence((_fresh_ref("src-a"), _fresh_ref("src-b")), now=NOW)
-        assert "src-a" in summary and "src-b" in summary
+        # Need two accessible refs — use a registry where both are accessible.
+        rec_a = EvidenceRecord(
+            source_id="src-a",
+            evidence_id="ev-a",
+            captured_at=NOW - timedelta(seconds=60),
+            digest=DIGEST_A,
+            provenance="p6_evidence_store",
+            ttl_seconds=3600,
+        )
+        rec_b = EvidenceRecord(
+            source_id="src-b",
+            evidence_id="ev-b",
+            captured_at=NOW - timedelta(seconds=60),
+            digest=DIGEST_B,
+            provenance="p6_evidence_store",
+            ttl_seconds=3600,
+        )
+        reg2 = EvidenceRegistry({"ev-a": rec_a, "ev-b": rec_b})
+        refs = (reg2.create_reference("ev-a"), reg2.create_reference("ev-b"))
+        summary = correlate_evidence(refs, now=NOW)
+        assert "ev-a" in summary and "ev-b" in summary
         assert "VERIFIED" not in summary
 
     def test_identify_ambiguity(self) -> None:
@@ -139,9 +216,10 @@ class TestPositiveCapabilities:
 
     def test_form_hypothesis(self) -> None:
         """A hypothesis over evidence refs constructs successfully."""
+        reg = _registry()
         hyp = AgentHypothesis(
             text="Dip may be seasonal.",
-            evidence_refs=(_fresh_ref(),),
+            evidence_refs=(_fresh_ref(reg),),
             uncertainty="Seasonality unconfirmed.",
             created_at=NOW,
         )
@@ -155,10 +233,11 @@ class TestPositiveCapabilities:
     def test_request_further_investigation(self) -> None:
         """Requesting investigation is an allowed advisory proposal."""
         boundary = AuthorityBoundary()
-        boundary.attempt("propose")
+        boundary.attempt(AgentCapability.PROPOSE.value)
+        reg = _registry()
         proposal = AgentProposal(
-            action="propose",
-            evidence_refs=(_fresh_ref(),),
+            proposal_type="request_investigation",
+            evidence_refs=(_fresh_ref(reg),),
             uncertainty="Ledger detail missing.",
             rationale="Request ledger drill-down.",
             created_at=NOW,
@@ -168,15 +247,15 @@ class TestPositiveCapabilities:
     def test_identify_missing_info(self) -> None:
         """Missing required sources are reported, never fabricated."""
         missing = find_missing_info(
-            present_ids=("src-a",),
-            required_ids=("src-a", "src-b"),
+            present_ids=("ev-a",),
+            required_ids=("ev-a", "ev-b"),
         )
-        assert missing == ("src-b",)
+        assert missing == ("ev-b",)
 
     def test_structured_proposal_with_evidence_refs(self) -> None:
-        """A proposal carries typed action, refs, and uncertainty — no status."""
+        """A proposal carries typed intent, refs, and uncertainty — no status."""
         proposal = _proposal()
-        assert proposal.action == "propose"
+        assert proposal.proposal_type == "advisory_note"
         assert len(proposal.evidence_refs) == 1
         assert proposal.uncertainty != ""
         assert "status" not in proposal.to_dict()
@@ -195,10 +274,18 @@ class TestPositiveCapabilities:
 
     def test_observation_is_not_fact(self) -> None:
         """An observation over evidence refs is advisory, never authoritative."""
+        reg = _registry()
         obs = AgentObservation(
             text="Refund spike observed.",
-            evidence_refs=(_fresh_ref(),),
+            evidence_refs=(_fresh_ref(reg),),
             observed_at=NOW,
         )
         assert not isinstance(obs, AuthoritativeFact)
         assert obs.tier == "observation"
+
+    def test_capability_attempt_succeeds_for_allowed(self) -> None:
+        """Each advisory capability must be grantable via the boundary."""
+        boundary = AuthorityBoundary()
+        for cap in AgentCapability:
+            boundary.attempt_capability(cap)
+        assert len(boundary.audit_log()) == len(AgentCapability)
