@@ -179,7 +179,10 @@ class TestCorrelationContract:
         reg = _registry()
         # Make ev-002 inaccessible
         reg2 = EvidenceRegistry(
-            {"ev-ledger-001": reg.get_record("ev-ledger-001"), "ev-ledger-002": reg.get_record("ev-ledger-002")},
+            {
+                "ev-ledger-001": reg.get_record("ev-ledger-001"),
+                "ev-ledger-002": reg.get_record("ev-ledger-002"),
+            },
             accessible_ids={"ev-ledger-001"},
         )
         ctx = RuntimeFactory().create_context(
@@ -224,7 +227,6 @@ class TestExplanationContract:
     """Explanation: handoff → human-facing advisory explanation."""
 
     def test_valid_explanation_returns_advisory(self) -> None:
-        from agents.runtime import AgentRuntime
         from agents.tools.explanation import ExplanationRequest, explain
 
         factory = RuntimeFactory()
@@ -282,7 +284,6 @@ class TestExplanationContract:
             )
 
     def test_explanation_rejects_wrong_situation_scope(self) -> None:
-        from agents.runtime import AgentRuntime
         from agents.tools.explanation import ExplanationRequest, explain
 
         factory = RuntimeFactory()
