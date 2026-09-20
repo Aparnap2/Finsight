@@ -62,7 +62,7 @@ class TestEvidenceLookupContract:
             now=NOW,
             evidence_ids=("ev-ledger-001",),
         )
-        result = evidence_lookup(req, registry=ctx.registry, boundary=ctx.boundary)
+        result = evidence_lookup(req, context=ctx)
         assert result.success is True
         assert result.evidence_refs is not None
         assert result.evidence_refs[0].evidence_id == "ev-ledger-001"
@@ -104,7 +104,7 @@ class TestEvidenceLookupContract:
             now=NOW,
             evidence_ids=("ev-missing-999",),
         )
-        result = evidence_lookup(req, registry=ctx.registry, boundary=ctx.boundary)
+        result = evidence_lookup(req, context=ctx)
         assert result.success is False
         assert result.failure is not None
         assert result.failure.code == "MISSING_EVIDENCE"
@@ -135,7 +135,7 @@ class TestEvidenceLookupContract:
             now=NOW,
             evidence_ids=("ev-stale-001",),
         )
-        result = evidence_lookup(req, registry=ctx.registry, boundary=ctx.boundary)
+        result = evidence_lookup(req, context=ctx)
         assert result.success is False
         assert result.failure is not None
         assert result.failure.code == "STALE_EVIDENCE"
@@ -155,7 +155,7 @@ class TestCorrelationContract:
             now=NOW,
             evidence_ids=("ev-ledger-001", "ev-ledger-002"),
         )
-        result = correlate(req, registry=ctx.registry, boundary=ctx.boundary)
+        result = correlate(req, context=ctx)
         assert result.success is True
         assert result.summary is not None
         assert "ev-ledger-001" in result.summary
@@ -198,7 +198,7 @@ class TestCorrelationContract:
             now=NOW,
             evidence_ids=("ev-ledger-002",),
         )
-        result = correlate(req, registry=ctx.registry, boundary=ctx.boundary)
+        result = correlate(req, context=ctx)
         assert result.success is False
         assert result.failure is not None
         assert result.failure.code == "INACCESSIBLE_EVIDENCE"
@@ -216,7 +216,7 @@ class TestCorrelationContract:
             evidence_ids=("ev-ledger-001", "ev-ledger-002"),
         )
         # The tool returns an advisory correlation, not a merged fact.
-        result = correlate(req, registry=ctx.registry, boundary=ctx.boundary)
+        result = correlate(req, context=ctx)
         assert result.success is True
         # Must not claim authoritative resolution.
         assert "VERIFIED" not in (result.summary or "")
@@ -251,7 +251,7 @@ class TestExplanationContract:
             now=NOW,
             handoff=handoff,
         )
-        result = explain(req, boundary=ctx.boundary)
+        result = explain(req, context=ctx)
         assert result.success is True
         assert result.explanation is not None
         assert "advisory" in result.explanation.lower()
@@ -308,7 +308,7 @@ class TestExplanationContract:
             now=NOW,
             handoff=handoff,
         )
-        result = explain(req, boundary=ctx.boundary)
+        result = explain(req, context=ctx)
         assert result.success is False
         assert result.failure is not None
         assert result.failure.code == "SCOPE_MISMATCH"

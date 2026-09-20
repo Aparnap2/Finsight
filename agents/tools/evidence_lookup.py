@@ -5,8 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 
-from agents.authority.claims import AgentCapability, AuthorityBoundary
-from agents.authority.evidence import AuthorityError, EvidenceReference, EvidenceRegistry
+from agents.authority.claims import AgentCapability
+from agents.authority.evidence import AuthorityError, EvidenceReference
+from agents.runtime.context import RuntimeContext
 
 
 @dataclass(frozen=True)
@@ -68,19 +69,55 @@ class EvidenceLookupResult:
 def evidence_lookup(
     request: EvidenceLookupRequest,
     *,
-    registry: EvidenceRegistry,
-    boundary: AuthorityBoundary,
+    context: RuntimeContext,
 ) -> EvidenceLookupResult:
-    """Evidence lookup via deterministic registry — no external access.
+    """Evidence lookup via deterministic context — no external access.
 
-    Checks capability, situation scope, and registry authority (HMAC +
+    Obtains ``registry``, ``boundary``, ``now``, ``situation_id`` and
+    ``company_id`` from the already-validated ``RuntimeContext``. The
+    registry/boundary are exactly those bound to the context — a
+    caller-supplied rogue registry/boundary cannot be injected. Checks
+    capability, situation scope, and registry authority (HMAC +
     freshness). Returns typed success or typed failure; security
-    violations (capability escalation, authoritative smuggling) raise.
+    violations raise.
     """
+    # Context is factory-bound; registry/boundary/now/situation/company
+    # are the deterministic authority already bound to the context.
+    registry = context.registry
+    boundary = context.boundary
+    # Request must be bound to the same deterministic context.
+    if request.situation_id != context.situation_id:
+        return EvidenceLookupResult(
+            success=False,
+            evidence_refs=None,
+            failure=ToolFailure(
+                code="SCOPE_MISMATCH",
+                detail=f"situation {request.situation_id!r} != context {context.situation_id!r}",
+            ),
+            provenance=None,
+        )
+    if request.company_id != context.company_id:
+        return EvidenceLookupResult(
+            success=False,
+            evidence_refs=None,
+            failure=ToolFailure(
+                code="SCOPE_MISMATCH",
+                detail=f"company {request.company_id!r} != context {context.company_id!r}",
+            ),
+            provenance=None,
+        )
+    if request.now != context.now:
+        return EvidenceLookupResult(
+            success=False,
+            evidence_refs=None,
+            failure=ToolFailure(
+                code="SCOPE_MISMATCH",
+                detail="request now != context now — wall-clock or stale context",
+            ),
+            provenance=None,
+        )
     # Capability gate — P7-01 boundary.
     boundary.attempt(request.capability.value)
-    # Situation scope is already validated at construction; no hidden
-    # company_id mutation allowed.
     # Registry authority — each id must be known, accessible, HMAC-valid, fresh.
     refs: list[EvidenceReference] = []
     for eid in request.evidence_ids:

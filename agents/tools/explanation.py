@@ -5,8 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 
-from agents.authority.claims import AgentCapability, AuthorityBoundary
+from agents.authority.claims import AgentCapability
 from agents.authority.evidence import AuthorityError
+from agents.runtime.context import RuntimeContext
 from agents.runtime.handoff import RuntimeHandoff
 from agents.tools.evidence_lookup import ToolFailure
 
@@ -58,9 +59,46 @@ class ExplanationResult:
 def explain(
     request: ExplanationRequest,
     *,
-    boundary: AuthorityBoundary,
+    context: RuntimeContext,
 ) -> ExplanationResult:
-    """Explanation via handoff — scope-bound, advisory only."""
+    """Explanation via handoff — scope-bound, advisory only.
+
+    Obtains ``boundary`` and scope from the already-validated
+    ``RuntimeContext``; a caller-supplied rogue boundary cannot be
+    injected.
+    """
+    boundary = context.boundary
+    # Request must be bound to the same deterministic context.
+    if request.situation_id != context.situation_id:
+        return ExplanationResult(
+            success=False,
+            explanation=None,
+            failure=ToolFailure(
+                code="SCOPE_MISMATCH",
+                detail=(
+                    f"request situation {request.situation_id!r} "
+                    f"!= context {context.situation_id!r}"
+                ),
+            ),
+        )
+    if request.company_id != context.company_id:
+        return ExplanationResult(
+            success=False,
+            explanation=None,
+            failure=ToolFailure(
+                code="SCOPE_MISMATCH",
+                detail=f"request company {request.company_id!r} != context {context.company_id!r}",
+            ),
+        )
+    if request.now != context.now:
+        return ExplanationResult(
+            success=False,
+            explanation=None,
+            failure=ToolFailure(
+                code="SCOPE_MISMATCH",
+                detail="request now != context now",
+            ),
+        )
     boundary.attempt(request.capability.value)
     # Situation scope must match handoff's situation — model cannot redefine.
     if request.situation_id != request.handoff.situation_id:

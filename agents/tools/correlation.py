@@ -5,8 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 
-from agents.authority.claims import AgentCapability, AuthorityBoundary, correlate_evidence
-from agents.authority.evidence import AuthorityError, EvidenceRegistry
+from agents.authority.claims import AgentCapability, correlate_evidence
+from agents.authority.evidence import AuthorityError
+from agents.runtime.context import RuntimeContext
 from agents.tools.evidence_lookup import ToolFailure
 
 
@@ -64,14 +65,45 @@ class CorrelationResult:
 def correlate(
     request: CorrelationRequest,
     *,
-    registry: EvidenceRegistry,
-    boundary: AuthorityBoundary,
+    context: RuntimeContext,
 ) -> CorrelationResult:
-    """Correlation via deterministic registry — advisory only.
+    """Correlation via deterministic context — advisory only.
 
-    No silent resolution of contradictory evidence; the tool returns
-    an advisory correlation that preserves ambiguity.
+    Obtains ``registry``, ``boundary``, ``now`` and scope from the
+    already-validated ``RuntimeContext``. No silent resolution of
+    contradictory evidence; the tool returns an advisory correlation
+    that preserves ambiguity.
     """
+    registry = context.registry
+    boundary = context.boundary
+    # Request must be bound to the same deterministic context.
+    if request.situation_id != context.situation_id:
+        return CorrelationResult(
+            success=False,
+            summary=None,
+            failure=ToolFailure(
+                code="SCOPE_MISMATCH",
+                detail=f"situation {request.situation_id!r} != context {context.situation_id!r}",
+            ),
+        )
+    if request.company_id != context.company_id:
+        return CorrelationResult(
+            success=False,
+            summary=None,
+            failure=ToolFailure(
+                code="SCOPE_MISMATCH",
+                detail=f"company {request.company_id!r} != context {context.company_id!r}",
+            ),
+        )
+    if request.now != context.now:
+        return CorrelationResult(
+            success=False,
+            summary=None,
+            failure=ToolFailure(
+                code="SCOPE_MISMATCH",
+                detail="request now != context now",
+            ),
+        )
     boundary.attempt(request.capability.value)
     refs = []
     for eid in request.evidence_ids:
