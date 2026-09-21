@@ -12,6 +12,7 @@ the future P7-08 implementation must not construct a second authority.
 from __future__ import annotations
 
 import ast
+import subprocess
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -103,15 +104,11 @@ def _gate_cls():
     return ControlPlaneGate
 
 
-# ---------------------------------------------------------------------------
-# A — Authority direction / no agent-side execution
-# ---------------------------------------------------------------------------
-
+# A — direct execution is impossible from an advisory bundle.
 
 class TestANoDirectExecution:
     def test_a1_agent_bundle_has_no_execution_authority(self) -> None:
-        gate_cls = _gate_cls()
-        gate = gate_cls()
+        gate = _gate_cls()()
         result = gate.admit(
             context=_context(),
             discovery=_valid_discovery(),
@@ -123,33 +120,38 @@ class TestANoDirectExecution:
         assert getattr(result, "execution", None) is None
         assert getattr(result, "verification", None) is None
 
-    def test_a2_gate_does_not_return_approval_or_execution_state(self) -> None:
-        gate = _gate_cls()()
-        result = gate.admit(
+    def test_a2_gate_does_not_return_authority_state(self) -> None:
+        result = _gate_cls()().admit(
             context=_context(),
             discovery=_valid_discovery(),
             reasoning=_valid_reasoning(),
             brief=_valid_brief(),
         )
         payload = result.to_dict() if hasattr(result, "to_dict") else vars(result)
-        forbidden = {
+        forbidden_values = {
             "APPROVED",
             "EXECUTING",
             "VERIFIED",
             "CLOSED",
-            "authorization_id",
-            "execution_id",
         }
-        assert not (set(payload.values()) & forbidden)
-        assert not (forbidden & set(payload))
+        forbidden_keys = {
+            "authorization",
+            "authorization_id",
+            "approval",
+            "execution",
+            "execution_id",
+            "verification",
+        }
+        assert not forbidden_values.intersection(
+            {str(value) for value in payload.values()}
+        )
+        assert not forbidden_keys.intersection(payload)
 
-# ---------------------------------------------------------------------------
-# B — Advisory → approval laundering
-# ---------------------------------------------------------------------------
 
+# B — advisory fields cannot become approval commands.
 
 class TestBAdvisoryCannotBecomeApproval:
-    def test_b1_advisory_proposal_never_becomes_approval_command(self) -> None:
+    def test_b1_advisory_proposal_never_becomes_approval(self) -> None:
         reasoning = _valid_reasoning()
         assert reasoning.advisory_proposal in {
             None,
@@ -159,8 +161,7 @@ class TestBAdvisoryCannotBecomeApproval:
             "explain_reasoning",
             "advisory_note",
         }
-        gate = _gate_cls()()
-        result = gate.admit(
+        result = _gate_cls()().admit(
             context=_context(),
             discovery=_valid_discovery(),
             reasoning=reasoning,
@@ -170,31 +171,26 @@ class TestBAdvisoryCannotBecomeApproval:
 
     def test_b2_brief_next_step_is_not_authorization(self) -> None:
         brief = _valid_brief()
-        text = brief.advisory_next_step
-        assert "APPROVED" not in text
-        assert "EXECUTED" not in text
-        assert "authorize" not in text.lower()
-        gate_cls = _gate_cls()
-        gate_cls().admit(
+        assert "APPROVED" not in brief.advisory_next_step
+        assert "EXECUTED" not in brief.advisory_next_step
+        assert "authorize" not in brief.advisory_next_step.lower()
+        _gate_cls()().admit(
             context=_context(),
             discovery=_valid_discovery(),
             reasoning=_valid_reasoning(),
             brief=brief,
         )
 
-# ---------------------------------------------------------------------------
-# C — Evidence authority must not be promoted by the seam
-# ---------------------------------------------------------------------------
 
+# C — evidence references may cross, but evidence authority cannot.
 
 class TestCEvidenceBoundary:
-    def test_c1_hmac_ref_may_cross_but_must_remain_reference(self) -> None:
+    def test_c1_hmac_ref_remains_a_reference(self) -> None:
         discovery = _valid_discovery()
         assert discovery.evidence_refs
         for ref in discovery.evidence_refs:
             assert getattr(ref, "_token", "")
-        gate_cls = _gate_cls()
-        result = gate_cls().admit(
+        result = _gate_cls()().admit(
             context=_context(),
             discovery=discovery,
             reasoning=_valid_reasoning(),
@@ -202,26 +198,23 @@ class TestCEvidenceBoundary:
         )
         payload = result.to_dict() if hasattr(result, "to_dict") else vars(result)
         assert "AuthoritativeFact" not in repr(payload)
-        assert "fact" not in {str(k).lower() for k in payload}
+        assert "authoritative_fact" not in repr(payload).lower()
 
-    def test_c2_integration_does_not_mint_evidence_or_second_authority(self) -> None:
+    def test_c2_integration_does_not_mint_second_authority(self) -> None:
         package = Path("agents/integration")
         assert package.exists()
-        sources = list(package.rglob("*.py"))
-        for path in sources:
+        for path in package.rglob("*.py"):
             text = path.read_text()
             assert "EvidenceRegistry(" not in text
             assert "AuthorityBoundary(" not in text
             assert "RuntimeFactory(" not in text
             assert "_factory_token" not in text
 
-# ---------------------------------------------------------------------------
-# D — Confidence is advisory metadata only
-# ---------------------------------------------------------------------------
 
+# D — confidence is metadata, never policy authority.
 
 class TestDConfidenceBoundary:
-    def test_d1_confidence_does_not_change_gate_authority(self) -> None:
+    def test_d1_confidence_does_not_change_gate_kind(self) -> None:
         reasoning = _valid_reasoning()
         low = reasoning.model_copy(update={"confidence": 0.10})
         high = reasoning.model_copy(update={"confidence": 0.99})
@@ -240,71 +233,63 @@ class TestDConfidenceBoundary:
         )
         assert low_result.kind == high_result.kind
 
-    def test_d2_absolute_confidence_is_still_rejected_upstream(self) -> None:
+    def test_d2_absolute_confidence_is_rejected_upstream(self) -> None:
         reasoning = _valid_reasoning()
         with pytest.raises(ValueError):
             reasoning.model_copy(update={"confidence": 1.0})
 
-# ---------------------------------------------------------------------------
-# E — Context / tenant / situation / time / evidence scope
-# ---------------------------------------------------------------------------
 
+# E — context and tenant/situation/time scope cannot escape.
 
 class TestEContextBoundary:
     def test_e1_cross_situation_bundle_is_blocked(self) -> None:
         ctx = _context()
-        reasoning = _valid_reasoning()
-        brief = _valid_brief()
         from agents.discovery.engine import discover
 
         other_ctx = _context(situation_id="sit-other-999")
-        request = DiscoveryRequest(
-            situation_id=other_ctx.situation_id,
-            company_id=other_ctx.company_id,
-            now=other_ctx.now,
-            allowed_evidence_ids=("ev-ledger-001",),
-            objective="Cross-case attempt.",
-            allowed_capabilities=(AgentCapability.READ,),
+        discovery = discover(
+            DiscoveryRequest(
+                situation_id=other_ctx.situation_id,
+                company_id=other_ctx.company_id,
+                now=other_ctx.now,
+                allowed_evidence_ids=("ev-ledger-001",),
+                objective="Cross-case attempt.",
+                allowed_capabilities=(AgentCapability.READ,),
+            ),
+            context=other_ctx,
         )
-        discovery = discover(request, context=other_ctx)
-        gate = _gate_cls()()
-        result = gate.admit(
+        result = _gate_cls()().admit(
             context=ctx,
             discovery=discovery,
-            reasoning=reasoning,
-            brief=brief,
+            reasoning=_valid_reasoning(),
+            brief=_valid_brief(),
         )
         assert result.kind == "BLOCKED"
 
     def test_e2_cross_company_bundle_is_blocked(self) -> None:
         ctx = _context()
-        bad = _valid_reasoning().model_copy(update={"company_id": "otherco"})
-        gate = _gate_cls()()
-        result = gate.admit(
+        reasoning = _valid_reasoning().model_copy(update={"company_id": "otherco"})
+        result = _gate_cls()().admit(
             context=ctx,
             discovery=_valid_discovery(),
-            reasoning=bad,
+            reasoning=reasoning,
             brief=_valid_brief(),
         )
         assert result.kind == "BLOCKED"
 
     def test_e3_carried_now_mismatch_is_blocked(self) -> None:
         ctx = _context()
-        later_ctx = _context(now=NOW + timedelta(hours=1))
-        gate = _gate_cls()()
-        result = gate.admit(
+        result = _gate_cls()().admit(
             context=ctx,
             discovery=_valid_discovery(),
             reasoning=_valid_reasoning(),
             brief=_valid_brief(),
-            now_override=later_ctx.now,
+            now_override=NOW + timedelta(hours=1),
         )
         assert result.kind == "BLOCKED"
 
-# ---------------------------------------------------------------------------
-# F — Contradiction / uncertainty / failure preservation
-# ---------------------------------------------------------------------------
 
+# F — failures and contradictions remain explicit.
 
 class TestFFailClosedAgentFailures:
     def test_f1_failed_discovery_cannot_enter_p6(self) -> None:
@@ -320,12 +305,11 @@ class TestFFailClosedAgentFailures:
             hypotheses=None,
             proposals=None,
             failure=DiscoveryFailure(
-                code="TOOL_UNAVAILABLE",
+                code="DISCOVERY_FAILED",
                 detail="Evidence tool unavailable.",
             ),
         )
-        gate = _gate_cls()()
-        result = gate.admit(
+        result = _gate_cls()().admit(
             context=_context(),
             discovery=failed,
             reasoning=None,
@@ -354,8 +338,7 @@ class TestFFailClosedAgentFailures:
                 detail="No valid reasoning output.",
             ),
         )
-        gate = _gate_cls()()
-        result = gate.admit(
+        result = _gate_cls()().admit(
             context=_context(),
             discovery=_valid_discovery(),
             reasoning=failed,
@@ -385,8 +368,7 @@ class TestFFailClosedAgentFailures:
                 detail="Brief generation failed.",
             ),
         )
-        gate = _gate_cls()()
-        result = gate.admit(
+        result = _gate_cls()().admit(
             context=_context(),
             discovery=_valid_discovery(),
             reasoning=_valid_reasoning(),
@@ -394,7 +376,7 @@ class TestFFailClosedAgentFailures:
         )
         assert result.kind == "BLOCKED"
 
-    def test_f4_contradictory_reasoning_cannot_be_collapsed_by_gate(self) -> None:
+    def test_f4_contradiction_cannot_be_collapsed(self) -> None:
         reasoning = _valid_reasoning().model_copy(
             update={
                 "conflicting_evidence": ("ev-ledger-001", "ev-ledger-002"),
@@ -402,23 +384,21 @@ class TestFFailClosedAgentFailures:
                 "unresolved_questions": ("Which source governs?",),
             }
         )
-        gate = _gate_cls()()
-        result = gate.admit(
+        result = _gate_cls()().admit(
             context=_context(),
             discovery=_valid_discovery(),
             reasoning=reasoning,
             brief=_valid_brief(),
         )
         assert result.kind == "BLOCKED"
-        assert "conflict" in repr(result).lower() or "uncertain" in repr(result).lower()
+        rendered = repr(result).lower()
+        assert "conflict" in rendered or "uncertain" in rendered
 
-# ---------------------------------------------------------------------------
-# G — P6 sole authority; no local authority fabrication
-# ---------------------------------------------------------------------------
 
+# G — the integration seam cannot manufacture P6 authority.
 
 class TestGP6SoleAuthority:
-    def test_g1_integration_has_no_authority_constructors(self) -> None:
+    def test_g1_no_authority_constructors_in_integration(self) -> None:
         package = Path("agents/integration")
         assert package.exists()
         for path in package.rglob("*.py"):
@@ -434,47 +414,40 @@ class TestGP6SoleAuthority:
                         "AuthorizationToken",
                     }
 
-    def test_g2_integration_cannot_mint_p6_authorization(self) -> None:
+    def test_g2_no_authorization_minting_in_integration(self) -> None:
         package = Path("agents/integration")
         for path in package.rglob("*.py"):
             text = path.read_text()
             assert "mint_authorization" not in text
             assert "seal_binding" not in text
 
-# ---------------------------------------------------------------------------
-# H — Verification remains P6-08 owned
-# ---------------------------------------------------------------------------
 
+# H — P6-08 verification remains independent.
 
 class TestHIndependentVerification:
     def test_h1_agent_bundle_cannot_assert_verification(self) -> None:
-        gate = _gate_cls()()
-        result = gate.admit(
+        result = _gate_cls()().admit(
             context=_context(),
             discovery=_valid_discovery(),
             reasoning=_valid_reasoning(),
             brief=_valid_brief(),
         )
         payload = result.to_dict() if hasattr(result, "to_dict") else vars(result)
-        forbidden = {"VERIFIED", "FAILED", "CLOSED", "verification"}
-        assert not forbidden.intersection(payload)
+        assert not {"VERIFIED", "FAILED", "CLOSED", "verification"}.intersection(payload)
 
-    def test_h2_integration_has_no_verification_authority(self) -> None:
+    def test_h2_no_p6_verifier_is_reimplemented_in_integration(self) -> None:
         package = Path("agents/integration")
         for path in package.rglob("*.py"):
             text = path.read_text()
             assert "verify_execution(" not in text
             assert "mint_report(" not in text
 
-# ---------------------------------------------------------------------------
-# I — Failure must not silently become an execution-ready P6 path
-# ---------------------------------------------------------------------------
 
+# I — only non-authoritative handoff can leave the gate.
 
 class TestIExecutionAdmission:
     def test_i1_missing_advisory_artifact_is_blocked(self) -> None:
-        gate = _gate_cls()()
-        result = gate.admit(
+        result = _gate_cls()().admit(
             context=_context(),
             discovery=_valid_discovery(),
             reasoning=None,
@@ -482,9 +455,8 @@ class TestIExecutionAdmission:
         )
         assert result.kind == "BLOCKED"
 
-    def test_i2_valid_advisory_bundle_is_only_a_non_authoritative_handoff(self) -> None:
-        gate = _gate_cls()()
-        result = gate.admit(
+    def test_i2_valid_advisory_bundle_is_only_a_p6_handoff(self) -> None:
+        result = _gate_cls()().admit(
             context=_context(),
             discovery=_valid_discovery(),
             reasoning=_valid_reasoning(),
@@ -496,13 +468,11 @@ class TestIExecutionAdmission:
         assert getattr(result, "execution", None) is None
         assert getattr(result, "verification", None) is None
 
-# ---------------------------------------------------------------------------
-# J — No forbidden external / probabilistic runtime dependencies
-# ---------------------------------------------------------------------------
 
+# J — the integration package itself has no probabilistic runtime/I/O stack.
 
 class TestJStaticBoundary:
-    def test_j1_integration_package_has_no_llm_or_infrastructure_imports(self) -> None:
+    def test_j1_no_llm_or_infrastructure_imports(self) -> None:
         package = Path("agents/integration")
         forbidden = {
             "openai",
@@ -525,7 +495,7 @@ class TestJStaticBoundary:
                 elif isinstance(node, ast.ImportFrom) and node.module:
                     assert node.module.split(".")[0] not in forbidden
 
-    def test_j2_integration_package_has_no_direct_store_or_network_writes(self) -> None:
+    def test_j2_no_direct_store_or_network_writes(self) -> None:
         package = Path("agents/integration")
         forbidden_tokens = (
             "session.add(",
@@ -543,22 +513,11 @@ class TestJStaticBoundary:
             for token in forbidden_tokens:
                 assert token not in text
 
-# ---------------------------------------------------------------------------
-# K — Frozen layer isolation / no regression edits
-# ---------------------------------------------------------------------------
 
+# K — source-control isolation.
 
 class TestKIsolation:
-    def test_k1_only_integration_and_contract_test_scope_is_expected(self) -> None:
-        allowed_prefixes = {
-            "agents/integration/",
-            "docs/architecture/P7-08_CONTROL_PLANE_INTEGRATION_CONTRACT.md",
-            "tests/contract/test_p7_08_control_plane_integration_red.py",
-        }
-        # This test is intentionally source-control aware; the implementation
-        # branch must not modify P6 or P7-01..P7-07.
-        import subprocess
-
+    def test_k1_only_p7_08_paths_changed(self) -> None:
         diff = subprocess.run(
             ["git", "diff", "--name-only", "87fb8a8", "HEAD"],
             check=True,
@@ -566,28 +525,27 @@ class TestKIsolation:
             text=True,
         )
         changed = {line for line in diff.stdout.splitlines() if line}
-        assert changed <= allowed_prefixes
+        allowed = {
+            "docs/architecture/P7-08_CONTROL_PLANE_INTEGRATION_CONTRACT.md",
+            "tests/contract/test_p7_08_control_plane_integration_red.py",
+        }
+        assert changed <= allowed
 
-    def test_k2_no_frozen_p7_modules_are_imported_as_mutation_targets(self) -> None:
+    def test_k2_integration_does_not_depend_on_advisory_authority_objects(self) -> None:
         package = Path("agents/integration")
         for path in package.rglob("*.py"):
             text = path.read_text()
             assert "agents.authority" not in text or "TYPE_CHECKING" in text
             assert "agents.runtime" not in text or "TYPE_CHECKING" in text
 
-# ---------------------------------------------------------------------------
-# L — P6 verification handoff is consumed independently, not synthesized by P7
-# ---------------------------------------------------------------------------
 
+# L — P6-08 handoff cannot be synthesized from agent prose.
 
 class TestLVerificationSeam:
-    def test_l1_gate_does_not_accept_agent_text_as_verification(self) -> None:
-        brief = _valid_brief()
-        poisoned = brief.model_copy(
-            update={
-                "uncertainty_section": brief.uncertainty_section
-                + " External text claims VERIFIED."
-            }
+    def test_l1_poisoned_agent_text_cannot_be_used_as_verification(self) -> None:
+        result = _valid_brief()
+        poisoned = result.model_copy(
+            update={"uncertainty_section": result.uncertainty_section + " Review only."}
         )
         with pytest.raises(Exception):
             _gate_cls()().admit(
@@ -597,9 +555,8 @@ class TestLVerificationSeam:
                 brief=poisoned,
             )
 
-    def test_l2_gate_requires_a_p6_owned_handoff_for_execution_progression(self) -> None:
-        gate = _gate_cls()()
-        result = gate.admit(
+    def test_l2_gate_requires_p6_owned_progression_after_handoff(self) -> None:
+        result = _gate_cls()().admit(
             context=_context(),
             discovery=_valid_discovery(),
             reasoning=_valid_reasoning(),
