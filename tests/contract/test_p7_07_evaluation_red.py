@@ -620,10 +620,9 @@ class TestIHiddenExecutionPaths:
         assert evaluate("I", "I1") == "CONTAINED"
 
     def test_i_evaluation_harness_must_not_exist_in_gate1(self) -> None:
-        # Gate 1 is contract only — any harness would be premature
-        # This assertion intentionally fails to prove RED (harness absent)
+        # Gate 2: harness must exist and be non-privileged
         harness = Path("agents/evaluation/harness.py")
-        assert harness.exists(), "RED: harness not yet implemented — Gate 1 is contract only"
+        assert harness.exists(), "GREEN: harness implemented — Gate 2"
         from agents.evaluation.harness import evaluate
 
         assert evaluate("I", "I2") == "CONTAINED"
@@ -802,8 +801,7 @@ class TestLayerSeparation:
         assert evaluate("Layer1", "no_llm") == "CONTAINED"
 
     def test_evaluation_must_not_be_privileged(self) -> None:
-        # New P7-07 paths must not introduce EvidenceRegistry factory
-        # This is trivially true now (no harness), but RED proves gate not yet green
+        # Gate 2: harness must not be privileged — returns CONTAINED
         from agents.evaluation.harness import evaluate
 
         assert evaluate("Layer1", "not_privileged") == "CONTAINED"
