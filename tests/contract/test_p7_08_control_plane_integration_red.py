@@ -234,9 +234,24 @@ class TestDConfidenceBoundary:
         assert low_result.kind == high_result.kind
 
     def test_d2_absolute_confidence_is_rejected_upstream(self) -> None:
-        reasoning = _valid_reasoning()
+        from agents.reasoning.resolution import ReasoningResult
+
+        # Direct construction with 1.0 must be rejected (model_copy bypasses validation)
         with pytest.raises(ValueError):
-            reasoning.model_copy(update={"confidence": 1.0})
+            ReasoningResult(
+                success=True,
+                situation_id="sit-p708-001",
+                company_id="meridian",
+                now=NOW,
+                evidence_refs=_valid_reasoning().evidence_refs,
+                candidate_interpretation="interpretation",
+                conflicting_evidence=(),
+                uncertainty="uncertain",
+                rationale="grounded",
+                unresolved_questions=(),
+                advisory_proposal=None,
+                confidence=1.0,
+            )
 
 
 # E — context and tenant/situation/time scope cannot escape.
