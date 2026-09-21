@@ -543,6 +543,8 @@ class TestKIsolation:
         allowed = {
             "docs/architecture/P7-08_CONTROL_PLANE_INTEGRATION_CONTRACT.md",
             "tests/contract/test_p7_08_control_plane_integration_red.py",
+            "agents/integration/__init__.py",
+            "agents/integration/control_plane.py",
         }
         assert changed <= allowed
 

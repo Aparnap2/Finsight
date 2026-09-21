@@ -234,8 +234,8 @@ class ControlPlaneGate:
                             context, discovery, reasoning, brief, now_override, "STALE_EVIDENCE"
                         )
 
-        # D1, D2: confidence is metadata, never authority — gate kind must not change with confidence
-        # We do not use confidence to decide kind; only to preserve advisory semantics
+        # D1/D2: confidence is metadata, never authority — gate kind
+        # must not change with confidence; only preserve advisory semantics
 
         # If all checks pass, emit non-authoritative P6_HANDOFF
         # Evidence IDs are carried from discovery (or reasoning/brief, they should match)
