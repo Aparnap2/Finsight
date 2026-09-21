@@ -144,6 +144,21 @@ class ReasoningResult(BaseModel):
             raise ValueError("confidence must be in [0, 1)")
         return v
 
+    def model_copy(
+        self, *, update: dict[str, Any] | None = None, deep: bool = False
+    ) -> ReasoningResult:  # type: ignore[override]
+        """Override to re-validate confidence on copy (Pydantic bypasses validation)."""
+        if update is not None and "confidence" in update:
+            v = update["confidence"]
+            # Mirror _confidence_must_be_sub_certain validator
+            try:
+                fv = float(v)  # type: ignore[arg-type]
+            except Exception as exc:  # noqa: BLE001
+                raise ValueError("confidence must be in [0, 1)") from exc
+            if not 0.0 <= fv < 1.0:
+                raise ValueError("confidence must be in [0, 1)")
+        return super().model_copy(update=update, deep=deep)
+
     def __init__(self, **data: Any) -> None:
         # Forbid authoritative markers via extra="forbid" already, but also
         # check for smuggled keys that might be passed as extra kwargs
