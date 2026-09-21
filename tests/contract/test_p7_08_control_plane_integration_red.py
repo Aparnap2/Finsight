@@ -547,7 +547,7 @@ class TestLVerificationSeam:
         poisoned = result.model_copy(
             update={"uncertainty_section": result.uncertainty_section + " Review only."}
         )
-        with pytest.raises(Exception):
+        with pytest.raises(Exception):  # noqa: B017 - RED gate: any failure proves gate missing
             _gate_cls()().admit(
                 context=_context(),
                 discovery=_valid_discovery(),
