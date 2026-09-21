@@ -21,6 +21,7 @@ from __future__ import annotations
 from typing import Any
 
 from agents.authority.claims import AgentCapability
+from agents.authority.evidence import AuthorityError
 from agents.discovery.request import DiscoveryRequest
 from agents.discovery.result import DiscoveryFailure, DiscoveryResult
 from agents.runtime.context import RuntimeContext
@@ -272,11 +273,19 @@ def discover(
                     hypotheses=None,
                     proposals=None,
                     failure=DiscoveryFailure(
-                        code=result.failure.code, detail=result.failure.detail
-                    ),  # type: ignore[union-attr]
+                        code=result.failure.code, detail=result.failure.detail  # type: ignore[union-attr]
+                    ),
                 )
-            # Preserve ambiguity — summary is advisory, not outcome.
+            # Preserve ambiguity — summary is advisory, not verdict.
             observations.append(f"advisory correlation: {result.summary}")
+            # Also collect HMAC-bound refs for correlation scope
+            for eid in request.allowed_evidence_ids:
+                try:
+                    ref = context.registry.create_reference(eid)
+                    context.registry.validate_reference(ref, request.now)
+                    evidence_refs.append(ref)
+                except AuthorityError:
+                    pass
             # evidence_refs already collected via lookup; also add for correlation
             # (but ensure we don't duplicate beyond allowed scope)
         elif cap == AgentCapability.EXPLAIN:
