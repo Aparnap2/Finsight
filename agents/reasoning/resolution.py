@@ -101,7 +101,7 @@ class ReasoningResult(BaseModel):
             raise ValueError("now must be timezone-aware")
         return v
 
-    @field_validator("situation_id", "candidate_interpretation", "uncertainty", "rationale")
+    @field_validator("candidate_interpretation", "uncertainty", "rationale")
     @classmethod
     def _must_be_non_blank_if_present(cls, v: str | None) -> str | None:
         if v is not None and not v.strip():
