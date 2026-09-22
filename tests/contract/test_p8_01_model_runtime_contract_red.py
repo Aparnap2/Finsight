@@ -330,6 +330,29 @@ class TestDIdentityReplay:
         args.discard(type(None))
         assert args == {contract.ModelResponse}
 
+    def test_adversarial_replay_never_synthesizes_unrecorded_runs(self) -> None:
+        contract = _contract()
+        # Stateless contract holds no record store, so every probed identity is
+        # unrecorded: replay is observational and must return None, never a
+        # freshly constructed response. (Known-identity equality is exercised
+        # as replay determinism below; fixture-backed harnesses override this
+        # seam with record-store playback behind it.)
+        first_identity = contract.RunIdentity(
+            run_id="run-p801-unrecorded-001",
+            input_fingerprint=contract.compute_input_fingerprint(
+                {"situation_id": "sit-p801-unrecorded-001"}
+            ),
+        )
+        second_identity = contract.RunIdentity(
+            run_id="run-p801-unrecorded-002",
+            input_fingerprint=contract.compute_input_fingerprint(
+                {"situation_id": "sit-p801-unrecorded-002"}
+            ),
+        )
+        assert contract.replay_run(first_identity) is None
+        assert contract.replay_run(second_identity) is None
+        assert contract.replay_run(first_identity) == contract.replay_run(first_identity)
+
 
 # ---------------------------------------------------------------------------
 # E — Failure taxonomy: enumerated transient vs terminal classes
