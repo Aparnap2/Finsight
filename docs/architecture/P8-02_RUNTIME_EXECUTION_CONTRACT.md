@@ -126,12 +126,14 @@ attempt cap derives from `Budget.max_retries` and `RetryPolicy.max_retries`
 (whichever binds first). Termination by construction: no infinite loops.
 Each retry repeats the same neutral call with no authority change.
 
-### I12 — Only TRANSIENT retries, capped by construction
+### I12 — Persistent transient exhaustion
 
-Execution MUST retry exactly when P8-01 `is_retryable` returns true, and
-MUST raise immediately otherwise. Total attempts MUST NOT exceed
-`min(Budget.max_retries, RetryPolicy.max_retries) + 1`. Uncapped retry loops
-are forbidden.
+On persistent TRANSIENT failure, the runtime MUST attempt exactly
+min_retry_budget + 1 model executions, unless an independently authoritative
+execution constraint — such as the overall deadline or another exhausted
+budget — terminates execution earlier. Here min_retry_budget means
+min(Budget.max_retries, RetryPolicy.max_retries). Uncapped retry loops are
+forbidden.
 
 ### I13 — Retry repeats the neutral call with no authority change
 
@@ -161,14 +163,14 @@ tries MUST count against the I12 attempt cap and budget.
 
 ## 8. Execution record
 
-One `ExecutionRecord` exists per run: run identity, ordered attempt list,
+One `RunRecord` exists per run: run identity, ordered attempt list,
 per-attempt provenance (provider/model/version), timing, usage, failure
 info, and terminal state. The record is evidence-grade metadata for
 observers; it is NOT a financial fact and NOT evidence authority.
 
 ### I16 — Record shape is metadata, complete per run
 
-`ExecutionRecord` MUST carry `RunIdentity`, the ordered `AttemptIdentity`
+`RunRecord` MUST carry `RunIdentity`, the ordered `AttemptIdentity`
 list with per-attempt `Provenance`, timing, `BudgetUsage`, `FailureKind` /
 `FailureClass` where applicable, and the single terminal state. Records MUST
 NOT carry authorization, approval, execution, settlement, verdict, or
@@ -176,10 +178,12 @@ gate-result fields.
 
 ### I17 — Record is not a financial fact or evidence authority
 
-`ExecutionRecord` MUST NOT subclass, coerce to, or mint `AuthoritativeFact`,
+`RunRecord` MUST NOT subclass, coerce to, or mint `AuthoritativeFact`,
 journal entries, settlements, or P7 result types (`DiscoveryResult`,
 `ReasoningResult`, `HumanResolutionBrief`, `GateResult`). Agent output is
-never financial truth.
+never financial truth. Named RunRecord (not ExecutionRecord) to defer to
+frozen P8-01 j1, which forbids authority-outcome type names on the
+p8_runtime surface.
 
 ## 9. Replay and idempotency
 
@@ -270,7 +274,7 @@ semantics over those primitives.
 | `AttemptIdentity`, attempt counting, chain rule | P8-02 | New: per-try identity (I10, I11) |
 | Ordered orchestration, per-attempt budget checks | P8-02 | New: execution order (I6, I8, I9) |
 | Retry cap composition, fallback-as-attempt rule | P8-02 | New: policy execution (I12-I15) |
-| `ExecutionRecord` (metadata, not authority) | P8-02 | New: per-run record (I16, I17) |
+| `RunRecord` (metadata, not authority) | P8-02 | New: per-run record (I16, I17) |
 | Recorded-outcome replay, idempotency on `RunIdentity` | P8-02 | New: replay semantics (I18, I19) |
 
 ### I25 — Ambiguity resolves to frozen P8-01
@@ -291,7 +295,7 @@ shape, not by import.
 ### I27 — RED for intended reasons only
 
 The RED suite (`tests/contract/test_p8_02_*.py`) MUST fail only because the
-P8-02 execution surface (lifecycle, `AttemptIdentity`, `ExecutionRecord`,
+P8-02 execution surface (lifecycle, `AttemptIdentity`, `RunRecord`,
 orchestration, recorded replay) is absent — not because of P6, P7, or P8-01
 regressions, which MUST stay green.
 

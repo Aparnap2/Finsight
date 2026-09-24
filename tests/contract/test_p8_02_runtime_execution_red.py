@@ -13,7 +13,7 @@ Expected public surface of ``agents.p8_runtime.execution`` (GREEN target):
 - Ordered orchestration of frozen P8-01 primitives only (intake, complete,
   capture, validate_raw_output, classify_failure, bounded retry, result).
 - AttemptIdentity (run_id, zero-based gap-free attempt_number,
-  P8-01 input_fingerprint); ExecutionRecord (metadata, not financial fact).
+  P8-01 input_fingerprint); RunRecord (metadata, not financial fact).
 - Bounded execute_run orchestration; per-attempt budget checks; retry only
   on P8-01 TRANSIENT via is_retryable; fallback observational; replay
   without re-invocation keyed on P8-01 RunIdentity.
@@ -28,6 +28,7 @@ no filesystem writes, deterministic, no wall-clock dependence.
 from __future__ import annotations
 
 import ast
+from datetime import datetime
 from pathlib import Path
 
 from agents.p8_runtime import contract as p8_01
@@ -180,6 +181,60 @@ class TestCBudgetExhaustion:
         assert calls.invocations_after_exhaustion == 0
         assert calls.terminal_state == "EXHAUSTED"
 
+    def test_c4_mid_run_exhaustion_freezes_provider_invocations(self) -> None:
+        """I8: spy observes zero provider calls after EXHAUSTED mid-run."""
+        execution = _execution()
+        budget = p8_01.Budget(
+            max_model_calls=1,
+            max_tokens=1000,
+            max_tool_calls=1,
+            deadline_seconds=60.0,
+            max_retries=5,
+        )
+
+        class CountingAdapter:
+            def __init__(self) -> None:
+                self.calls = 0
+
+            def complete(
+                self, request: p8_01.ModelRequest, config: p8_01.RuntimeConfig
+            ) -> p8_01.ModelResponse:
+                self.calls += 1
+                raise p8_01.BudgetExhaustedError("exhausted mid-run (spy)")
+
+        spy = CountingAdapter()
+        record = execution.execute_run(
+            _identity(), budget, p8_01.RetryPolicy(max_retries=5), adapter=spy
+        )
+        assert record.terminal_state == "EXHAUSTED"
+        frozen = spy.calls
+        assert record.invocations_after_exhaustion == 0
+        assert spy.calls == frozen
+        assert spy.calls == record.attempt_count
+
+    def test_c5_each_provider_call_consumes_observable_budget(self) -> None:
+        """I8: usage counters advance once per observed provider attempt."""
+        execution = _execution()
+
+        class UsageAdapter:
+            def __init__(self) -> None:
+                self.calls = 0
+
+            def complete(
+                self, request: p8_01.ModelRequest, config: p8_01.RuntimeConfig
+            ) -> p8_01.ModelResponse:
+                self.calls += 1
+                raise p8_01.RetryExhaustedError("transient (spy)")
+
+        spy = UsageAdapter()
+        budget = _budget()
+        record = execution.execute_run(
+            _identity(), budget, p8_01.RetryPolicy(max_retries=1), adapter=spy
+        )
+        assert spy.calls == record.attempt_count
+        assert record.budget_usage.model_calls == record.attempt_count
+        assert record.budget_usage.model_calls == spy.calls
+
 
 # ---------------------------------------------------------------------------
 # D — Attempt identity (I10, I11)
@@ -218,6 +273,29 @@ class TestDAttemptIdentity:
         )
         assert execution.same_chain(first, second) is False
 
+    def test_d4_run_id_and_attempt_numbers_independently_meaningful(self) -> None:
+        """I10/I11: attempts share run_id with distinct numbers; no cross-run merge."""
+        execution = _execution()
+        identity = _identity()
+        record = execution.execute_run(
+            identity, _budget(), p8_01.RetryPolicy(max_retries=2)
+        )
+        numbers = [attempt.attempt_number for attempt in record.attempts]
+        assert {attempt.run_id for attempt in record.attempts} == {identity.run_id}
+        assert numbers == sorted(numbers)
+        assert len(set(numbers)) == len(numbers)
+        other = execution.execute_run(
+            p8_01.RunIdentity(
+                run_id="run-p802-002",
+                input_fingerprint=identity.input_fingerprint,
+            ),
+            _budget(),
+            p8_01.RetryPolicy(max_retries=2),
+        )
+        assert {a.run_id for a in other.attempts}.isdisjoint(
+            {a.run_id for a in record.attempts}
+        ) or other.attempts[0].run_id == "run-p802-002"
+
 
 # ---------------------------------------------------------------------------
 # E — Retry semantics (I12, I13)
@@ -232,12 +310,13 @@ class TestERetrySemantics:
             assert execution.should_retry(kind) is p8_01.is_retryable(kind)
 
     def test_e2_attempt_cap_composes_min_budget_policy_plus_one(self) -> None:
-        """I12/I13: attempts <= min(Budget, RetryPolicy)+1; neutral repeat."""
+        """I12: persistent TRANSIENT attempts == min(Budget, Policy)+1 exactly."""
         execution = _execution()
         budget = _budget()
         policy = p8_01.RetryPolicy(max_retries=5)
         record = execution.execute_run(_identity(), budget, policy)
-        assert record.attempt_count <= min(budget.max_retries, policy.max_retries) + 1
+        expected = min(budget.max_retries, policy.max_retries) + 1
+        assert record.attempt_count == expected
 
     def test_adversarial_infinite_retry_construction_is_impossible(self) -> None:
         """I12: uncapped retry loops forbidden; cap binds by construction."""
@@ -257,6 +336,102 @@ class TestERetrySemantics:
         ):
             assert execution.should_retry(kind) is False
         assert AUTHORITY_FIELDS.isdisjoint(set(execution.RetryRequest.model_fields))
+
+    def test_e5_persistent_transient_exhausts_exactly_min_plus_one(self) -> None:
+        """I12: persistent TRANSIENT with clear budgets attempts == min+1."""
+        execution = _execution()
+        budget = p8_01.Budget(
+            max_model_calls=10,
+            max_tokens=100000,
+            max_tool_calls=10,
+            deadline_seconds=600.0,
+            max_retries=2,
+        )
+        policy = p8_01.RetryPolicy(max_retries=2)
+        expected = min(budget.max_retries, policy.max_retries) + 1
+
+        class RecordingAdapter:
+            def __init__(self) -> None:
+                self.calls = 0
+
+            def complete(
+                self, request: p8_01.ModelRequest, config: p8_01.RuntimeConfig
+            ) -> p8_01.ModelResponse:
+                self.calls += 1
+                raise p8_01.RetryExhaustedError("persistent TRANSIENT (spy)")
+
+        spy = RecordingAdapter()
+        record = execution.execute_run(_identity(), budget, policy, adapter=spy)
+        assert spy.calls == expected
+        assert record.attempt_count == expected
+        assert record.terminal_state == "EXHAUSTED"
+
+    def test_c6_static_budget_refusal_zero_provider_calls(self) -> None:
+        """I8: zero-call budget refuses at intake; spy observes no complete()."""
+        execution = _execution()
+        budget = p8_01.Budget(
+            max_model_calls=0,
+            max_tokens=100000,
+            max_tool_calls=10,
+            deadline_seconds=600.0,
+            max_retries=2,
+        )
+
+        class WorkingAdapter:
+            def __init__(self) -> None:
+                self.calls = 0
+
+            def complete(
+                self, request: p8_01.ModelRequest, config: p8_01.RuntimeConfig
+            ) -> p8_01.ModelResponse:
+                self.calls += 1
+                moment = datetime(2026, 1, 1, 0, 0, 0)
+                return p8_01.ModelResponse(
+                    run_id="run-p802-001",
+                    output_text='{"summary": "working (spy)", "findings": []}',
+                    token_usage=1,
+                    latency_ms=1,
+                    provenance=p8_01.Provenance(
+                        prompt_context_id=request.prompt_context_id,
+                        evidence_ids=[],
+                        model="spy-model",
+                        provider="spy",
+                        version="spy-v1",
+                        runtime_config=config,
+                        started_at=moment,
+                        completed_at=moment,
+                        run_id="run-p802-001",
+                    ),
+                )
+
+        spy = WorkingAdapter()
+        record = execution.execute_run(
+            _identity(), budget, p8_01.RetryPolicy(max_retries=2), adapter=spy
+        )
+        assert record.terminal_state == "EXHAUSTED"
+        assert spy.calls == 0
+
+    def test_e6_terminal_failure_invokes_provider_exactly_once(self) -> None:
+        """I12: terminal failure -> exactly ONE provider call, then FAILED."""
+        execution = _execution()
+
+        class TerminalAdapter:
+            def __init__(self) -> None:
+                self.calls = 0
+
+            def complete(
+                self, request: p8_01.ModelRequest, config: p8_01.RuntimeConfig
+            ) -> p8_01.ModelResponse:
+                self.calls += 1
+                raise p8_01.InvalidStructuredOutputError("terminal (spy)")
+
+        spy = TerminalAdapter()
+        record = execution.execute_run(
+            _identity(), _budget(), p8_01.RetryPolicy(max_retries=3), adapter=spy
+        )
+        assert spy.calls == 1
+        assert record.attempt_count == 1
+        assert record.terminal_state == "FAILED"
 
 
 # ---------------------------------------------------------------------------
@@ -288,13 +463,46 @@ class TestFFallback:
         assert AUTHORITY_FIELDS.isdisjoint(set(execution.FallbackAttempt.model_fields))
         assert execution.fallback_task_semantics_unchanged() is True
 
+    def test_f4_fallback_invokes_fallback_adapter_with_equivalent_request(self) -> None:
+        """I14/I15: fallback spy called with equivalent request; authority unchanged."""
+        execution = _execution()
+
+        class SpyAdapter:
+            def __init__(self, provider: str) -> None:
+                self.provider = provider
+                self.requests: list[p8_01.ModelRequest] = []
+
+            def complete(
+                self, request: p8_01.ModelRequest, config: p8_01.RuntimeConfig
+            ) -> p8_01.ModelResponse:
+                self.requests.append(request)
+                raise p8_01.RetryExhaustedError(f"{self.provider} down (spy)")
+
+        primary, fallback = SpyAdapter("primary"), SpyAdapter("fallback")
+        record = execution.execute_run_with_fallback(
+            _identity(),
+            _budget(),
+            p8_01.RetryPolicy(max_retries=2),
+            primary=primary,
+            fallback=fallback,
+        )
+        assert len(primary.requests) >= 1
+        assert len(fallback.requests) >= 1
+        first, routed = primary.requests[0], fallback.requests[0]
+        assert routed.situation_id == first.situation_id
+        assert routed.input_text == first.input_text
+        assert routed.prompt_context_id == first.prompt_context_id
+        outcome = record.terminal_outcome
+        assert AUTHORITY_FIELDS.isdisjoint(set(outcome.model_fields))
+        assert outcome.summary == first.input_text or isinstance(outcome.summary, str)
+
 
 # ---------------------------------------------------------------------------
 # G — Execution record: metadata, never financial fact (I16, I17)
 # ---------------------------------------------------------------------------
 
 
-class TestGExecutionRecord:
+class TestGRunRecord:
     def test_g1_record_shape_complete_metadata_per_run(self) -> None:
         """I16: RunIdentity, ordered attempts, provenance, usage, terminal."""
         execution = _execution()
@@ -307,15 +515,15 @@ class TestGExecutionRecord:
             "failure_info",
             "terminal_state",
         }
-        assert required.issubset(set(execution.ExecutionRecord.model_fields))
-        assert AUTHORITY_FIELDS.isdisjoint(set(execution.ExecutionRecord.model_fields))
+        assert required.issubset(set(execution.RunRecord.model_fields))
+        assert AUTHORITY_FIELDS.isdisjoint(set(execution.RunRecord.model_fields))
 
     def test_g2_record_is_not_financial_fact_or_evidence_authority(self) -> None:
         """I17: no AuthoritativeFact/journal/P7 coercion; output never truth."""
         execution = _execution()
         for escape in ("to_authoritative", "mint_fact", "to_journal", "to_settlement"):
-            assert not hasattr(execution.ExecutionRecord, escape)
-        rendered = str(execution.ExecutionRecord.model_fields)
+            assert not hasattr(execution.RunRecord, escape)
+        rendered = str(execution.RunRecord.model_fields)
         for token in ("AuthoritativeFact", *P7_TYPE_NAMES):
             assert token not in rendered
 
@@ -357,6 +565,39 @@ class TestHReplayIdempotency:
             input_fingerprint=p8_01.compute_input_fingerprint(ghost_payload),
         )
         assert execution.replay_run(ghost) is None
+
+    def test_h4_replay_uses_zero_new_invocations_with_full_identity_key(self) -> None:
+        """I18/I19: replay returns recorded outcome with zero provider calls."""
+        execution = _execution()
+
+        class ReplaySpy:
+            def __init__(self) -> None:
+                self.calls = 0
+
+            def complete(
+                self, request: p8_01.ModelRequest, config: p8_01.RuntimeConfig
+            ) -> p8_01.ModelResponse:
+                self.calls += 1
+                raise p8_01.RetryExhaustedError("spy")
+
+        spy = ReplaySpy()
+        identity = _identity()
+        recorded = execution.execute_run(
+            identity, _budget(), p8_01.RetryPolicy(max_retries=0), adapter=spy
+        )
+        before = spy.calls
+        assert execution.replay_run(identity) == recorded.terminal_outcome
+        assert spy.calls == before
+        same_id_other_fp = p8_01.RunIdentity(
+            run_id=identity.run_id,
+            input_fingerprint=p8_01.compute_input_fingerprint({"situation_id": "x"}),
+        )
+        other_id_same_fp = p8_01.RunIdentity(
+            run_id="run-p802-002", input_fingerprint=identity.input_fingerprint
+        )
+        assert execution.replay_run(same_id_other_fp) != recorded.terminal_outcome
+        assert execution.replay_run(other_id_same_fp) != recorded.terminal_outcome
+        assert spy.calls == before
 
 
 # ---------------------------------------------------------------------------
