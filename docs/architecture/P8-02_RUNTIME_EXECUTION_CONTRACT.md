@@ -1,9 +1,9 @@
 # P8-02 Runtime Execution Contract
 
-**Status:** Gate 1 RED (design + tests only)
+**Status:** FROZEN (merged via PR #64 as `5611be1`; was Gate 1 RED at design time)
 **Base SHA:** `7fede69`
 **Branch:** `feat/finsight-p8-02-runtime-execution-semantics`
-**Type:** DOC-ONLY
+**Type:** Contract + RED + GREEN (frozen)
 **Scope:** `docs/architecture/P8-02_*.md` + `tests/contract/test_p8_02_*.py` ONLY
 
 ## 1. Purpose and non-goals
