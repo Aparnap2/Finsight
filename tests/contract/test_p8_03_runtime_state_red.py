@@ -35,11 +35,12 @@ no filesystem writes, deterministic, no wall-clock dependence.
 from __future__ import annotations
 
 import ast
+from datetime import UTC, datetime
 from pathlib import Path
-
-import pytest
+from typing import Any
 
 from agents.p8_runtime import contract as p8_01
+from agents.p8_runtime import execution as p8_02
 
 TERMINAL_STATES = frozenset({"SUCCEEDED", "FAILED", "EXHAUSTED"})
 FORBIDDEN_PERSISTED = frozenset(
@@ -75,6 +76,20 @@ BACKEND_TOKENS = frozenset(
 P7_TYPE_NAMES = frozenset(
     {"DiscoveryResult", "ReasoningResult", "HumanResolutionBrief", "GateResult"}
 )
+BANNED_DURABILITY_NAMES = frozenset(
+    {
+        "AuthorizationToken",
+        "ApprovalDecision",
+        "ExecutionRecord",
+        "VerificationVerdict",
+        "SettlementRecord",
+        "AuthoritativeFact",
+        "EvidenceRegistry",
+        "AuthorityBoundary",
+        "PolicyDecision",
+        "GateResult",
+    }
+)
 
 
 def _durability():
@@ -102,6 +117,80 @@ def _budget():
         deadline_seconds=60.0,
         max_retries=1,
     )
+
+
+def _recorded_terminal_record() -> p8_02.RunRecord:
+    """Frozen P8-01/P8-02 SUCCEEDED record used as fixture input for identity proofs."""
+    provenance = p8_01.Provenance(
+        prompt_context_id="ctx-p803-001",
+        evidence_ids=["ev-1"],
+        model="frozen-model",
+        provider="frozen-provider",
+        version="v1",
+        runtime_config=p8_01.RuntimeConfig(max_tokens=100, timeout_ms=1000),
+        started_at=datetime(2026, 1, 1, tzinfo=UTC),
+        completed_at=datetime(2026, 1, 1, 0, 0, 1, tzinfo=UTC),
+        run_id="run-p803-001",
+    )
+    attempt = p8_02.AttemptRecord(
+        run_id="run-p803-001",
+        attempt_number=0,
+        input_fingerprint=_identity().input_fingerprint,
+        provenance=provenance,
+        latency_ms=10,
+        token_usage=5,
+        validated_output=p8_01.StructuredModelOutput(
+            summary="recorded summary", findings=["recorded finding"]
+        ),
+    )
+    return p8_02.RunRecord(
+        run_identity=_identity(),
+        attempts=[attempt],
+        provenance=[provenance],
+        timing=[10],
+        budget_usage=p8_01.BudgetUsage(
+            model_calls=1, tokens=5, tool_calls=0, elapsed_seconds=0.1, retries=0
+        ),
+        terminal_state="SUCCEEDED",
+        budget_checks=1,
+        attempt_count=1,
+        invocations_after_exhaustion=0,
+        terminal_outcome=p8_02.TerminalOutcome(
+            summary="recorded summary", terminal_state="SUCCEEDED"
+        ),
+        scope="meridian:sit-p803-001",
+        intake_scope="meridian:sit-p803-001",
+    )
+
+
+class _RecordingProviderSpy:
+    """Behavioral stand-in for ProviderAdapter.complete: records every invocation."""
+
+    def __init__(self) -> None:
+        self.complete_calls: list[dict[str, Any]] = []
+
+    def complete(
+        self, request: p8_01.ModelRequest, config: p8_01.RuntimeConfig
+    ) -> p8_01.ModelResponse:
+        """Record the call and return a canned neutral response for counting."""
+        self.complete_calls.append({"request": request, "config": config})
+        return p8_01.ModelResponse(
+            run_id="run-p803-001",
+            output_text='{"summary": "spy", "findings": []}',
+            token_usage=1,
+            latency_ms=1,
+            provenance=p8_01.Provenance(
+                prompt_context_id=request.prompt_context_id,
+                evidence_ids=[],
+                model="spy-model",
+                provider="spy-provider",
+                version="v1",
+                runtime_config=config,
+                started_at=datetime(2026, 1, 1, tzinfo=UTC),
+                completed_at=datetime(2026, 1, 1, 0, 0, 1, tzinfo=UTC),
+                run_id="run-p803-001",
+            ),
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -204,6 +293,33 @@ class TestCInvocationGuarantees:
         durability = _durability()
         assert durability.reinvoke_recorded(_identity(), attempt_number=0) is False
 
+    def test_adversarial_spy_silence_on_replay_and_recovery(self) -> None:
+        """I11/I15: replay/recovery paths make ZERO complete() calls on the provider spy."""
+        durability = _durability()
+        spy = _RecordingProviderSpy()
+        durability.replay_durable(_identity(), provider=spy)
+        durability.recover_run(_identity(), provider=spy)
+        assert spy.complete_calls == []
+
+    def test_adversarial_exhaustion_freezes_provider_spy(self) -> None:
+        """I8/I11: after terminal state is recorded the spy freezes; no post-terminal calls."""
+        durability = _durability()
+        spy = _RecordingProviderSpy()
+        durability.execute_run(_identity(), provider=spy)
+        frozen = list(spy.complete_calls)
+        durability.execute_run(_identity(), provider=spy)
+        durability.resume_run(_identity(), provider=spy)
+        assert spy.complete_calls == frozen
+
+    def test_c5_each_executed_attempt_asserts_exactly_one_spy_call(self) -> None:
+        """I10/I11: each durable attempt maps to exactly one provider complete() call."""
+        durability = _durability()
+        spy = _RecordingProviderSpy()
+        durability.execute_run(_identity(), provider=spy)
+        history = durability.history(_identity())
+        assert len(history) >= 1
+        assert len(spy.complete_calls) == len(history)
+
 
 # ---------------------------------------------------------------------------
 # D — Idempotent resubmission on RunIdentity (I12, I13)
@@ -227,6 +343,16 @@ class TestDIdempotency:
         durability = _durability()
         other = p8_01.RunIdentity(run_id="run-p803-001", input_fingerprint="0" * 64)
         assert durability.resubmit(other).aliased is False
+
+    def test_d1b_recorded_terminal_resubmission_returns_identical_outcome(self) -> None:
+        """I12: resubmission of a recorded terminal identity returns the identical outcome."""
+        durability = _durability()
+        recorded = _recorded_terminal_record()
+        result = durability.resubmit(recorded.run_identity, recorded_record=recorded)
+        assert result.mode == "recorded"
+        assert result.forked is False
+        assert result.terminal_state == recorded.terminal_state
+        assert result.outcome.model_dump() == recorded.terminal_outcome.model_dump()
 
 
 # ---------------------------------------------------------------------------
@@ -267,6 +393,15 @@ class TestFRecoveryProtocol:
         """I16: recovery runs load->seal-verify->UNKNOWN-reconcile->resume/seal in order."""
         durability = _durability()
         assert durability.RECOVERY_ORDER == ("load", "verify", "reconcile", "resume_or_seal")
+
+    def test_f1b_recovery_observes_precedence_on_recording_probe(self) -> None:
+        """I16: recovery appends load->verify->reconcile->resume/seal to a probe in order."""
+        durability = _durability()
+        events: list[str] = []
+        durability.recover_run(_identity(), event_log=events)
+        assert events[0] == "load"
+        assert events.index("verify") < events.index("reconcile")
+        assert events.index("reconcile") < events.index("resume_or_seal")
 
     def test_f2_recovery_is_provenance_not_attempt(self) -> None:
         """I17: recovery events are audit entries; consume no attempt slots/cap/provenance."""
@@ -319,6 +454,8 @@ class TestGConcurrency:
         assert durability.resume_run(_identity()) is False
         assert durability.replay_quarantined_as_success(_identity()) is False
         assert durability.invoke_provider(_identity()) is False
+        assert durability.replay_durable(_identity()).outcome is None
+        assert durability.quarantine(_identity()).executable is False
 
 
 # ---------------------------------------------------------------------------
@@ -333,6 +470,20 @@ class TestHIntegritySeal:
         assert durability.seal_domain == "p8-03-seal"
         assert durability.seal_has_secrets() is False
         assert durability.new_crypto_infra is False
+
+    def test_h1b_seal_canonical_key_order_independent(self) -> None:
+        """I21: seal hashes canonically-serialized fields; key order never changes it."""
+        durability = _durability()
+        fields_a = {
+            "run_id": "run-p803-001",
+            "scope": {"tenant": "meridian", "situation": "sit-p803-001"},
+        }
+        fields_b = {
+            "scope": {"situation": "sit-p803-001", "tenant": "meridian"},
+            "run_id": "run-p803-001",
+        }
+        assert durability.seal_fields(fields_a) == durability.seal_fields(fields_b)
+        assert durability.verify_seal(fields_b, durability.seal_fields(fields_a)) is True
 
     def test_h2_mismatch_quarantines_distinct_non_executable(self) -> None:
         """I22: mismatch enters quarantine: not SUCCEEDED/FAILED, not an ExecutionState member."""
@@ -398,6 +549,12 @@ class TestJCompatibilitySeam:
         for name in (*P7_TYPE_NAMES, "Budget", "FailureKind", "ExecutionState", "RunRecord"):
             assert not hasattr(durability, name), f"RED: rival type: {name}"
 
+    def test_j1b_future_surface_avoids_banned_authority_names(self) -> None:
+        """I1/I26: durability exposes none of the frozen banned authority/type names."""
+        durability = _durability()
+        public = {name for name in dir(durability) if not name.startswith("_")}
+        assert public.isdisjoint(BANNED_DURABILITY_NAMES)
+
     def test_j3_ownership_seam_and_doc_only_gate(self) -> None:
         """I27/I28/I30/I2/I3: P8-03 owns durability only; backend-free; no impl/frozen changes."""
         durability = _durability()
@@ -406,6 +563,14 @@ class TestJCompatibilitySeam:
         assert durability.defines_only == ("durability", "recovery", "integrity", "audit")
 
     def test_j4_red_for_intended_reasons_only(self) -> None:
-        """I29: durability surface absent; other failures here are structural, not regressions."""
-        with pytest.raises(ImportError):
-            _durability()
+        """I29: durability surface present and complete; contracted seams exposed."""
+        durability = _durability()
+        for name in (
+            "seal_fields",
+            "verify_seal",
+            "recover_run",
+            "resubmit",
+            "replay_durable",
+            "append_audit",
+        ):
+            assert callable(getattr(durability, name)), f"missing seam: {name}"
