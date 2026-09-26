@@ -1,9 +1,9 @@
 # P8-03 Runtime State Persistence & Replay Contract
 
-**Status:** Gate 1 RED (design + tests only; NO implementation)
+**Status:** FROZEN (merged via PR #66 as `9fad082`; was Gate 1 RED at design time)
 **Base SHA:** `84c708e`
 **Branch:** `feat/finsight-p8-03-runtime-state-persistence-replay`
-**Type:** DOC-ONLY
+**Type:** Contract + RED + GREEN (frozen)
 **Scope:** `docs/architecture/P8-03_*.md` + `tests/contract/test_p8_03_*.py` ONLY
 
 ## 1. Purpose and non-goals
