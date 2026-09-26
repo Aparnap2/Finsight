@@ -1,9 +1,9 @@
 # P8-04 Durable Orchestration Boundary Contract
 
-**Status:** Gate 1 RED (design + tests only; NO implementation)
+**Status:** FROZEN (merged via PR #68 as `c9eb3b6`; was Gate 1 RED at design time)
 **Base SHA:** `9fad082`
 **Branch:** `feat/finsight-p8-04-durable-orchestration-boundary`
-**Type:** DOC-ONLY
+**Type:** Contract + RED + GREEN (frozen)
 **Scope:** `docs/architecture/P8-04_*.md` + `tests/contract/test_p8_04_*.py` ONLY
 
 ## 1. Purpose and non-goals
