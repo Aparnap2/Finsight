@@ -175,7 +175,9 @@ class TestAWorkflowLifecycle:
         orch = _orchestration()
         assert DURABILITY_MARKERS.isdisjoint(set(orch.WORKFLOW_STATES))
         assert DURABILITY_MARKERS.isdisjoint(set(p8_02.ExecutionState.__members__))
-        assert set(orch.WORKFLOW_STATES).isdisjoint(set(EXECUTION_STATES - {"RUNNING"}))
+        # Distinct types, not disjoint vocab: shared names (RUNNING/FAILED) are
+        # separate enum members per layer; a single merged/aliased enum fails.
+        assert orch.WorkflowState is not p8_02.ExecutionState
         assert "SUSPENDED" not in set(p8_02.ExecutionState.__members__)
         assert "QUARANTINED" not in set(orch.WORKFLOW_STATES)
 
@@ -253,11 +255,29 @@ class TestCSchedulingSeparation:
         assert orch.scheduler_widens_scope() is False
 
     def test_adversarial_scheduler_invokes_provider_forbidden(self) -> None:
-        """I11: scheduler invoking ProviderAdapter.complete is breach even if silent."""
+        """I11: ANY ProviderAdapter.complete call via any route is breach, silent or not."""
         orch = _orchestration()
-        assert orch.schedule_next("wf-p804-001").provider_invocations == 0
-        assert orch.scheduler_interprets_output() is False
-        assert orch.scheduler_reclassifies_failure() is False
+        calls: list[tuple[str, str]] = []
+
+        class _RecordingAdapter:
+            """Adapter-level spy counting complete() calls across all routes."""
+
+            def complete(self, request: Any, config: Any) -> Any:
+                calls.append((str(request), str(config)))
+                raise AssertionError("RED: scheduler must never invoke provider")
+
+        adapter = _RecordingAdapter()
+        orch.schedule_next("wf-p804-001", adapter=adapter)
+        orch.schedule_next_via_helper("wf-p804-001", adapter=adapter)
+        assert calls == []
+
+    def test_adversarial_scheduler_output_contains_zero_provider_content(self) -> None:
+        """I11: scheduler output equals input-derived projection; zero provider content."""
+        orch = _orchestration()
+        scheduled = orch.schedule_next("wf-p804-001")
+        assert scheduled.output == orch.deterministic_projection("wf-p804-001")
+        assert "provider-derived" not in str(scheduled.output).lower()
+        assert "model-response" not in str(scheduled.output).lower()
 
 
 # ---------------------------------------------------------------------------
@@ -340,6 +360,38 @@ class TestFRetryOwnership:
         assert orch.cross_layer_loop_bounded() is True
         assert orch.reexecute_same_identity("run-p804-001") is False
 
+    def test_f3_workflow_run_retries_advance_scheduler_owned_counter(self) -> None:
+        """I16: GREEN scheduler advances caller-visible run counter per admission."""
+        orch = _orchestration()
+        run_counter: dict[str, int] = {"workflow_runs": 0}
+        orch.schedule_with_run_counter("wf-p804-001", _identity(), run_counter)
+        assert run_counter["workflow_runs"] == 1
+        orch.schedule_with_run_counter("wf-p804-001", _identity(), run_counter)
+        assert run_counter["workflow_runs"] == 2
+
+    def test_adversarial_p8_02_attempt_cap_never_reset(self) -> None:
+        """I16/I17: orchestration never resets/recaps the frozen P8-02 attempt cap."""
+        orch = _orchestration()
+        budget = _budget()
+        policy = p8_01.RetryPolicy(max_retries=1)
+        cap_before = p8_02.max_attempts(budget, policy)
+        observed: list[int] = []
+
+        class _RecordingCapDouble:
+            """Recording P8-02 double exposing its cap before/after scheduling."""
+
+            def __init__(self, cap: int) -> None:
+                self.cap = cap
+
+            def max_attempts(self) -> int:
+                observed.append(self.cap)
+                return self.cap
+
+        double = _RecordingCapDouble(cap=cap_before)
+        orch.schedule_with_attempt_double("wf-p804-001", _identity(), double)
+        assert double.cap == cap_before
+        assert observed and all(seen == cap_before for seen in observed)
+
 
 # ---------------------------------------------------------------------------
 # G — Workflow-level idempotency (I18)
@@ -357,6 +409,53 @@ class TestGIdempotency:
         orch = _orchestration()
         assert orch.resubmit_workflow("wf-p804-001").forked is False
         assert orch.live_workflows("wf-p804-001") <= 1
+
+    def test_g2_workflow_deadline_uses_injectable_clock(self) -> None:
+        """I14/I18: admit/timeout read injected monotonic ms; never wall-clock."""
+        orch = _orchestration()
+        ticks: list[int] = [0]
+
+        def _monotonic_ms() -> int:
+            return ticks[0]
+
+        first = orch.admit_with_clock("wf-p804-001", _identity(), _budget(), _monotonic_ms)
+        ticks[0] += 61_000
+        second = orch.admit_with_clock("wf-p804-001", _identity(), _budget(), _monotonic_ms)
+        assert (first.checked, second.checked) == orch.replay_with_clock(
+            "wf-p804-001", _identity(), _budget(), _monotonic_ms
+        )
+
+    def test_adversarial_injected_clock_advance_rejects_beyond_deadline(self) -> None:
+        """I14: injected-clock advance past deadline rejects; wall-clock ignores it."""
+        orch = _orchestration()
+        ticks: list[int] = [1_000_000]
+
+        def _monotonic_ms() -> int:
+            return ticks[0]
+
+        first = orch.admit_with_clock(
+            "wf-p804-clock-pin", _identity(), _budget(), _monotonic_ms
+        )
+        ticks[0] += 61_000
+        second = orch.admit_with_clock(
+            "wf-p804-clock-pin", _identity(), _budget(), _monotonic_ms
+        )
+        assert first.checked == "admit"
+        assert second.checked == "no-admit"
+
+    def test_adversarial_alias_resubmission_never_forks_single_live_run(self) -> None:
+        """I18: same workflow_id + different run alias still yields one live run."""
+        orch = _orchestration()
+        alias_payload = {"situation_id": "sit-p804-001", "company_id": "meridian-alias"}
+        alias = p8_01.RunIdentity(
+            run_id="run-p804-002",
+            input_fingerprint=p8_01.compute_input_fingerprint(alias_payload),
+        )
+        first = orch.resubmit_workflow("wf-p804-001", child_runs=[_identity()])
+        second = orch.resubmit_workflow("wf-p804-001", child_runs=[alias])
+        assert orch.live_workflows("wf-p804-001") == 1
+        assert orch.live_run_ids("wf-p804-001") == ("run-p804-001",)
+        assert second.workflow_id == first.workflow_id
 
 
 # ---------------------------------------------------------------------------
@@ -447,6 +546,26 @@ class TestJHandoffObservabilitySeam:
         assert handoff.rewritten_summary is None
         assert handoff.minted_authority == ()
 
+    def test_adversarial_handoff_memoization_smuggling_forbidden(self) -> None:
+        """I24: two distinct histories must never receive identical cached handoff."""
+        orch = _orchestration()
+        other_payload = {"situation_id": "sit-p804-001", "company_id": "meridian-other"}
+        other = p8_01.RunIdentity(
+            run_id="run-p804-002",
+            input_fingerprint=p8_01.compute_input_fingerprint(other_payload),
+        )
+        first = orch.handoff_workflow("wf-p804-001", history=[_identity()])
+        second = orch.handoff_workflow("wf-p804-001", history=[other])
+        assert second.payload != first.payload
+
+    def test_adversarial_handoff_free_text_carries_no_ranking_or_authority(self) -> None:
+        """I24: ranking/authority absent even from free-text; scan rendered text."""
+        orch = _orchestration()
+        handoff = orch.handoff_workflow("wf-p804-001")
+        rendered = str(handoff.payload).lower() + str(handoff.summary).lower()
+        for token in ("rank", "verdict", "authoriz", "approv", "gate-result", "permit"):
+            assert token not in rendered
+
     def test_adversarial_evaluation_schedules_work_forbidden(self) -> None:
         """I26: no eval output authorizes work, mints capability, or drives priority."""
         orch = _orchestration()
@@ -459,4 +578,4 @@ class TestJHandoffObservabilitySeam:
                 assert not node.module.startswith("agents.p7")
                 assert not node.module.startswith("agents.p6")
         for name in (*P7_TYPE_NAMES, *BANNED_AUTHORITY_NAMES):
-            assert name not in tree, f"RED: rival authority type: {name}"
+            assert name not in ast.dump(tree), f"RED: rival authority type: {name}"
