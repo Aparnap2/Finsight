@@ -1,0 +1,55 @@
+# Staging environment: API + PostgreSQL ONLY (boring stack).
+# No Temporal/Redis/queues/vector/graph/K8s. Fresh names/ports; never touches
+# claimops/ministack containers. Secrets are NEVER stored here: runtime keys
+# come from the git-ignored host .env via env_file; POSTGRES_URI is injected
+# with the +psycopg driver (psycopg2 is not installed in the image).
+# The stock Dockerfile omits agents/, finance/, finplatform/ (compute-only
+# image), so they are mounted read-only for the API process. No app code change.
+services:
+  staging-pg:
+    image: postgres:17-alpine
+    container_name: staging-finsight-pg
+    environment:
+      POSTGRES_DB: finsight
+      POSTGRES_USER: finsight
+      POSTGRES_HOST_AUTH_METHOD: trust # local staging only, no password/secret
+    ports:
+      - "5544:5432"
+    volumes:
+      - staging-finsight-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U finsight"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - staging-finsight-net
+
+  staging-api:
+    image: staging-finsight-api:staging-001
+    container_name: staging-finsight-api
+    ports:
+      - "8100:8000"
+    env_file:
+      - path: .env
+        required: true
+    environment:
+      POSTGRES_URI: postgresql+psycopg://finsight@staging-pg:5432/finsight
+      APP_ENV: staging
+      PYTHONPATH: /app
+    volumes:
+      - ./agents:/app/agents:ro
+      - ./finance:/app/finance:ro
+      - ./finplatform:/app/finplatform:ro
+    depends_on:
+      staging-pg:
+        condition: service_healthy
+    networks:
+      - staging-finsight-net
+
+volumes:
+  staging-finsight-pgdata:
+
+networks:
+  staging-finsight-net:
+    name: staging-finsight-net
