@@ -37,9 +37,12 @@ from uuid import uuid4
 import psycopg
 import pytest
 import sqlalchemy
+from alembic.config import Config
 from sqlalchemy import create_engine, text
 from sqlalchemy.pool import NullPool
 
+from alembic import command
+from finance.exceptions.models import Base as ExceptionsBase
 from shared.migrations import MigrationRunner, discover_migrations
 
 logger = logging.getLogger(__name__)
@@ -91,17 +94,54 @@ def engine() -> Generator[sqlalchemy.Engine, None, None]:
     engine.dispose()
 
 
-def _apply_migrations() -> None:
-    """Apply every migration file in version order via the structured runner.
+def _apply_alembic_base() -> None:
+    """Bring the alembic-tracked base schema to head (idempotent, version-tracked).
 
-    Uses a dedicated psycopg3 connection in autocommit mode; each file is
-    executed as one multi-statement ``ClientCursor`` call. Idempotency comes
-    from the ``schema_migrations`` version table; duplicate-object errors are
-    tolerated only to adopt a database migrated before tracking began.
+    File 011 needs base tables (e.g. ``webhook_events``) that exist only in the
+    alembic chain, so the alembic base must precede the SQL set on a fresh DB.
+    Honors the same DSN the fixture uses (``FINSIGHT_TEST_DSN``); alembic's
+    ``env.py`` otherwise defaults to ``localhost:5432``. Safe to re-run.
     """
+    repo_root = Path(__file__).resolve().parents[2]
+    cfg = Config(str(repo_root / "alembic.ini"))
+    cfg.set_main_option("sqlalchemy.url", DSN)
+    command.upgrade(cfg, "head")
+
+
+def _apply_migrations() -> None:
+    """Apply alembic base, then every migration file in version order.
+
+    Fresh-DB order is load-bearing: ``alembic upgrade head`` first (base
+    tables such as ``webhook_events``), then SQL 000-010, then the ORM
+    ``create_all`` for the ``exceptions``/``exception_audits`` tables (created
+    only by ``finance.exceptions.models.Base``), then 011 which enables RLS on
+    them. Uses a dedicated psycopg3 connection in autocommit mode; each file is
+    executed as one multi-statement ``ClientCursor`` call. Idempotency comes
+    from alembic's version table, the ``schema_migrations`` version table, and
+    ``create_all`` semantics; duplicate-object errors are tolerated only to
+    adopt a database migrated before tracking began.
+    """
+    _apply_alembic_base()
     migrations = discover_migrations(MIGRATIONS_DIR)
+    pre = [m for m in migrations if m.version <= "010"]
+    post = [m for m in migrations if m.version > "010"]
+    results = []
     with psycopg.connect(_psycopg_dsn(), autocommit=True) as conn:
-        results = MigrationRunner(conn).apply(migrations)
+        results.extend(MigrationRunner(conn).apply(pre))
+    orm_engine = create_engine(DSN, isolation_level="AUTOCOMMIT", poolclass=NullPool)
+    try:
+        ExceptionsBase.metadata.create_all(orm_engine)
+        # Alembic-first shadowing: alembic creates audit_logs without the
+        # 000_init DEFAULT NOW() on created_at (000's CREATE TABLE IF NOT
+        # EXISTS becomes a no-op), while 002 still sets NOT NULL — so the
+        # probe INSERT omitting created_at would fail. Restore the default
+        # the SQL chain owns; idempotent, fixture bootstrap only.
+        with orm_engine.connect() as conn:
+            conn.execute(text("ALTER TABLE audit_logs ALTER COLUMN created_at SET DEFAULT NOW()"))
+    finally:
+        orm_engine.dispose()
+    with psycopg.connect(_psycopg_dsn(), autocommit=True) as conn:
+        results.extend(MigrationRunner(conn).apply(post))
     counts: dict[str, int] = {}
     for result in results:
         counts[result.status] = counts.get(result.status, 0) + 1
@@ -149,16 +189,24 @@ def probe_rows(engine: sqlalchemy.Engine) -> Generator[tuple[str, str], None, No
                 "INSERT INTO audit_logs (id, tenant_id, period, event_type, event_data) "
                 "VALUES (:id, :tenant_id, :period, :event_type, '{}'::jsonb)"
             ),
-            {"id": row_a, "tenant_id": ACME_TENANT_ID, "period": PROBE_PERIOD,
-             "event_type": PROBE_EVENT_TYPE},
+            {
+                "id": row_a,
+                "tenant_id": ACME_TENANT_ID,
+                "period": PROBE_PERIOD,
+                "event_type": PROBE_EVENT_TYPE,
+            },
         )
         conn.execute(
             text(
                 "INSERT INTO audit_logs (id, tenant_id, period, event_type, event_data) "
                 "VALUES (:id, :tenant_id, :period, :event_type, '{}'::jsonb)"
             ),
-            {"id": row_b, "tenant_id": GLOBEX_TENANT_ID, "period": PROBE_PERIOD,
-             "event_type": PROBE_EVENT_TYPE},
+            {
+                "id": row_b,
+                "tenant_id": GLOBEX_TENANT_ID,
+                "period": PROBE_PERIOD,
+                "event_type": PROBE_EVENT_TYPE,
+            },
         )
     yield row_a, row_b
 
@@ -257,13 +305,33 @@ def test_d_superuser_bypasses_rls(engine: sqlalchemy.Engine, probe_rows: tuple[s
 def test_tenant_ids_populated_across_boundary_tables(engine: sqlalchemy.Engine) -> None:
     """010 backfill left no NULL tenant_id rows across the 27 tenant-scoped tables."""
     tables = [
-        "review_decisions", "action_items", "commentary_versions", "audit_logs",
-        "pipeline_runs", "assertions_db", "tool_result_cache", "data_quality_snapshots",
-        "policy_decision_logs", "bridge_analysis_results", "variance_snapshots",
-        "root_cause_findings_db", "entities", "gl_accounts", "trial_balance",
-        "budget_lines", "forecast_lines", "actuals", "headcount_data", "vendor_invoices",
-        "sales_pipeline", "agent_runs", "variances", "root_causes", "commentary_drafts",
-        "scenarios", "review_logs",
+        "review_decisions",
+        "action_items",
+        "commentary_versions",
+        "audit_logs",
+        "pipeline_runs",
+        "assertions_db",
+        "tool_result_cache",
+        "data_quality_snapshots",
+        "policy_decision_logs",
+        "bridge_analysis_results",
+        "variance_snapshots",
+        "root_cause_findings_db",
+        "entities",
+        "gl_accounts",
+        "trial_balance",
+        "budget_lines",
+        "forecast_lines",
+        "actuals",
+        "headcount_data",
+        "vendor_invoices",
+        "sales_pipeline",
+        "agent_runs",
+        "variances",
+        "root_causes",
+        "commentary_drafts",
+        "scenarios",
+        "review_logs",
     ]
     with engine.connect() as conn:
         for table in tables:
