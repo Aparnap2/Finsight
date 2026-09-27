@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 
 from apps.api.approvals import router as approvals_router
+from apps.api.execution_routes import router as execution_router
 from apps.api.middleware import TenantAuthMiddleware
 from apps.api.routes import compute_router, router
 from apps.api.webhooks import router as webhook_router
@@ -11,3 +12,4 @@ app.include_router(router, prefix="/api/v1")
 app.include_router(compute_router)
 app.include_router(webhook_router)
 app.include_router(approvals_router)
+app.include_router(execution_router)

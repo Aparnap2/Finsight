@@ -237,3 +237,78 @@ class JobStatusResponse(BaseModel):
     duration_ms: int | None = None
     error: dict[str, Any] | None = None
     artifact: dict[str, Any] | None = None
+
+
+# ── Controlled execution schemas (Phase 5: POST /execute, POST /verify) ──
+
+
+class ExecuteRequest(BaseModel):
+    """Decision coordinates plus execution binding; money/action never accepted.
+
+    Unknown fields (amount/action) are rejected with 422 (``extra="forbid"``)
+    so callers can never smuggle money past policy — the route reads money
+    from the pinned proposal only. Mirrors ``DecideRequest`` coordinates.
+    """
+
+    model_config = {"extra": "forbid"}
+
+    exception_id: str = Field(min_length=1)
+    proposal_id: str = Field(min_length=1)
+    proposal_version: int = Field(ge=1)
+    proposal_content_hash: str = Field(min_length=1)
+    approver_id: str = Field(min_length=1)
+    decision: str = Field(min_length=1)
+    idempotency_key: str = Field(min_length=1)
+    execution_idempotency_key: str = Field(min_length=1)
+    expected_state_version: int = Field(ge=1)
+    situation_id: str = Field(min_length=1)
+    company_id: str = "meridian"
+    scope_batch: str | None = None
+    advisory_status: str = "none"
+
+
+class VerificationSummary(BaseModel):
+    """Verification outcome carried inside an execute response."""
+
+    verdict: str
+    reason_code: str | None = None
+    execution_id: str
+    situation_id: str
+
+
+class ExecuteResponse(BaseModel):
+    """Controlled-path acknowledgement: approval, execution, verification."""
+
+    status: str
+    execution_id: str
+    approval_id: str
+    authorization_id: str
+    exception_id: str
+    stages: list[str] = []
+    deduplicated: bool = False
+    verification: VerificationSummary | None = None
+
+
+class VerifyRequest(BaseModel):
+    """Handoff coordinates for standalone verification; no execution occurs."""
+
+    model_config = {"extra": "forbid"}
+
+    execution_id: str = Field(min_length=1)
+    authorization_id: str = Field(min_length=1)
+    situation_id: str = Field(min_length=1)
+    company_id: str = "meridian"
+    proposal_hash: str = Field(min_length=1)
+    proposal_version: int = Field(ge=0)
+    batch_id: str = Field(min_length=1)
+    control_total: MoneyDecimal
+    accepted_total: MoneyDecimal
+
+
+class VerifyResponse(BaseModel):
+    """Verification report acknowledgement."""
+
+    execution_id: str
+    situation_id: str
+    verdict: str
+    reason_code: str | None = None
