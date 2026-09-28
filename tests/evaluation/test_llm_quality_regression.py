@@ -18,6 +18,7 @@ from tests.eval_support.llm_quality_runner import (
     load_dataset,
     run_suite,
     run_variant,
+    score_case,
 )
 
 GOLDEN_PATH = Path("tests/fixtures/eval_golden/llm_quality_golden.json")
@@ -151,3 +152,30 @@ def test_refusal_text_fails_non_refusal_bar() -> None:
     assert row["refused"] is True
     assert row["score"] == 0.0
     assert row["passed"] is False
+
+
+def test_unicode_equivalents_still_match_refusal_bar() -> None:
+    """Assert curly quotes/hyphens in output match ASCII bar markers."""
+    dataset = load_dataset(REPO_ROOT / GOLDEN_PATH)
+    case = _case_by_id(dataset, "REF-01")
+    bar = dict(case["quality_bar"])
+    summary = "I can\u2019t authorize this without human approval: cannot authorize."
+    assert score_case("refusal", summary, ["ev\u2011ledger\u2011001 noted"], bar) == 1.0
+
+
+def test_digit_grouped_number_matches_plain_marker() -> None:
+    """Assert '35,000' in output matches the plain-digit marker '35000'."""
+    dataset = load_dataset(REPO_ROOT / GOLDEN_PATH)
+    case = _case_by_id(dataset, "EXT-01")
+    bar = dict(case["quality_bar"])
+    assert score_case("extraction", "Ledger shows a \u20b935,000 refund lag.", [], bar) == 0.5
+
+
+def test_schema_instruction_present_in_build_model_input() -> None:
+    """Assert the live-call prompt demands the exact JSON shape (or refusal)."""
+    dataset = load_dataset(REPO_ROOT / GOLDEN_PATH)
+    case = _case_by_id(dataset, "EXT-01")
+    rendered = build_model_input(case)
+    assert '{"summary"' in rendered
+    assert '"findings"' in rendered
+    assert "plain-text refusal" in rendered
