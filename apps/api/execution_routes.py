@@ -63,6 +63,7 @@ from finance.execution.executor import Executor
 from finance.legacy_execution.handoff import ExecutionHandoff
 from finance.policy.execution_policy import DEFAULT_AMOUNT_THRESHOLD
 from finance.policy.execution_policy import check as policy_check
+from finance.proposals.staging_seed import rebuild_proposal_for
 from finance.verification.audit import AuditLog
 from finance.verification.orchestrator import (
     R1Observation,
@@ -377,6 +378,14 @@ async def execute_controlled(
         logger.warning("Cross-tenant execute denied exception=%s.", body.exception_id)
         return _refused(403, "CROSS_TENANT", "Cross-tenant denied")
     proposal = proposals.get(body.proposal_id)
+    if proposal is None:
+        # Staging seam: the lookup is process-local with no persistence, so
+        # rebuild the seeded exception's pinned v1 via the frozen builder.
+        # Anything else (or a coordinate mismatch below) keeps refusing.
+        rebuilt = rebuild_proposal_for(snapshot)
+        if rebuilt is not None and rebuilt.proposal_id == body.proposal_id:
+            proposals[body.proposal_id] = rebuilt
+            proposal = rebuilt
     if proposal is None:
         return _refused(422, "PROPOSAL_UNKNOWN", f"Unknown proposal {body.proposal_id}")
     stages.append("p6_entry")
