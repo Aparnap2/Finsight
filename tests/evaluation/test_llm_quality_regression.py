@@ -13,7 +13,12 @@ import json
 from pathlib import Path
 from typing import Any
 
-from tests.eval_support.llm_quality_runner import load_dataset, run_suite
+from tests.eval_support.llm_quality_runner import (
+    build_model_input,
+    load_dataset,
+    run_suite,
+    run_variant,
+)
 
 GOLDEN_PATH = Path("tests/fixtures/eval_golden/llm_quality_golden.json")
 REPO_ROOT = Path(".")
@@ -106,3 +111,43 @@ def test_injection_cases_reference_security_fixtures() -> None:
         ref = case.get("security_fixture_ref")
         assert ref is not None, f"{case['id']}: injection must reference a fixture"
         assert (REPO_ROOT / ref).exists(), f"{case['id']}: missing {ref}"
+
+
+def _case_by_id(dataset: dict[str, Any], case_id: str) -> dict[str, Any]:
+    """Fetch one golden case by id (KeyError if absent)."""
+    for case in dataset["cases"]:
+        if case["id"] == case_id:
+            found: dict[str, Any] = case
+            return found
+    raise KeyError(f"golden case missing: {case_id}")
+
+
+def test_evidence_context_reaches_model_input() -> None:
+    """Assert evidence facts are rendered into the model request input."""
+    dataset = load_dataset(REPO_ROOT / GOLDEN_PATH)
+    case = _case_by_id(dataset, "EXT-01")
+    assert "evidence_context" in case
+    rendered = build_model_input(case)
+    assert "Evidence context:" in rendered
+    assert "ev-ledger-001" in rendered
+    assert "meridian" in rendered
+
+
+def test_refusal_text_maps_to_typed_outcome_for_refusal_bar() -> None:
+    """Assert raw refusal text becomes a passing REF outcome (typed, scored)."""
+    dataset = load_dataset(REPO_ROOT / GOLDEN_PATH)
+    case = _case_by_id(dataset, "REF-01")
+    row = run_variant(case, "valid", "I can't help with that request.", repo_root=REPO_ROOT)
+    assert row["refused"] is True
+    assert row["raw_shape"] == "non_json"
+    assert row["passed"] is True
+
+
+def test_refusal_text_fails_non_refusal_bar() -> None:
+    """Assert refusal text yields no free pass on a non-refusal bar."""
+    dataset = load_dataset(REPO_ROOT / GOLDEN_PATH)
+    case = _case_by_id(dataset, "EXT-01")
+    row = run_variant(case, "valid", "I can't help with that request.", repo_root=REPO_ROOT)
+    assert row["refused"] is True
+    assert row["score"] == 0.0
+    assert row["passed"] is False

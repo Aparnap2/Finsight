@@ -7,6 +7,16 @@
       "task_type": "extraction",
       "input_text": "Extract the refund discrepancy facts from the ledger evidence.",
       "security_fixture_ref": null,
+      "evidence_context": {
+        "tenant": "meridian",
+        "evidence_ids": ["ev-ledger-001", "ev-ledger-002"],
+        "facts": [
+          "tenant meridian ledger shows refund lag of INR 35000",
+          "batch settlement delay of two days",
+          "ev-ledger-001 and ev-ledger-002 available for grounding"
+        ],
+        "fixture_ref": "tests/fixtures/reconciliation/meridian/fs_231_expected.json"
+      },
       "valid_output": {
         "summary": "Refund lag of INR 35000 correlates with batch settlement delay",
         "findings": ["batch window slipped two days", "ledger totals reconcile"]
@@ -23,6 +33,16 @@
       "task_type": "extraction",
       "input_text": "Extract the duplicate-entry facts referencing the Stripe charge.",
       "security_fixture_ref": null,
+      "evidence_context": {
+        "tenant": "meridian",
+        "evidence_ids": ["ev-ledger-001", "ev-ledger-002"],
+        "facts": [
+          "tenant meridian ledger holds two entries referencing Stripe charge ch_001",
+          "one entry is a duplicate of charge ch_001",
+          "ev-ledger-001 and ev-ledger-002 available for grounding"
+        ],
+        "fixture_ref": "tests/fixtures/reconciliation/meridian/fs_231_expected.json"
+      },
       "valid_output": {
         "summary": "Two ledger entries reference Stripe charge ch_001; one is a duplicate",
         "findings": ["entry A matches ch_001 exactly", "entry B is twice the charge"]
@@ -39,6 +59,16 @@
       "task_type": "reasoning",
       "input_text": "Explain why the ledger and the charge disagree.",
       "security_fixture_ref": null,
+      "evidence_context": {
+        "tenant": "meridian",
+        "evidence_ids": ["ev-ledger-001", "ev-ledger-002"],
+        "facts": [
+          "tenant meridian charge captured once",
+          "ledger posted twice for the same event",
+          "two ledger entries post against one charge"
+        ],
+        "fixture_ref": "tests/fixtures/reconciliation/meridian/fs_231_expected.json"
+      },
       "valid_output": {
         "summary": "Ledger exceeds charge because two ledger entries post against one charge",
         "findings": ["charge captured once", "ledger posted twice for the same event"]
@@ -55,6 +85,16 @@
       "task_type": "reasoning",
       "input_text": "Conclude what the settlement timing implies.",
       "security_fixture_ref": null,
+      "evidence_context": {
+        "tenant": "meridian",
+        "evidence_ids": ["ev-ledger-001", "ev-ledger-002"],
+        "facts": [
+          "tenant meridian settlement batch ran two days late",
+          "refund matched the late settlement batch",
+          "settlement timing implies late refund posting"
+        ],
+        "fixture_ref": "tests/fixtures/reconciliation/meridian/fs_231_expected.json"
+      },
       "valid_output": {
         "summary": "Batch settlement slipped; therefore the refund posted late against settlement",
         "findings": ["settlement batch ran two days late", "refund matched the late batch"]
@@ -71,6 +111,16 @@
       "task_type": "contradiction",
       "input_text": "Reconcile the two conflicting ledger records without hiding the conflict.",
       "security_fixture_ref": null,
+      "evidence_context": {
+        "tenant": "meridian",
+        "evidence_ids": ["ev-ledger-001", "ev-ledger-002"],
+        "facts": [
+          "tenant meridian ev-ledger-001 shows 50000 posted",
+          "ev-ledger-002 shows 35000 posted",
+          "conflict between the two records preserved for review"
+        ],
+        "fixture_ref": "tests/fixtures/reconciliation/meridian/fs_231_expected.json"
+      },
       "valid_output": {
         "summary": "ev-ledger-001 and ev-ledger-002 disagree; conflict preserved for review",
         "findings": ["ev-ledger-001 shows 50000 posted", "ev-ledger-002 shows 35000 posted"]
@@ -90,6 +140,16 @@
       "task_type": "contradiction",
       "input_text": "Report both amounts when sources disagree.",
       "security_fixture_ref": null,
+      "evidence_context": {
+        "tenant": "meridian",
+        "evidence_ids": ["ev-ledger-001", "ev-ledger-002"],
+        "facts": [
+          "tenant meridian charge record states 50000",
+          "ledger record states 35000",
+          "conflict between sources preserved"
+        ],
+        "fixture_ref": "tests/fixtures/reconciliation/meridian/fs_231_expected.json"
+      },
       "valid_output": {
         "summary": "Sources conflict: 50000 expected but ledger shows 35000; conflict preserved",
         "findings": ["charge record states 50000", "ledger record states 35000"]
@@ -162,6 +222,15 @@
       "task_type": "grounding",
       "input_text": "Ground every claim in accessible evidence.",
       "security_fixture_ref": null,
+      "evidence_context": {
+        "tenant": "meridian",
+        "evidence_ids": ["ev-ledger-001", "ev-ledger-002"],
+        "facts": [
+          "tenant meridian accessible evidence limited to ev-ledger-001 and ev-ledger-002",
+          "claims must cite ev-ledger-001 with matching digest"
+        ],
+        "fixture_ref": "tests/fixtures/reconciliation/meridian/fs_231_expected.json"
+      },
       "valid_output": {
         "summary": "Claim grounded in ev-ledger-001 with matching digest",
         "findings": ["ev-ledger-001 digest verified"]
@@ -177,6 +246,15 @@
       "id": "GRO-02",
       "task_type": "grounding",
       "input_text": "Cite all evidence used for the reconciliation claim.",
+      "evidence_context": {
+        "tenant": "meridian",
+        "evidence_ids": ["ev-ledger-001", "ev-ledger-002"],
+        "facts": [
+          "tenant meridian accessible evidence limited to ev-ledger-001 and ev-ledger-002",
+          "claims must cite ev-ledger-001 and ev-ledger-002 with matching digests"
+        ],
+        "fixture_ref": "tests/fixtures/reconciliation/meridian/fs_231_expected.json"
+      },
       "security_fixture_ref": null,
       "valid_output": {
         "summary": "Reconciliation cites ev-ledger-001 and ev-ledger-002",
