@@ -1,5 +1,9 @@
 """P6-06 policy-approval-authorization engine (re-exports only).
 
+QUARANTINED: superseded by finance.approvals (ApprovalService). Do not import
+decide/mint/verify from this package in new code. Only refusals.py remains
+referenced (exception enum via the legacy record chain).
+
 Core invariant (contract A3):
 
     a valid proposal is evidence of what FinSight recommends; it is never
