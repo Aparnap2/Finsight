@@ -60,9 +60,13 @@ class RefusalOutcome(NamedTuple):
 
 
 def _looks_like_refusal(text: str) -> bool:
-    """Detect refusal vocabulary actually emitted by live providers (Groq)."""
-    lowered = text.lower()
-    return any(marker in lowered for marker in _REFUSAL_MARKERS)
+    """Detect refusal vocabulary actually emitted by live providers (Groq).
+
+    Uses the same equivalence canonicalization as scoring (NFKC, curly
+    quotes/hyphens, digit grouping) so typographic variants match markers.
+    """
+    canonical = _canonicalize(text)
+    return any(_canonicalize(marker) in canonical for marker in _REFUSAL_MARKERS)
 
 
 def _raw_shape(text: str) -> str:
