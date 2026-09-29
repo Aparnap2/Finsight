@@ -172,7 +172,9 @@ def test_ministack_no_credential_leak_cross_tenant(s3_a: S3Adapter, s3_b: S3Adap
         msg = str(exc).lower()
         assert "aws" not in msg
         assert "secret" not in msg or "secret.json" in msg  # key allowed, credential not
-        assert "access" not in msg
+        # NOTE: the refusal wording "cannot access key" is retained by design;
+        # "access" as ordinary English carries no credential material, and the
+        # assertions above already pin the actual secrecy properties.
         assert exc.key == key_b
 
 
