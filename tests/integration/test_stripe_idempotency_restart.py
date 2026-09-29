@@ -32,6 +32,8 @@ import sqlalchemy
 from sqlalchemy import create_engine, text
 from sqlalchemy.pool import NullPool
 
+from tests.integration.test_tenant_isolation import _apply_migrations
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_DSN = "postgresql+psycopg://finsight:finsight@localhost:5432/finsight"
@@ -68,6 +70,7 @@ def engine() -> Generator[sqlalchemy.Engine, None, None]:
     eng = create_engine(DSN, isolation_level="AUTOCOMMIT", poolclass=NullPool)
     if not _db_reachable(eng):
         pytest.skip("integration database not reachable")
+    _apply_migrations()  # base schema (audit_logs etc.); idempotent, shared with tenant suite
     with eng.connect() as conn:
         conn.execute(
             text(
@@ -116,13 +119,17 @@ def _ingest(
     """
     incoming = _payload_hash(payload)
     with engine.connect() as conn:
-        existing = conn.execute(
-            text(
-                f"SELECT payload_hash, result_net FROM {PROBE_TABLE} "
-                "WHERE idempotency_key = :key"
-            ),
-            {"key": idempotency_key},
-        ).mappings().first()
+        existing = (
+            conn.execute(
+                text(
+                    f"SELECT payload_hash, result_net FROM {PROBE_TABLE} "
+                    "WHERE idempotency_key = :key"
+                ),
+                {"key": idempotency_key},
+            )
+            .mappings()
+            .first()
+        )
         if existing is not None:
             if existing["payload_hash"] != incoming:
                 conn.execute(
@@ -130,7 +137,7 @@ def _ingest(
                         "INSERT INTO audit_logs "
                         "(id, tenant_id, period, event_type, event_data) "
                         "VALUES (:id, :tenant_id, :period, :event_type, "
-                        ":event_data::jsonb)"
+                        "CAST(:event_data AS JSONB))"
                     ),
                     {
                         "id": f"stripe_conflict_{uuid4().hex[:8]}",
