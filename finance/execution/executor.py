@@ -33,7 +33,7 @@ from sqlalchemy.orm import Session
 
 from finance.accounting.commands import CorrectingEntryCommand, JournalLine
 from finance.accounting.errors import AccountingError, EntryNotFoundError, TransientError
-from finance.exceptions.errors import ConcurrencyConflictError
+from finance.exceptions.errors import ConcurrencyConflictError, IllegalTransitionError
 from finance.exceptions.models import ExceptionAuditRow, ExceptionRow
 from finance.exceptions.repository import ExceptionRepository
 from finance.exceptions.states import ExceptionState
@@ -55,6 +55,7 @@ from finance.reconciliation.models import (
 )
 from finance.reconciliation.reconciler import reconcile
 from finance.reconciliation.tolerances import ReconciliationTolerance
+from shared.safety.errors import PersistenceError
 from shared.safety.execution_guard import ExecutionCommand, ExecutionGuard
 from shared.safety.idempotency import IdempotencyStore
 
@@ -154,6 +155,33 @@ class Executor:
         ExecutionBase.metadata.create_all(engine)
 
     def run(
+        self,
+        approved_snapshot: Any,
+        proposal: Any,
+        approval: Any,
+        idempotency_key: str,
+    ) -> ExecutionResult:
+        """Control-plane entry: map typed infra/domain errors to a typed result.
+
+        :class:`PersistenceError`, :class:`ConcurrencyConflictError`, and
+        :class:`IllegalTransitionError` never escape to the caller as raw
+        tracebacks; they become a pre-write ``REJECTED`` result with the
+        stable ``execution_id`` for the idempotency key. The database
+        remains the source of truth; a retry resumes from persisted
+        state (intent row → crash-recovery, terminal row → replay).
+        """
+        try:
+            return self._run(approved_snapshot, proposal, approval, idempotency_key)
+        except (ConcurrencyConflictError, IllegalTransitionError) as exc:
+            exc_id = str(getattr(approved_snapshot, "exception_id", "") or "")
+            logger.warning("run refused key=%s reason=%s", idempotency_key, type(exc).__name__)
+            return self._rejected(execution_id_for(idempotency_key), idempotency_key, exc_id)
+        except PersistenceError as exc:
+            exc_id = str(getattr(approved_snapshot, "exception_id", "") or "")
+            logger.error("run persistence failure key=%s: %s", idempotency_key, exc)
+            return self._rejected(execution_id_for(idempotency_key), idempotency_key, exc_id)
+
+    def _run(
         self,
         approved_snapshot: Any,
         proposal: Any,
