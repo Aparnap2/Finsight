@@ -71,19 +71,23 @@ _MAX_ADAPTER_WRITES = 3
 _ZERO_TOLERANCE = ReconciliationTolerance(absolute=Decimal("0"), percent=Decimal("0"))
 
 
-def execution_id_for(idempotency_key: str) -> str:
-    """Derive a stable execution id from the caller-supplied key.
+def execution_id_for(tenant_id: str, idempotency_key: str) -> str:
+    """Derive a stable execution id from the caller-supplied key and tenant.
 
     Args:
+        tenant_id: Owning tenant of the security boundary (non-empty).
         idempotency_key: Caller-supplied idempotency key (non-empty).
 
     Returns:
-        ``exec_<16 hex>`` stable for identical keys, so replays address
-        the same record instead of minting duplicates.
+        ``exec_<16 hex>`` stable for identical (tenant, key), so replays
+        address the same record instead of minting duplicates, and two
+        tenants' identical keys do not collide on the id.
     """
+    if not isinstance(tenant_id, str) or not tenant_id.strip():
+        raise ValueError("Field 'tenant_id' must be a non-empty string.")
     if not isinstance(idempotency_key, str) or not idempotency_key.strip():
         raise ValueError("Field 'idempotency_key' must be a non-empty string.")
-    digest = hashlib.sha256(idempotency_key.encode("utf-8")).hexdigest()
+    digest = hashlib.sha256(f"{tenant_id}|{idempotency_key}".encode()).hexdigest()
     return f"exec_{digest[:16]}"
 
 
@@ -174,12 +178,16 @@ class Executor:
             return self._run(approved_snapshot, proposal, approval, idempotency_key)
         except (ConcurrencyConflictError, IllegalTransitionError) as exc:
             exc_id = str(getattr(approved_snapshot, "exception_id", "") or "")
+            tenant_id = str(getattr(approved_snapshot, "tenant_id", "") or "")
             logger.warning("run refused key=%s reason=%s", idempotency_key, type(exc).__name__)
-            return self._rejected(execution_id_for(idempotency_key), idempotency_key, exc_id)
+            exe_id = execution_id_for(tenant_id, idempotency_key)
+            return self._rejected(exe_id, idempotency_key, exc_id)
         except PersistenceError as exc:
             exc_id = str(getattr(approved_snapshot, "exception_id", "") or "")
+            tenant_id = str(getattr(approved_snapshot, "tenant_id", "") or "")
             logger.error("run persistence failure key=%s: %s", idempotency_key, exc)
-            return self._rejected(execution_id_for(idempotency_key), idempotency_key, exc_id)
+            exe_id = execution_id_for(tenant_id, idempotency_key)
+            return self._rejected(exe_id, idempotency_key, exc_id)
 
     def _run(
         self,
@@ -204,13 +212,14 @@ class Executor:
             verification break (exception ``ESCALATED``), ``REJECTED`` +
             ``MISMATCH`` on any pre-write refusal (no state change).
         """
-        execution_id = execution_id_for(idempotency_key)
+        tenant_id = str(getattr(approved_snapshot, "tenant_id", ""))
+        execution_id = execution_id_for(tenant_id, idempotency_key)
         exception_id = str(getattr(approved_snapshot, "exception_id", ""))
 
         # (1) Execution-record replay fast-path: a prior row owns the key.
         # Runs BEFORE the APPROVED state gate so crash restarts passing a
         # stale APPROVED snapshot against CLOSED rows return the prior.
-        prior = self._load_row(idempotency_key)
+        prior = self._load_row(tenant_id, idempotency_key)
         if prior is not None and prior.result is not None and prior.post_verify is not None:
             logger.info("execution replay key=%s id=%s", idempotency_key, prior.execution_id)
             return self._result_from_row(prior)
@@ -218,7 +227,7 @@ class Executor:
         payload_hash = str(getattr(proposal, "content_hash", ""))
 
         # (2) Store conflict check: same key, differing hash performs no write.
-        seen_hash = self._store.payload_hash_for(idempotency_key)
+        seen_hash = self._store.payload_hash_for(tenant_id, idempotency_key)
         if seen_hash is not None and seen_hash != payload_hash:
             logger.warning("idempotency conflict key=%s: no write performed", idempotency_key)
             return self._rejected(execution_id, idempotency_key, exception_id)
@@ -239,7 +248,7 @@ class Executor:
                 if entry is None:
                     return self._mark_failed(live, execution_id, idempotency_key, None)
                 entry_id = str(entry.entry_id)
-            self._update_row(idempotency_key, external_reference=entry_id)
+            self._update_row(tenant_id, idempotency_key, external_reference=entry_id)
             if command is None and entry_id is None:
                 return self._mark_failed(live, execution_id, idempotency_key, None)
             if live.state is ExceptionState.EXECUTING:
@@ -284,7 +293,7 @@ class Executor:
             return self._rejected(execution_id, idempotency_key, fresh.exception_id)
 
         # (7) Bind the key to this payload hash (identical re-record is a no-op).
-        self._store.record(idempotency_key, payload_hash)
+        self._store.record(tenant_id, idempotency_key, payload_hash)
 
         command = self._build_command(fresh, proposal, execution_id)
 
@@ -305,7 +314,7 @@ class Executor:
             return self._mark_failed(live, execution_id, idempotency_key, None)
 
         # (10) Persist the booked write outcome before verification.
-        self._update_row(idempotency_key, external_reference=str(entry.entry_id))
+        self._update_row(tenant_id, idempotency_key, external_reference=str(entry.entry_id))
 
         # (11) POST_VERIFYING + COMMIT: verification runs inside this state.
         live = self._cas(live, ExceptionState.POST_VERIFYING, actor="executor")
@@ -333,13 +342,14 @@ class Executor:
         """
         if live.state is ExceptionState.EXECUTING:
             live = self._cas(live, ExceptionState.POST_VERIFYING, actor="executor")
-        row = self._load_row(idempotency_key)
+        row = self._load_row(live.tenant_id, idempotency_key)
         entry_id = row.external_reference if row is not None else None
         observed = self._poll(entry_id) if entry_id else None
         matched = self._post_verify(proposal, observed)
         if matched:
             # (14a) MATCHED -> EXECUTION_VERIFIED -> CLOSED.
             self._update_row(
+                live.tenant_id,
                 idempotency_key,
                 result=ExecutionResultStatus.SUCCEEDED.value,
                 post_verify=PostVerifyVerdict.MATCHED.value,
@@ -378,6 +388,7 @@ class Executor:
             The frozen ``FAILED`` + ``MISMATCH`` result.
         """
         self._update_row(
+            live.tenant_id,
             idempotency_key,
             result=ExecutionResultStatus.FAILED.value,
             external_reference=entry_id,
@@ -667,6 +678,7 @@ class Executor:
             )
             session.add(
                 ExecutionRow(
+                    tenant_id=fresh.tenant_id,
                     idempotency_key=key,
                     execution_id=execution_id,
                     exception_id=fresh.exception_id,
@@ -806,10 +818,10 @@ class Executor:
             session.commit()
 
     @persist_guarded
-    def _load_row(self, key: str) -> ExecutionRow | None:
+    def _load_row(self, tenant_id: str, key: str) -> ExecutionRow | None:
         """Read one execution record by key (replay/resume path)."""
         with Session(self._engine) as session:
-            row = session.get(ExecutionRow, key)
+            row = session.get(ExecutionRow, (tenant_id, key))
             if row is None:
                 return None
             session.expunge(row)
@@ -818,6 +830,7 @@ class Executor:
     @persist_guarded
     def _update_row(
         self,
+        tenant_id: str,
         key: str,
         *,
         result: str | None = None,
@@ -826,7 +839,7 @@ class Executor:
     ) -> None:
         """Update outcome columns on one execution record (no-op if absent)."""
         with Session(self._engine) as session:
-            row = session.get(ExecutionRow, key)
+            row = session.get(ExecutionRow, (tenant_id, key))
             if row is None:
                 logger.warning("execution row missing key=%s: skip update", key)
                 return
