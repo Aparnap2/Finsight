@@ -92,7 +92,7 @@ class TestAdapterFailureSeams:
 
         _Row.__table__.drop(engine)  # type: ignore[arg-type]
         with pytest.raises(PersistenceError):
-            executor._update_row("key-fi-row", external_reference="x")
+            executor._update_row("tenant-acme", "key-fi-row", external_reference="x")
 
     def test_local_persist_failure_after_adapter_write_recovers_without_second_write(self) -> None:
         engine = _engine()
