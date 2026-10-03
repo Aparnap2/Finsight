@@ -89,3 +89,98 @@ class TestReasoningHarness:
         state = ReasoningState(query="test")
         result = harness.run(state)
         assert result.state.loop_decision in ("finalize", "continue")
+
+
+class _StubNode:
+    def __init__(
+        self, name: str, updates: dict | None = None, error: Exception | None = None
+    ) -> None:
+        self._name = name
+        self._updates = updates or {}
+        self._error = error
+
+    def execute(self, state):  # type: ignore[no-untyped-def]
+        from finance.cognition.state.node import NodeResult
+
+        if self._error is not None:
+            raise self._error
+        return NodeResult(
+            node_name=self._name,
+            state_updates=self._updates,
+            confidence=0.9,
+            message="stub",
+        )
+
+
+class TestReasoningHarnessIntegrity:
+    def test_finalize_reports_success_and_stop_reason(self) -> None:
+        from finance.cognition.harness import ReasoningHarness
+        from finance.cognition.registry import NodeRegistry
+        from finance.cognition.state.models import ReasoningState
+
+        registry = NodeRegistry()
+        registry.register("planner", _StubNode("planner", {"loop_decision": "finalize"}))
+        registry.configure_pipeline(["planner"])
+        result = ReasoningHarness(registry=registry, max_iterations=2).run(
+            ReasoningState(query="test")
+        )
+        assert result.success is True
+        assert result.stop_reason == "finalize"
+
+    def test_max_iterations_exhausted_is_not_success(self) -> None:
+        from finance.cognition.harness import ReasoningHarness
+        from finance.cognition.registry import NodeRegistry
+        from finance.cognition.state.models import ReasoningState
+
+        registry = NodeRegistry()
+        registry.register("planner", _StubNode("planner", {"loop_decision": "continue"}))
+        registry.configure_pipeline(["planner"])
+        result = ReasoningHarness(registry=registry, max_iterations=2).run(
+            ReasoningState(query="test", max_iterations=2)
+        )
+        assert result.success is False
+        assert result.stop_reason == "max_iterations_exhausted"
+
+    def test_missing_node_fails_closed(self) -> None:
+        from finance.cognition.harness import ReasoningHarness
+        from finance.cognition.registry import NodeRegistry
+        from finance.cognition.state.models import ReasoningState
+
+        registry = NodeRegistry()
+        registry.register("planner", _StubNode("planner", {"loop_decision": "finalize"}))
+        registry.configure_pipeline(["planner"])
+        del registry._nodes["planner"]
+        result = ReasoningHarness(registry=registry, max_iterations=1).run(
+            ReasoningState(query="test")
+        )
+        assert result.success is False
+        assert result.stop_reason == "missing_node"
+
+    def test_node_exception_fails_closed(self) -> None:
+        from finance.cognition.harness import ReasoningHarness
+        from finance.cognition.registry import NodeRegistry
+        from finance.cognition.state.models import ReasoningState
+
+        registry = NodeRegistry()
+        registry.register("planner", _StubNode("planner", error=RuntimeError("boom")))
+        registry.configure_pipeline(["planner"])
+        result = ReasoningHarness(registry=registry, max_iterations=1).run(
+            ReasoningState(query="test")
+        )
+        assert result.success is False
+        assert result.stop_reason == "node_error"
+
+    def test_state_fingerprint_is_stable_for_identical_state(self) -> None:
+        from finance.cognition.harness import ReasoningHarness
+        from finance.cognition.registry import NodeRegistry
+        from finance.cognition.state.models import ReasoningState
+
+        registry = NodeRegistry()
+        registry.register("planner", _StubNode("planner", {"loop_decision": "finalize"}))
+        registry.configure_pipeline(["planner"])
+        harness = ReasoningHarness(registry=registry, max_iterations=1)
+        a = harness.run(ReasoningState(query="same"))
+        b = harness.run(ReasoningState(query="same"))
+        assert a.state_fingerprint == b.state_fingerprint
+        c = harness.run(ReasoningState(query="different"))
+        assert a.state_fingerprint != c.state_fingerprint
