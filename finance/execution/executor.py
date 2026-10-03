@@ -55,7 +55,7 @@ from finance.reconciliation.models import (
 )
 from finance.reconciliation.reconciler import reconcile
 from finance.reconciliation.tolerances import ReconciliationTolerance
-from shared.safety.errors import PersistenceError
+from shared.safety.errors import PersistenceError, persist_guarded
 from shared.safety.execution_guard import ExecutionCommand, ExecutionGuard
 from shared.safety.idempotency import IdempotencyStore
 
@@ -223,7 +223,33 @@ class Executor:
             logger.warning("idempotency conflict key=%s: no write performed", idempotency_key)
             return self._rejected(execution_id, idempotency_key, exception_id)
 
+        # (3) In-flight intent row with no terminal outcome: the owner was
+        # interrupted (crash or local failure) after COMMIT. Never restart
+        # a second write and never refuse purely because the exception is
+        # EXECUTING — resume via recovery, reusing the persisted intent.
+        if prior is not None and (prior.result is None or prior.post_verify is None):
+            live = self._repo.get(exception_id)
+            if live is None:
+                return self._rejected(execution_id, idempotency_key, exception_id)
+            entry_id = self._scan_adapter_calls(idempotency_key)
+            entry = None
+            command = self._build_command(live, proposal, execution_id)
+            if entry_id is None and command is not None:
+                entry = self._bounded_write(command, idempotency_key)
+                if entry is None:
+                    return self._mark_failed(live, execution_id, idempotency_key, None)
+                entry_id = str(entry.entry_id)
+            self._update_row(idempotency_key, external_reference=entry_id)
+            if command is None and entry_id is None:
+                return self._mark_failed(live, execution_id, idempotency_key, None)
+            if live.state is ExceptionState.EXECUTING:
+                live = self._cas(live, ExceptionState.POST_VERIFYING, actor="executor")
+            return self._verify_and_close(live, execution_id, idempotency_key, proposal)
+
         # (3) Fresh APPROVED state gate off a re-read row, never the snapshot.
+        # NOTE: this gate must only see genuinely new submissions. An
+        # exception whose crashed-owner intent row is still unresolved is
+        # EXECUTING and handled above by recovery, never rejected here.
         fresh = self._repo.get(exception_id) if exception_id else None
         if fresh is None or fresh.state is not ExceptionState.APPROVED:
             logger.warning("execution refused key=%s: exception not APPROVED", idempotency_key)
@@ -261,25 +287,6 @@ class Executor:
         self._store.record(idempotency_key, payload_hash)
 
         command = self._build_command(fresh, proposal, execution_id)
-
-        if prior is not None:
-            # Crash recovery: an intent row exists with no terminal outcome.
-            # Recover the booked entry by scanning adapter calls by key and
-            # never blindly re-execute; same-key rewrites replay, not duplicate.
-            live = self._repo.get(fresh.exception_id)
-            if live is None:
-                return self._rejected(execution_id, idempotency_key, fresh.exception_id)
-            entry_id = self._scan_adapter_calls(idempotency_key)
-            entry = None
-            if entry_id is None and command is not None:
-                entry = self._bounded_write(command, idempotency_key)
-                if entry is None:
-                    return self._mark_failed(live, execution_id, idempotency_key, None)
-                entry_id = str(entry.entry_id)
-            self._update_row(idempotency_key, external_reference=entry_id)
-            if live.state is ExceptionState.EXECUTING:
-                live = self._cas(live, ExceptionState.POST_VERIFYING, actor="executor")
-            return self._verify_and_close(live, execution_id, idempotency_key, proposal)
 
         if command is None:
             # Policy-admitted but adapter-unbookable action: persist intent,
@@ -351,6 +358,7 @@ class Executor:
         # (14b) Any mismatch fails and escalates; adapter success never closes.
         return self._mark_failed(live, execution_id, idempotency_key, entry_id)
 
+    @persist_guarded
     def _mark_failed(
         self,
         live: Any,
@@ -585,6 +593,7 @@ class Executor:
                 return entry_id
         return None
 
+    @persist_guarded
     def _persist_intent(
         self, fresh: Any, execution_id: str, key: str, payload_hash: str, proposal: Any
     ) -> Any:
@@ -680,6 +689,7 @@ class Executor:
             )
         return refreshed
 
+    @persist_guarded
     def _cas(self, snapshot: Any, target: ExceptionState, *, actor: str) -> Any:
         """CAS-advance one exception transition predicated on version+state.
 
@@ -795,6 +805,7 @@ class Executor:
             )
             session.commit()
 
+    @persist_guarded
     def _load_row(self, key: str) -> ExecutionRow | None:
         """Read one execution record by key (replay/resume path)."""
         with Session(self._engine) as session:
@@ -804,6 +815,7 @@ class Executor:
             session.expunge(row)
             return row
 
+    @persist_guarded
     def _update_row(
         self,
         key: str,
