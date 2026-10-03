@@ -13,7 +13,6 @@ from __future__ import annotations
 import threading
 from typing import Any
 
-import pytest
 from sqlalchemy import create_engine
 
 from finance.accounting.errors import AccountingError
@@ -29,10 +28,15 @@ from tests.unit.execution.test_executor import (
 
 
 class _Seed:
-    def __init__(self, engine: Any, exc_id: str = "exc-boundary") -> None:
+    def __init__(
+        self, engine: Any, exc_id: str = "exc-boundary", tenant_id: str | None = None
+    ) -> None:
+        from tests.unit.execution.test_executor import _TENANT
+
+        self.tenant_id = tenant_id or _TENANT
         self.repo = ExceptionRepository(engine)  # type: ignore[arg-type]
         self.approved, self.proposal, self.approval = _approve(
-            engine, self.repo, exc_id, approval_key=f"{exc_id}-approval"
+            engine, self.repo, exc_id, approval_key=f"{exc_id}-approval", tenant_id=self.tenant_id
         )
         self.engine = engine
 
@@ -147,7 +151,7 @@ class TestConcurrencyBoundary:
 
         # Store binds key to a DIFFERENT payload hash than the proposal carries.
         store = _make_store(engine)
-        store.record("key-conflict-1", "different-payload-hash")
+        store.record("tenant-acme", "key-conflict-1", "different-payload-hash")
 
         bad = _make_executor(adapter, engine).run(
             seed.approved, seed.proposal, seed.approval, "key-conflict-1"
@@ -161,23 +165,42 @@ class TestConcurrencyBoundary:
 
 
 class TestTenantCrossKeyCollision:
-    @pytest.mark.xfail(
-        reason=(
-            "execution ledger is tenant-blind: ExecutionRow PK is idempotency_key, "
-            "so same key from another tenant can collide and replay tenant A's result. "
-            "Tracking for Commit 6 tenant isolation work."
-        ),
-        strict=True,
-    )
     def test_same_key_cross_tenant_never_returns_other_tenant_result(self) -> None:
         engine = _engine()
-        seed_a = _Seed(engine, exc_id="exc-ten-a")
+        seed_a = _Seed(engine, exc_id="exc-ten-a", tenant_id="tenant-a")
         adapter_a = MockQuickBooksAdapter()
         r_a = _run_one(engine, adapter_a, seed_a, "shared-key")
         assert str(r_a.result) == "SUCCEEDED"
 
-        seed_b = _Seed(engine, exc_id="exc-ten-b")
+        seed_b = _Seed(engine, exc_id="exc-ten-b", tenant_id="tenant-b")
         adapter_b = MockQuickBooksAdapter()
         r_b = _run_one(engine, adapter_b, seed_b, "shared-key")
-        # RED-once (xfail doing its job): must not be tenant A's result
+
+        # Two tenants, key identical -> independent executions with
+        # independent ids, both terminal, each exception closed via its
+        # own aggregate. Neither contract touches the other's row.
+        assert str(r_b.result) == "SUCCEEDED"
         assert r_b.execution_id != r_a.execution_id
+        a = ExceptionRepository(engine).get("exc-ten-a")
+        b = ExceptionRepository(engine).get("exc-ten-b")
+        assert a is not None and a.state is ExceptionState.CLOSED
+        assert b is not None and b.state is ExceptionState.CLOSED
+
+        from sqlalchemy.orm import Session
+
+        from finance.execution.models import ExecutionRow
+
+        with Session(engine) as s:
+            rows = list(
+                s.query(ExecutionRow).filter(ExecutionRow.idempotency_key == "shared-key").all()
+            )
+        assert len(rows) == 2
+        assert {r.tenant_id for r in rows} == {"tenant-a", "tenant-b"}
+        ids_a = [r.execution_id for r in rows if r.tenant_id == "tenant-a"]
+        ids_b = [r.execution_id for r in rows if r.tenant_id == "tenant-b"]
+        assert ids_a == [r_a.execution_id]
+        assert ids_b == [r_b.execution_id]
+        # each adapter wrote exactly one entry for its own tenant's key
+        c_a = [c for c in adapter_a.calls if c.op == "create_correcting_entry"]
+        c_b = [c for c in adapter_b.calls if c.op == "create_correcting_entry"]
+        assert len(c_a) == 1 and len(c_b) == 1

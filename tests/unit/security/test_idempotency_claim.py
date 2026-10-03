@@ -23,16 +23,16 @@ class TestIdempotencyClaimContract:
         from shared.safety.idempotency import ClaimOutcome
 
         store = _store()
-        assert store.claim("k1", "hash-a") is ClaimOutcome.FRESH
-        assert store.claim("k1", "hash-a") is ClaimOutcome.REPLAY
-        assert store.claim("k1", "hash-b") is ClaimOutcome.CONFLICT
-        assert store.payload_hash_for("k1") == "hash-a"
+        assert store.claim("t-acme", "k1", "hash-a") is ClaimOutcome.FRESH
+        assert store.claim("t-acme", "k1", "hash-a") is ClaimOutcome.REPLAY
+        assert store.claim("t-acme", "k1", "hash-b") is ClaimOutcome.CONFLICT
+        assert store.payload_hash_for("t-acme", "k1") == "hash-a"
 
     def test_conflicting_claim_does_not_overwrite(self) -> None:
         store = _store()
-        store.claim("k2", "hash-x")
-        store.claim("k2", "hash-y")
-        assert store.payload_hash_for("k2") == "hash-x"
+        store.claim("t-acme", "k2", "hash-x")
+        store.claim("t-acme", "k2", "hash-y")
+        assert store.payload_hash_for("t-acme", "k2") == "hash-x"
 
     def test_concurrent_claims_produce_exactly_one_fresh(self, tmp_path) -> None:
         from shared.safety.idempotency import ClaimOutcome
@@ -50,7 +50,7 @@ class TestIdempotencyClaimContract:
         def worker(i: int) -> None:
             try:
                 barrier.wait(timeout=5)
-                outcomes.append(store.claim("race", f"hash-{i % 2}"))
+                outcomes.append(store.claim("t-acme", "race", f"hash-{i % 2}"))
             except Exception as exc:  # noqa: BLE001
                 errors.append(exc)
 
@@ -62,18 +62,18 @@ class TestIdempotencyClaimContract:
 
         assert errors == []
         assert outcomes.count(ClaimOutcome.FRESH) == 1
-        final = store.payload_hash_for("race")
+        final = store.payload_hash_for("t-acme", "race")
         assert final in {"hash-0", "hash-1"}
         # No torn state: a second concurrent batch must be stable replays/conflicts.
-        again = [store.claim("race", final) for _ in range(3)]
+        again = [store.claim("t-acme", "race", final) for _ in range(3)]
         assert again == [ClaimOutcome.REPLAY] * 3
 
     def test_sequential_replays_are_stable(self) -> None:
         from shared.safety.idempotency import ClaimOutcome
 
         store = _store()
-        assert store.claim("k3", "h") is ClaimOutcome.FRESH
+        assert store.claim("t-acme", "k3", "h") is ClaimOutcome.FRESH
         for _ in range(3):
-            assert store.claim("k3", "h") is ClaimOutcome.REPLAY
-        assert store.claim("k3", "other") is ClaimOutcome.CONFLICT
-        assert store.payload_hash_for("k3") == "h"
+            assert store.claim("t-acme", "k3", "h") is ClaimOutcome.REPLAY
+        assert store.claim("t-acme", "k3", "other") is ClaimOutcome.CONFLICT
+        assert store.payload_hash_for("t-acme", "k3") == "h"

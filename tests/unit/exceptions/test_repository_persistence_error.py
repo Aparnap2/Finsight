@@ -94,7 +94,7 @@ class TestIdempotencyStorePersistenceFailure:
         store = IdempotencyStore(engine)  # type: ignore[arg-type]
         IdempotencyRow.__table__.drop(engine)  # type: ignore[arg-type]
         with pytest.raises(PersistenceError):
-            store.seen("k")
+            store.seen("t-acme", "k")
 
     def test_payload_hash_for_on_broken_db_raises_typed_persistence_error(self) -> None:
         from shared.safety.errors import PersistenceError
@@ -104,7 +104,7 @@ class TestIdempotencyStorePersistenceFailure:
         store = IdempotencyStore(engine)  # type: ignore[arg-type]
         IdempotencyRow.__table__.drop(engine)  # type: ignore[arg-type]
         with pytest.raises(PersistenceError):
-            store.payload_hash_for("k")
+            store.payload_hash_for("t-acme", "k")
 
     def test_claim_on_broken_db_raises_typed_persistence_error(self) -> None:
         from shared.safety.errors import PersistenceError
@@ -114,4 +114,4 @@ class TestIdempotencyStorePersistenceFailure:
         store = IdempotencyStore(engine)  # type: ignore[arg-type]
         IdempotencyRow.__table__.drop(engine)  # type: ignore[arg-type]
         with pytest.raises(PersistenceError):
-            store.claim("k", "h")
+            store.claim("t-acme", "k", "h")
