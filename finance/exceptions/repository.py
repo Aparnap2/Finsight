@@ -16,18 +16,33 @@ imports nothing from ``apps/`` or ``agents/``.
 
 from __future__ import annotations
 
+import functools
 import logging
 import uuid
+from collections.abc import Callable
 from datetime import UTC, datetime
 
 from sqlalchemy import Engine, update
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, InterfaceError, OperationalError
 from sqlalchemy.orm import Session
 
 from finance.exceptions.aggregate import ExceptionAggregate
 from finance.exceptions.errors import ConcurrencyConflictError, IllegalTransitionError
 from finance.exceptions.models import Base, ExceptionAuditRow, ExceptionRow
 from finance.exceptions.states import ExceptionState
+from shared.safety.errors import PersistenceError
+
+
+def _persist_guarded[**P, R](func: Callable[P, R]) -> Callable[P, R]:
+    @functools.wraps(func)
+    def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
+        try:
+            return func(*args, **kwargs)
+        except (OperationalError, InterfaceError) as exc:
+            raise PersistenceError(f"persistence failure in {func.__name__}: {exc}") from exc
+
+    return wrapper
+
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +91,7 @@ class ExceptionRepository:
         self._engine = engine
         Base.metadata.create_all(engine)
 
+    @_persist_guarded
     def create(self, aggregate: ExceptionAggregate, *, actor: str = "system") -> None:
         """Persist a fresh aggregate exactly once (create-once).
 
@@ -127,6 +143,7 @@ class ExceptionRepository:
                     reason="duplicate create: aggregate already exists",
                 ) from exc
 
+    @_persist_guarded
     def get(self, exception_id: str) -> ExceptionAggregate | None:
         """Read the current snapshot, exposing ``state_version`` for retry.
 
@@ -136,6 +153,7 @@ class ExceptionRepository:
             row = session.get(ExceptionRow, exception_id)
             return _row_to_aggregate(row) if row is not None else None
 
+    @_persist_guarded
     def get_for_tenant(self, tenant_id: str, exception_id: str) -> ExceptionAggregate | None:
         """Tenant-scoped read — fails closed if tenant does not own the case.
 
@@ -154,6 +172,7 @@ class ExceptionRepository:
             )
             return _row_to_aggregate(row) if row is not None else None
 
+    @_persist_guarded
     def apply(
         self,
         snapshot: ExceptionAggregate,
@@ -271,6 +290,7 @@ class ExceptionRepository:
             )
         return refreshed
 
+    @_persist_guarded
     def audit_trail(self, exception_id: str) -> list[ExceptionAuditRow]:
         """Return the ordered audit rows for one aggregate (oldest first)."""
         with Session(self._engine) as session:
@@ -282,6 +302,7 @@ class ExceptionRepository:
             )
             return list(rows)
 
+    @_persist_guarded
     def _audit_rejection(
         self,
         snapshot: ExceptionAggregate,

@@ -21,9 +21,11 @@ import logging
 from datetime import UTC, datetime
 
 from sqlalchemy import DateTime, Engine, String, create_engine
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, InterfaceError, OperationalError
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
 from sqlalchemy.pool import StaticPool
+
+from shared.safety.errors import PersistenceError
 
 logger = logging.getLogger(__name__)
 
@@ -92,8 +94,11 @@ class IdempotencyStore:
         Returns:
             A strict ``bool`` — never a truthy row object.
         """
-        with Session(self._engine) as session:
-            return session.get(IdempotencyRow, key) is not None
+        try:
+            with Session(self._engine) as session:
+                return session.get(IdempotencyRow, key) is not None
+        except (OperationalError, InterfaceError) as exc:
+            raise PersistenceError(f"idempotency seen({key!r}) failed: {exc}") from exc
 
     def payload_hash_for(self, key: str) -> str | None:
         """Return the hash first recorded for ``key``, or None if unseen.
@@ -104,9 +109,12 @@ class IdempotencyStore:
         Returns:
             The bound payload hash, or None when the key is new.
         """
-        with Session(self._engine) as session:
-            row = session.get(IdempotencyRow, key)
-            return row.payload_hash if row is not None else None
+        try:
+            with Session(self._engine) as session:
+                row = session.get(IdempotencyRow, key)
+                return row.payload_hash if row is not None else None
+        except (OperationalError, InterfaceError) as exc:
+            raise PersistenceError(f"idempotency payload_hash_for({key!r}) failed: {exc}") from exc
 
     def record(self, key: str, payload_hash: str) -> None:
         """Bind ``key`` to ``payload_hash``, refreshing an identical binding.
@@ -126,21 +134,24 @@ class IdempotencyStore:
             raise ValueError("Field 'key' must be a non-empty string.")
         if not isinstance(payload_hash, str) or not payload_hash.strip():
             raise ValueError("Field 'payload_hash' must be a non-empty string.")
-        with Session(self._engine) as session:
-            row = session.get(IdempotencyRow, key)
-            if row is None:
-                session.add(
-                    IdempotencyRow(
-                        idempotency_key=key,
-                        payload_hash=payload_hash,
-                        created_at=_utcnow(),
-                        updated_at=_utcnow(),
+        try:
+            with Session(self._engine) as session:
+                row = session.get(IdempotencyRow, key)
+                if row is None:
+                    session.add(
+                        IdempotencyRow(
+                            idempotency_key=key,
+                            payload_hash=payload_hash,
+                            created_at=_utcnow(),
+                            updated_at=_utcnow(),
+                        )
                     )
-                )
-            else:
-                row.payload_hash = payload_hash
-                row.updated_at = _utcnow()
-            session.commit()
+                else:
+                    row.payload_hash = payload_hash
+                    row.updated_at = _utcnow()
+                session.commit()
+        except (OperationalError, InterfaceError) as exc:
+            raise PersistenceError(f"idempotency record({key!r}) failed: {exc}") from exc
         logger.info("idempotency recorded key=%s", key)
 
     def claim(self, key: str, payload_hash: str) -> ClaimOutcome:
@@ -167,24 +178,27 @@ class IdempotencyStore:
             raise ValueError("Field 'key' must be a non-empty string.")
         if not isinstance(payload_hash, str) or not payload_hash.strip():
             raise ValueError("Field 'payload_hash' must be a non-empty string.")
-        with Session(self._engine) as session:
-            row = session.get(IdempotencyRow, key)
-            if row is None:
-                try:
-                    session.add(
-                        IdempotencyRow(
-                            idempotency_key=key,
-                            payload_hash=payload_hash,
-                            created_at=_utcnow(),
-                            updated_at=_utcnow(),
+        try:
+            with Session(self._engine) as session:
+                row = session.get(IdempotencyRow, key)
+                if row is None:
+                    try:
+                        session.add(
+                            IdempotencyRow(
+                                idempotency_key=key,
+                                payload_hash=payload_hash,
+                                created_at=_utcnow(),
+                                updated_at=_utcnow(),
+                            )
                         )
-                    )
-                    session.commit()
-                    logger.info("idempotency claimed key=%s outcome=fresh", key)
-                    return ClaimOutcome.FRESH
-                except IntegrityError:
-                    session.rollback()
-                    row = session.get(IdempotencyRow, key)
-            if row is not None and row.payload_hash == payload_hash:
-                return ClaimOutcome.REPLAY
-            return ClaimOutcome.CONFLICT
+                        session.commit()
+                        logger.info("idempotency claimed key=%s outcome=fresh", key)
+                        return ClaimOutcome.FRESH
+                    except IntegrityError:
+                        session.rollback()
+                        row = session.get(IdempotencyRow, key)
+                if row is not None and row.payload_hash == payload_hash:
+                    return ClaimOutcome.REPLAY
+                return ClaimOutcome.CONFLICT
+        except (OperationalError, InterfaceError) as exc:
+            raise PersistenceError(f"idempotency claim({key!r}) failed: {exc}") from exc
