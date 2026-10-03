@@ -16,10 +16,12 @@ imports nothing from ``apps/``, ``agents/``, or ``finance/``.
 
 from __future__ import annotations
 
+import enum
 import logging
 from datetime import UTC, datetime
 
 from sqlalchemy import DateTime, Engine, String, create_engine
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
 from sqlalchemy.pool import StaticPool
 
@@ -29,6 +31,14 @@ logger = logging.getLogger(__name__)
 def _utcnow() -> datetime:
     """Return a tz-aware UTC timestamp for ledger rows."""
     return datetime.now(UTC)
+
+
+class ClaimOutcome(enum.Enum):
+    """Result of an atomic idempotency claim."""
+
+    FRESH = "fresh"
+    REPLAY = "replay"
+    CONFLICT = "conflict"
 
 
 class _IdempotencyBase(DeclarativeBase):
@@ -132,3 +142,49 @@ class IdempotencyStore:
                 row.updated_at = _utcnow()
             session.commit()
         logger.info("idempotency recorded key=%s", key)
+
+    def claim(self, key: str, payload_hash: str) -> ClaimOutcome:
+        """Atomically bind ``key`` to its first ``payload_hash``.
+
+        Returns :attr:`ClaimOutcome.FRESH` for the first claim, ``REPLAY``
+        when the same key re-presents the same hash, and ``CONFLICT`` when
+        the same key re-presents a different hash (no overwrite). Exactly
+        one concurrent caller wins the fresh bind; losers observe REPLAY or
+        CONFLICT instead of an error, and the row's hash is never mutated
+        by a losing claim.
+
+        Args:
+            key: Caller-supplied idempotency key (non-empty).
+            payload_hash: Opaque payload fingerprint (non-empty).
+
+        Returns:
+            The :class:`ClaimOutcome` for this claim.
+
+        Raises:
+            ValueError: If either argument is blank or not a string.
+        """
+        if not isinstance(key, str) or not key.strip():
+            raise ValueError("Field 'key' must be a non-empty string.")
+        if not isinstance(payload_hash, str) or not payload_hash.strip():
+            raise ValueError("Field 'payload_hash' must be a non-empty string.")
+        with Session(self._engine) as session:
+            row = session.get(IdempotencyRow, key)
+            if row is None:
+                try:
+                    session.add(
+                        IdempotencyRow(
+                            idempotency_key=key,
+                            payload_hash=payload_hash,
+                            created_at=_utcnow(),
+                            updated_at=_utcnow(),
+                        )
+                    )
+                    session.commit()
+                    logger.info("idempotency claimed key=%s outcome=fresh", key)
+                    return ClaimOutcome.FRESH
+                except IntegrityError:
+                    session.rollback()
+                    row = session.get(IdempotencyRow, key)
+            if row is not None and row.payload_hash == payload_hash:
+                return ClaimOutcome.REPLAY
+            return ClaimOutcome.CONFLICT
