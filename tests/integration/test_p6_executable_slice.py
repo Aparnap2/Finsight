@@ -470,7 +470,7 @@ class TestExecutableSliceHappy:
         assert entry.outcome == "VERIFIED"
         assert len(entry.reread_digests) == 3  # R1/R2/R3 re-read evidence present
         assert entry.report_hash is not None
-        assert IdempotencyStore(engine).seen("slice-exec-1") is True
+        assert IdempotencyStore(engine).seen(_TENANT, "slice-exec-1") is True
         assert approved.tenant_id == _TENANT  # tenant preserved into execution
         assert report.situation_id == _SITUATION  # situation preserved to report
         assert report.execution_id == str(result.execution_id)

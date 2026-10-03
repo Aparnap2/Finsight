@@ -290,7 +290,9 @@ def _require_ministack_or_skip() -> str:
             probe.put_object(f"{tenant}/_probe/{label}", b"probe")
             probe.delete(f"{tenant}/_probe/{label}")
         except Exception as exc:  # noqa: BLE001
-            pytest.skip(f"S3 bucket not initialized ({label}={bucket}): {exc} — make ministack-init")
+            pytest.skip(
+                f"S3 bucket not initialized ({label}={bucket}): {exc} — make ministack-init"
+            )
     return tenant
 
 
@@ -308,8 +310,7 @@ def test_ministack_evidence_artifact_via_s3_not_pg(s3_a):
     net = amount - fee
     assert net == Decimal("34250.00")  # deterministic Decimal, no float
     payload = (
-        f'{{"case_id": "{case_id}", "amount": "{amount}", '
-        f'"fee": "{fee}", "net": "{net}"}}'
+        f'{{"case_id": "{case_id}", "amount": "{amount}", "fee": "{fee}", "net": "{net}"}}'
     ).encode()
     key = f"{s3_a._tenant_id}/{case_id}/evidence-bundle.json"
     meta = s3_a.put_object(key, payload, content_type="application/json")
@@ -417,7 +418,7 @@ def test_ministack_legacy_outbound_result_correlated_flow():
         f'"accepted": 7, "rejected": 3, "control_total": "{control_total}", '
         f'"status": "partial", "correlation_id": "{case_id}"}}'
     ).encode()
-    result_key = f"{tenant}/{batch_id}/result.json"
+    result_key = f"{tenant}/{batch_id}/{case_id}-result.json"
     r_meta = result.put_object(result_key, result_bytes, content_type="application/json")
     assert r_meta.content_hash == _hash(result_bytes)
     # Correlation: both keys carry batch_id, result carries case_id, hashes preserved
@@ -535,7 +536,7 @@ def test_ministack_fake_and_adapter_legacy_port_parity():
     assert fake.get_object(key)[0] == data
     # Cross-tenant before store for Fake as well
     with pytest.raises(TenantIsolationError):
-        fake.get_object(f"other-tenant/batch-123/outbound.csv")
+        fake.get_object("other-tenant/batch-123/outbound.csv")
     # S3Adapter enforces same prefix before boto3 (verified without network)
     import unittest.mock as mock
 
@@ -567,19 +568,23 @@ def test_ministack_compose_healthcheck_and_transport_invariants():
     # ministack healthcheck hits /_localstack/health and checks s3
     assert "_localstack/health" in text
     # S3 is the only AWS service — SQS/SNS/EventBridge/Dynamo must not appear
+    # in configuration (comments documenting the exclusion don't count).
     assert "SERVICES=s3" in text
-    lower = text.lower()
+    code = "\n".join(line for line in text.splitlines() if not line.strip().startswith("#"))
+    code_lower = code.lower()
     for forbidden in ("services=sqs", "services=sns", "sqs", "sns", "eventbridge", "dynamodb"):
         # SERVICES=s3 is allowed; bare s3 elsewhere is ok — but SQS/SNS must not appear
         if forbidden in ("sqs", "sns"):
             # reject only if a service line mentions it (not as substring of other words)
-            assert forbidden not in lower or "services=s3" in lower and forbidden not in text
+            assert forbidden not in code_lower or (
+                "services=s3" in code_lower and forbidden not in code
+            )
             # stricter: the compose file should not contain SQS/SNS service names at all
-            assert "SQS" not in text and "SNS" not in text
+            assert "SQS" not in code and "SNS" not in code
         else:
-            assert forbidden not in lower
+            assert forbidden not in code_lower
     # Buckets are documented per-deployment (evidence+outbound+result) not per-tenant
-    assert "finsight-evidence-test" in text or "finsight-legacy" in text or True
+    assert "finsight-evidence-test" in text or "finsight-legacy" in text
     # test service depends_on service_healthy for both postgres and ministack
     assert "condition: service_healthy" in text
     # Ministack uses pinned localstack:3.8, not :latest
@@ -589,17 +594,17 @@ def test_ministack_compose_healthcheck_and_transport_invariants():
     assert "ministack:4566" in text or "4566" in text
     # No redis/qdrant/redpanda/temporal — those live in docker-compose.yml
     for svc in ("redis", "qdrant", "redpanda", "temporal"):
-        assert svc not in lower
+        assert svc not in code_lower
 
 
 def test_ministack_sqs_remains_closed_s3_transport_only():
     """SQS stays closed — S3 is transport only, buckets are evidence/legacy only."""
     # No SQS seam in finance/object_store: only FakeS3+S3Adapter, no QueuePort
-    from finance.object_store import FakeS3 as _F
-    from finance.object_store.port import ObjectStorePort as _Port
+    from finance.object_store import FakeS3
+    from finance.object_store.port import ObjectStorePort
 
-    assert _F is not None
-    assert _Port is not None
+    assert FakeS3 is not None
+    assert ObjectStorePort is not None
     # AwsSettings exposes only S3 buckets, not queue names
     settings = get_aws_settings()
     assert hasattr(settings, "s3_evidence_bucket")
@@ -610,8 +615,9 @@ def test_ministack_sqs_remains_closed_s3_transport_only():
     # Compose does not declare SQS env or service
     compose_path = Path(__file__).parents[2] / "docker-compose.ministack.yml"
     text = compose_path.read_text(encoding="utf-8")
-    assert "SQS" not in text
-    assert "queue" not in text.lower() or "queue" in text.lower() and "SQS" not in text
+    code = "\n".join(line for line in text.splitlines() if not line.strip().startswith("#"))
+    assert "SQS" not in code
+    assert "queue" not in code.lower() or "queue" in code.lower() and "SQS" not in code
     # Registry check: grep for queue port would fail — but we assert spec non-goal
     assert settings.s3_evidence_bucket == "finsight-evidence-test"
     assert settings.s3_legacy_outbound_bucket == "finsight-legacy-outbound-test"
@@ -633,8 +639,7 @@ def test_ministack_postgres_remains_authority_s3_is_transport():
     control_total = Decimal("35000.00")
     outbound_bytes = f"HDR|{batch_id}|{control_total}\nTRL|{batch_id}|0|{control_total}\n".encode()
     result_bytes = (
-        f'{{"batch_id": "{batch_id}", "control_total": "{control_total}", '
-        f'"status": "accepted"}}'
+        f'{{"batch_id": "{batch_id}", "control_total": "{control_total}", "status": "accepted"}}'
     ).encode()
     o_key = f"{tenant}/{batch_id}/outbound.csv"
     r_key = f"{tenant}/{batch_id}/result.json"
@@ -848,8 +853,7 @@ def test_legacy_result_put_to_s3_verify_key_format():
     result_key = build_result_key(company_id, batch_id, _processing_date())
     adapter = FakeS3(tenant_id=company_id)
     result_bytes = (
-        f'{{"batch_id": "{batch_id}", "accepted": 2, "rejected": 1, '
-        f'"control_total": "35000.00"}}'
+        f'{{"batch_id": "{batch_id}", "accepted": 2, "rejected": 1, "control_total": "35000.00"}}'
     ).encode()
     meta = adapter.put_object(result_key, result_bytes, content_type="application/json")
     assert meta.content_hash == _hash(result_bytes)
@@ -970,8 +974,7 @@ def test_legacy_evidence_artifact_tenant_prefix_key_format():
     adapter = FakeS3(tenant_id=company_id)
     evidence_key = f"{company_id}/{case_id}/evidence-bundle.json"
     payload = (
-        f'{{"case_id": "{case_id}", "amount": "35000.00", '
-        f'"evidence_hash": "abc123"}}'
+        f'{{"case_id": "{case_id}", "amount": "35000.00", "evidence_hash": "abc123"}}'
     ).encode()
     meta = adapter.put_object(evidence_key, payload, content_type="application/json")
     assert meta.content_hash == _hash(payload)
@@ -1095,12 +1098,16 @@ def test_legacy_result_to_s3_and_back():
     # Build 2 result lines
     lines = [
         make_record_line(
-            batch_id=batch_id, sequence=1,
-            record_type="01", record_payload="PAYMENT|10000.00",
+            batch_id=batch_id,
+            sequence=1,
+            record_type="01",
+            record_payload="PAYMENT|10000.00",
         ),
         make_record_line(
-            batch_id=batch_id, sequence=2,
-            record_type="01", record_payload="PAYMENT|20000.00",
+            batch_id=batch_id,
+            sequence=2,
+            record_type="01",
+            record_payload="PAYMENT|20000.00",
         ),
     ]
     result_bytes = "\n".join(lines).encode("ascii")
@@ -1158,17 +1165,23 @@ def test_legacy_batch_control_total_mismatch_raises():
     batch_id = generate_batch_id(_processing_date(), 1)
     lines = [
         make_record_line(
-            batch_id=batch_id, sequence=1,
-            record_type="01", record_payload="PAYMENT|10000.00",
+            batch_id=batch_id,
+            sequence=1,
+            record_type="01",
+            record_payload="PAYMENT|10000.00",
         ),
         make_record_line(
-            batch_id=batch_id, sequence=2,
-            record_type="01", record_payload="PAYMENT|20000.00",
+            batch_id=batch_id,
+            sequence=2,
+            record_type="01",
+            record_payload="PAYMENT|20000.00",
         ),
         # Control record claims wrong total (raw decimal, not CONTROL| prefixed)
         make_record_line(
-            batch_id=batch_id, sequence=3,
-            record_type="99", record_payload="99999.00",
+            batch_id=batch_id,
+            sequence=3,
+            record_type="99",
+            record_payload="99999.00",
         ),
     ]
     with pytest.raises(LegacyControlTotalError):
@@ -1179,8 +1192,10 @@ def test_legacy_checksum_mismatch_raises():
     """Corrupted line raises LegacyChecksumError."""
     batch_id = generate_batch_id(_processing_date(), 1)
     line = make_record_line(
-        batch_id=batch_id, sequence=1,
-        record_type="01", record_payload="PAYMENT|10000.00",
+        batch_id=batch_id,
+        sequence=1,
+        record_type="01",
+        record_payload="PAYMENT|10000.00",
     )
     # Corrupt last char (checksum)
     corrupted = line[:-1] + ("0" if line[-1] != "0" else "1")

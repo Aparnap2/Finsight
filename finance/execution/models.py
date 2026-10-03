@@ -20,7 +20,7 @@ imports nothing from ``apps/``, ``agents/``, ``shared/``, or any other
 
 from __future__ import annotations
 
-from sqlalchemy import String
+from sqlalchemy import PrimaryKeyConstraint, String
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -32,8 +32,10 @@ class ExecutionRow(Base):
     """Persisted intent/outcome of one ``Executor.run`` keyed execution."""
 
     __tablename__ = "execution_records"
+    __table_args__ = (PrimaryKeyConstraint("tenant_id", "idempotency_key"),)
 
-    idempotency_key: Mapped[str] = mapped_column(String, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String, nullable=False, default="")
+    idempotency_key: Mapped[str] = mapped_column(String, nullable=False)
     execution_id: Mapped[str] = mapped_column(String, nullable=False)
     exception_id: Mapped[str] = mapped_column(String, nullable=False)
     proposal_id: Mapped[str] = mapped_column(String, nullable=False)

@@ -490,7 +490,7 @@ async def execute_controlled(
     stages.append("report")
 
     exec_seen = IdempotencyStore(engine).seen(  # type: ignore[arg-type]
-        body.execution_idempotency_key
+        tenant_id, body.execution_idempotency_key
     )
     _ = exec_seen  # ledger echo for audit symmetry; replay truth is the approval key
     deduplicated = dedup_approval

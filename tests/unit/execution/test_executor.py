@@ -112,7 +112,7 @@ def _engine() -> Engine:
     )
 
 
-def _records() -> tuple[PaymentRecord, PaymentRecord]:
+def _records(tenant_id: str = _TENANT) -> tuple[PaymentRecord, PaymentRecord]:
     """Processor net 35k (50k-15k refund) vs stale ledger net 50k."""
     processor = PaymentRecord(
         payment_id="pay-proc-50k",
@@ -126,7 +126,7 @@ def _records() -> tuple[PaymentRecord, PaymentRecord]:
         currency="USD",
         status="PARTIALLY_REFUNDED",
         occurred_at=_AT,
-        tenant_id=_TENANT,
+        tenant_id=tenant_id,
     )
     ledger = PaymentRecord(
         payment_id="pay-ledger-50k",
@@ -140,18 +140,18 @@ def _records() -> tuple[PaymentRecord, PaymentRecord]:
         currency="USD",
         status="SETTLED",
         occurred_at=_AT,
-        tenant_id=_TENANT,
+        tenant_id=tenant_id,
     )
     return (processor, ledger)
 
 
 def _awaiting(
-    repo: ExceptionRepository, exc_id: str = "exc-exec-1"
+    repo: ExceptionRepository, exc_id: str = "exc-exec-1", tenant_id: str = _TENANT
 ) -> tuple[ExceptionAggregate, Proposal]:
     """Drive one aggregate to AWAITING_APPROVAL and draft its proposal."""
     agg = ExceptionAggregate.create(
         exception_id=exc_id,
-        tenant_id=_TENANT,
+        tenant_id=tenant_id,
         reconciliation_result_id=f"recon-{exc_id}",
         exception_type=ExceptionCode.PARTIAL_REFUND_ACCOUNTING_LAG,
         severity="HIGH",
@@ -168,7 +168,7 @@ def _awaiting(
         evidence_ids=list(_EVIDENCE),
     )
     snapshot = repo.apply(snapshot, ExceptionState.EVIDENCE_VERIFIED, actor="t")
-    proposal = build_proposal(snapshot, _records(), ("ev-1",))
+    proposal = build_proposal(snapshot, _records(tenant_id), ("ev-1",))
     assert proposal.amount == Decimal("15000.00")
     snapshot = repo.apply(
         snapshot,
@@ -210,9 +210,10 @@ def _approve(
     repo: ExceptionRepository,
     exc_id: str,
     approval_key: str,
+    tenant_id: str = _TENANT,
 ) -> tuple[ExceptionAggregate, Proposal, ApprovalRecord]:
     """Arrange AWAITING then approve; return snapshot, proposal, record."""
-    snapshot, proposal = _awaiting(repo, exc_id)
+    snapshot, proposal = _awaiting(repo, exc_id, tenant_id=tenant_id)
     record = _service(engine).decide(
         _cmd(snapshot, proposal, key=approval_key),
         repo,
@@ -411,12 +412,12 @@ class TestExecutorUnit:
         adapter = MockQuickBooksAdapter()
         first = _make_executor(adapter, engine)
         store = _make_store(engine)
-        assert store.seen("exec-u-crash") is False
-        store.record("exec-u-crash", proposal.content_hash)
+        assert store.seen(_TENANT, "exec-u-crash") is False
+        store.record(_TENANT, "exec-u-crash", proposal.content_hash)
         outcome: Any = first.run(approved, proposal, approval, "exec-u-crash")
         # Act: restart with the same key against the same books and store.
         second = _make_executor(adapter, engine)
-        assert store.seen("exec-u-crash") is True
+        assert store.seen(_TENANT, "exec-u-crash") is True
         replayed: Any = second.run(approved, proposal, approval, "exec-u-crash")
         # Assert: one financial action with a stable execution identity.
         assert replayed.execution_id == outcome.execution_id

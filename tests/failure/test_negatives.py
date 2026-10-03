@@ -171,7 +171,7 @@ def _approve(
 def _execution_row(engine: Engine, key: str) -> ExecutionRow | None:
     """Read one execution record by key without touching executor privates."""
     with Session(engine) as session:
-        row = session.get(ExecutionRow, key)
+        row = session.get(ExecutionRow, (_TENANT, key))
         if row is None:
             return None
         session.expunge(row)

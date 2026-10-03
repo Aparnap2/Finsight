@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import uuid
 from datetime import UTC, datetime
 
@@ -16,10 +18,29 @@ class HarnessResult:
         state: ReasoningState,
         run_id: str,
         success: bool = True,
+        stop_reason: str = "finalize",
+        state_fingerprint: str = "",
     ) -> None:
         self.state = state
         self.run_id = run_id
         self.success = success
+        self.stop_reason = stop_reason
+        self.state_fingerprint = state_fingerprint
+
+
+def _state_fingerprint(state: ReasoningState) -> str:
+    payload = json.dumps(
+        {
+            "query": state.query,
+            "context": state.context,
+            "iteration_count": state.iteration_count,
+            "loop_decision": state.loop_decision,
+            "overall_confidence": state.overall_confidence,
+        },
+        sort_keys=True,
+        default=str,
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
 
 
 class ReasoningHarness:
@@ -38,13 +59,14 @@ class ReasoningHarness:
     ) -> None:
         self._registry = registry or NodeRegistry()
         self._max_iterations = max_iterations
-        self._telemetry = ReasoningTelemetry(
-            output_dir=telemetry_dir or ".reasoning_traces"
-        )
+        self._telemetry = ReasoningTelemetry(output_dir=telemetry_dir or ".reasoning_traces")
 
     def run(self, state: ReasoningState) -> HarnessResult:
         run_id = f"run_{uuid.uuid4().hex[:12]}"
         pipeline = self._registry.get_pipeline()
+
+        success = False
+        stop_reason = "max_iterations_exhausted"
 
         while state.iteration_count < min(state.max_iterations, self._max_iterations):
             state.iteration_count += 1
@@ -52,10 +74,22 @@ class ReasoningHarness:
             for node_name in pipeline:
                 node = self._registry.get(node_name)
                 if node is None:
-                    continue
+                    stop_reason = "missing_node"
+                    break
 
                 started_at = datetime.now(UTC)
-                result = node.execute(state)
+                try:
+                    result = node.execute(state)
+                except Exception:
+                    stop_reason = "node_error"
+                    self._telemetry.capture(run_id=run_id, state=state)
+                    return HarnessResult(
+                        state=state,
+                        run_id=run_id,
+                        success=False,
+                        stop_reason="node_error",
+                        state_fingerprint=_state_fingerprint(state),
+                    )
                 duration_ms = (datetime.now(UTC) - started_at).total_seconds() * 1000
 
                 state.record_step(
@@ -77,6 +111,7 @@ class ReasoningHarness:
                         state.overall_confidence = value
                     elif key == "action_plan":
                         from finance.cognition.state.action import ActionPlan
+
                         if isinstance(value, dict):
                             state.action_plan = ActionPlan.model_validate(value)
                         else:
@@ -85,8 +120,19 @@ class ReasoningHarness:
                     else:
                         state.context[key] = value
 
+            if stop_reason == "missing_node":
+                break
+
             if state.loop_decision == "finalize":
+                success = True
+                stop_reason = "finalize"
                 break
 
         self._telemetry.capture(run_id=run_id, state=state)
-        return HarnessResult(state=state, run_id=run_id, success=True)
+        return HarnessResult(
+            state=state,
+            run_id=run_id,
+            success=success,
+            stop_reason=stop_reason,
+            state_fingerprint=_state_fingerprint(state),
+        )

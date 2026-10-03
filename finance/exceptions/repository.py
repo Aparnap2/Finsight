@@ -28,6 +28,7 @@ from finance.exceptions.aggregate import ExceptionAggregate
 from finance.exceptions.errors import ConcurrencyConflictError, IllegalTransitionError
 from finance.exceptions.models import Base, ExceptionAuditRow, ExceptionRow
 from finance.exceptions.states import ExceptionState
+from shared.safety.errors import persist_guarded
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +77,7 @@ class ExceptionRepository:
         self._engine = engine
         Base.metadata.create_all(engine)
 
+    @persist_guarded
     def create(self, aggregate: ExceptionAggregate, *, actor: str = "system") -> None:
         """Persist a fresh aggregate exactly once (create-once).
 
@@ -127,6 +129,7 @@ class ExceptionRepository:
                     reason="duplicate create: aggregate already exists",
                 ) from exc
 
+    @persist_guarded
     def get(self, exception_id: str) -> ExceptionAggregate | None:
         """Read the current snapshot, exposing ``state_version`` for retry.
 
@@ -136,6 +139,7 @@ class ExceptionRepository:
             row = session.get(ExceptionRow, exception_id)
             return _row_to_aggregate(row) if row is not None else None
 
+    @persist_guarded
     def get_for_tenant(self, tenant_id: str, exception_id: str) -> ExceptionAggregate | None:
         """Tenant-scoped read — fails closed if tenant does not own the case.
 
@@ -154,6 +158,7 @@ class ExceptionRepository:
             )
             return _row_to_aggregate(row) if row is not None else None
 
+    @persist_guarded
     def apply(
         self,
         snapshot: ExceptionAggregate,
@@ -271,6 +276,7 @@ class ExceptionRepository:
             )
         return refreshed
 
+    @persist_guarded
     def audit_trail(self, exception_id: str) -> list[ExceptionAuditRow]:
         """Return the ordered audit rows for one aggregate (oldest first)."""
         with Session(self._engine) as session:
@@ -282,6 +288,7 @@ class ExceptionRepository:
             )
             return list(rows)
 
+    @persist_guarded
     def _audit_rejection(
         self,
         snapshot: ExceptionAggregate,
