@@ -41,8 +41,9 @@ Identity is `(tenant_id, idempotency_key)` (composite PK).
 3. non-terminal intent row → **recovery** (scan adapter by key, write
    only if absent, advance, verify) — dispatched *before* the
    fresh-`APPROVED` gate so crashed owners are resumable;
-4. fresh `APPROVED` gate → integrity → guard → policy → `record`
-   (same-hash race is a no-op) → single-commit intent
+4. fresh `APPROVED` gate → integrity → guard → policy → `claim`
+   (`FRESH` binds, `REPLAY` passes through, `CONFLICT` rejects) →
+   single-commit intent
    (`APPROVED→EXECUTING` + audit + row) → bounded same-key adapter
    writes → persist `external_reference` → `POST_VERIFYING` →
    verify → `CLOSED`, or `FAILED`/`MISMATCH` → `FAILED`→`ESCALATED`.

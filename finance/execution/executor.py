@@ -57,7 +57,7 @@ from finance.reconciliation.reconciler import reconcile
 from finance.reconciliation.tolerances import ReconciliationTolerance
 from shared.safety.errors import PersistenceError, persist_guarded
 from shared.safety.execution_guard import ExecutionCommand, ExecutionGuard
-from shared.safety.idempotency import IdempotencyStore
+from shared.safety.idempotency import ClaimOutcome, IdempotencyStore
 
 logger = logging.getLogger(__name__)
 
@@ -226,9 +226,12 @@ class Executor:
 
         payload_hash = str(getattr(proposal, "content_hash", ""))
 
-        # (2) Store conflict check: same key, differing hash performs no write.
-        seen_hash = self._store.payload_hash_for(tenant_id, idempotency_key)
-        if seen_hash is not None and seen_hash != payload_hash:
+        # (2) Idempotency claim: FRESH binds (tenant, key) to this hash
+        # and proceeds; REPLAY means the binding already exists and the
+        # row state below decides (terminal replay / intent recovery /
+        # fresh execute); CONFLICT (same key, different hash) performs
+        # no write.
+        if self._store.claim(tenant_id, idempotency_key, payload_hash) is ClaimOutcome.CONFLICT:
             logger.warning("idempotency conflict key=%s: no write performed", idempotency_key)
             return self._rejected(execution_id, idempotency_key, exception_id)
 
@@ -292,9 +295,7 @@ class Executor:
             logger.warning("execution refused key=%s: policy denied", idempotency_key)
             return self._rejected(execution_id, idempotency_key, fresh.exception_id)
 
-        # (7) Bind the key to this payload hash (identical re-record is a no-op).
-        self._store.record(tenant_id, idempotency_key, payload_hash)
-
+        # (7) Key already bound by the claim at step (2); build the command.
         command = self._build_command(fresh, proposal, execution_id)
 
         if command is None:
