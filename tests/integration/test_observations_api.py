@@ -60,21 +60,21 @@ def _seed_eval_reports(runs_dir: Path) -> str:
             {
                 "case_id": "EXT-01",
                 "task_type": "extraction",
-                "dimension": "external_evidence",
-                "structured_output_valid": True,
-                "contract_validation_passed": True,
-                "score": 1.0,
+                "dimension": "extraction_accuracy",
+                "output_schema_valid": True,
+                "decision_contract_valid": True,
+                "quality_score": 1.0,
                 "threshold": 1.0,
                 "passed": True,
             },
             {
                 "case_id": "REF-01",
                 "task_type": "refusal",
-                "dimension": "refusal_handling",
-                "structured_output_valid": True,
-                "contract_validation_passed": True,
+                "dimension": "refusal_correctness",
+                "output_schema_valid": True,
+                "decision_contract_valid": True,
                 "abstained": True,
-                "score": 0.0,
+                "quality_score": 0.0,
                 "threshold": 1.0,
                 "passed": False,
             },
@@ -242,25 +242,25 @@ class TestEvaluationDimension:
     def test_dimension_enum_covers_task_types(self) -> None:
         from tests.eval_support.llm_quality_runner import EvaluationDimension
 
-        assert EvaluationDimension("external_evidence") is EvaluationDimension.EXTERNAL_EVIDENCE
-        assert EvaluationDimension("consistency") is EvaluationDimension.CONSISTENCY
-        assert EvaluationDimension("grounding") is EvaluationDimension.GROUNDING
-        assert EvaluationDimension("reasoning") is EvaluationDimension.REASONING
-        assert EvaluationDimension("refusal_handling") is EvaluationDimension.REFUSAL_HANDLING
+        assert EvaluationDimension("extraction_accuracy") is EvaluationDimension.EXTERNAL_EVIDENCE
+        assert EvaluationDimension("contract_compliance") is EvaluationDimension.CONSISTENCY
+        assert EvaluationDimension("groundedness") is EvaluationDimension.GROUNDING
+        assert EvaluationDimension("reasoning_quality") is EvaluationDimension.REASONING
+        assert EvaluationDimension("refusal_correctness") is EvaluationDimension.REFUSAL_HANDLING
         assert EvaluationDimension("scope_compliance") is EvaluationDimension.SCOPE_COMPLIANCE
-        calc = EvaluationDimension("calculation_accuracy")
-        assert calc is EvaluationDimension.CALCULATION_ACCURACY
+        calc = EvaluationDimension("calibration")
+        assert calc is EvaluationDimension.CALIBRATION
         inj = EvaluationDimension("injection_resistance")
         assert inj is EvaluationDimension.INJECTION_RESISTANCE
 
     def test_task_type_maps_to_dimension(self) -> None:
         from tests.eval_support.llm_quality_runner import task_dimension
 
-        assert task_dimension("extraction") == "external_evidence"
-        assert task_dimension("contradiction") == "consistency"
-        assert task_dimension("grounding") == "grounding"
-        assert task_dimension("reasoning") == "reasoning"
-        assert task_dimension("refusal") == "refusal_handling"
+        assert task_dimension("extraction") == "extraction_accuracy"
+        assert task_dimension("contradiction") == "contract_compliance"
+        assert task_dimension("grounding") == "groundedness"
+        assert task_dimension("reasoning") == "reasoning_quality"
+        assert task_dimension("refusal") == "refusal_correctness"
         assert task_dimension("scope") == "scope_compliance"
-        assert task_dimension("calibration") == "calculation_accuracy"
+        assert task_dimension("calibration") == "calibration"
         assert task_dimension("injection") == "injection_resistance"

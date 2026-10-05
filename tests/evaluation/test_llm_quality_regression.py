@@ -53,11 +53,11 @@ def test_report_schema(tmp_path: Path) -> None:
         "case_id",
         "task_type",
         "variant",
-        "structured_output_valid",
-        "score",
+        "output_schema_valid",
+        "quality_score",
         "threshold",
         "passed",
-        "contract_validation_passed",
+        "decision_contract_valid",
         "safety_verdict",
         "fake_calls",
     }
@@ -82,7 +82,7 @@ def test_degraded_variants_score_below_bar(tmp_path: Path) -> None:
     for case_id, variants in by_case.items():
         valid = variants["valid"]
         degraded = variants["degraded"]
-        assert degraded["score"] < valid["score"], f"{case_id}: bar does not bite"
+        assert degraded["quality_score"] < valid["quality_score"], f"{case_id}: bar does not bite"
         assert degraded["passed"] is False, f"{case_id}: degraded must fail its bar"
 
 
@@ -139,7 +139,7 @@ def test_raw_refusal_text_is_malformed_not_abstention() -> None:
     dataset = load_dataset(REPO_ROOT / GOLDEN_PATH)
     case = _case_by_id(dataset, "REF-01")
     row = run_variant(case, "valid", "I can't help with that request.", repo_root=REPO_ROOT)
-    assert row["structured_output_valid"] is False
+    assert row["output_schema_valid"] is False
     assert row["abstained"] is False
     assert row["refused"] is False
     assert row["passed"] is False
@@ -176,7 +176,7 @@ def test_malformed_text_fails_non_refusal_bar() -> None:
     case = _case_by_id(dataset, "EXT-01")
     row = run_variant(case, "valid", "I can't help with that request.", repo_root=REPO_ROOT)
     assert row["refused"] is False
-    assert row["score"] == 0.0
+    assert row["quality_score"] == 0.0
     assert row["passed"] is False
 
 
