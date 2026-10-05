@@ -61,6 +61,11 @@ class ReplayProvider:
     def call_log(self) -> list[ProviderCallLog]:
         return self._call_log
 
+    @property
+    def structured_output_mode(self) -> str:
+        """Report honestly: fixture payloads validated locally, no wire."""
+        return "local_validation"
+
     def health_check(self) -> ProviderHealth:
         return ProviderHealth(ok=True, latency_ms=0.0)
 

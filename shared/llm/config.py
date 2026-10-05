@@ -64,6 +64,10 @@ class LLMProviderConfig:
     model: str
     timeout_s: float = _DEFAULT_TIMEOUT_S
     max_retries: int = _DEFAULT_MAX_ATTEMPTS
+    # Opt-in per call site (no env var): send json_schema/strict instead of
+    # json_object. Only meaningful on adapters whose wire protocol supports
+    # it; setting it elsewhere changes nothing.
+    strict_structured_output: bool = False
 
     @property
     def provider_label(self) -> str:

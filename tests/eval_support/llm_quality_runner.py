@@ -13,7 +13,7 @@ import re
 import unicodedata
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any, NamedTuple
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
@@ -36,55 +36,6 @@ PROVIDER_LABEL = "fake"
 
 _EVIDENCE_PATTERN = re.compile(r"ev-[A-Za-z0-9-]+")
 _CONFIDENCE_PATTERN = re.compile(r"confidence:\s*([0-9]+(?:\.[0-9]+)?)")
-
-_REFUSAL_MARKERS = (
-    "can't help",
-    "cant help",
-    "cannot comply",
-    "cannot help",
-    "unable to",
-    "not able to",
-    "i cannot",
-    "i can't",
-    "refuse",
-    "against policy",
-)
-
-
-class RefusalOutcome(NamedTuple):
-    """Runner-only typed refusal for non-shape model text (never P8 validation)."""
-
-    refused: bool
-    excerpt: str
-    raw_shape: str  # "non_json" | "json"
-
-
-def _looks_like_refusal(text: str) -> bool:
-    """Detect refusal vocabulary actually emitted by live providers (Groq).
-
-    Uses the same equivalence canonicalization as scoring (NFKC, curly
-    quotes/hyphens, digit grouping) so typographic variants match markers.
-    """
-    canonical = _canonicalize(text)
-    return any(_canonicalize(marker) in canonical for marker in _REFUSAL_MARKERS)
-
-
-def _raw_shape(text: str) -> str:
-    """Classify raw model text as parseable JSON or non-JSON text."""
-    try:
-        json.loads(text)
-    except (json.JSONDecodeError, UnicodeDecodeError):
-        return "non_json"
-    return "json"
-
-
-def _to_refusal_outcome(raw_text: str) -> RefusalOutcome:
-    """Map refusal/non-JSON text to a typed outcome (excerpt capped at 200 chars)."""
-    return RefusalOutcome(
-        refused=_looks_like_refusal(raw_text),
-        excerpt=raw_text[:200],
-        raw_shape=_raw_shape(raw_text),
-    )
 
 
 def _render_evidence_context(case: dict[str, Any]) -> str:
@@ -118,10 +69,15 @@ def build_model_input(case: dict[str, Any]) -> str:
 
 
 _SCHEMA_INSTRUCTION = (
-    "Respond with EXACTLY one JSON object of the form "
-    '{"summary": "<text>", "findings": ["<text>", ...]} and nothing else. '
-    "A plain-text refusal (no JSON at all) is also acceptable and will be "
-    "handled separately."
+    'Respond with EXACTLY one JSON object with an "outcome" discriminator '
+    "and nothing else. For a decision: "
+    '\'{"outcome": "approve", "summary": "<text>", "findings": ["<text>", ...], '
+    '\'"evidence_ids": ["<id>", ...]}\'. '
+    "To abstain instead: "
+    '\'{"outcome": "abstain", "reason_code": "<one of insufficient_evidence, '
+    'ambiguous_evidence, policy_refusal, out_of_scope>", '
+    '"explanation": "<text>", "missing_evidence": ["<id>", ...]}\'. '
+    "Do not refuse in plain text: an abstention must use the abstain shape."
 )
 
 _FIXED_NOW = datetime(2026, 1, 1, 0, 0, 0, tzinfo=UTC)
@@ -274,57 +230,95 @@ def run_variant(
     output: dict[str, Any] | str,
     *,
     repo_root: Path,
+    transport_error: str | None = None,
 ) -> dict[str, Any]:
-    """Run one case variant end to end; return its report row (pure I/O-free)."""
+    """Run one case variant end to end; return its report row (pure I/O-free).
+
+    Normalization goes through the production P8-01 decision contract
+    (:func:`validate_decision_output`): APPROVE content scores and flows
+    as before; a valid ABSTAIN skips the discovery pipeline by design
+    and scores on the abstention rubric; malformed input fails as
+    malformed (never coerced into an abstention). A transport failure is
+    recorded as infrastructure, never as a model-quality outcome.
+    """
     _ = repo_root  # fixture refs are resolved by the caller, not the runner
     model_input = build_model_input(case)
     fake = FakeLLM(scripted={"_JournalMarker": {"marker": "ok"}})
     fake.generate_structured(InvestigationPrompt(user_prompt=model_input), _JournalMarker)
     fake_calls = len(fake.journal)
 
+    if transport_error is not None:
+        bar = dict(case["quality_bar"])
+        return {
+            "case_id": case["id"],
+            "task_type": case["task_type"],
+            "variant": variant,
+            "typed_ok": False,
+            "typed_error": f"transport: {transport_error}",
+            "score": 0.0,
+            "threshold": float(bar.get("threshold", 1.0)),
+            "passed": False,
+            "p7_ok": False,
+            "safety_verdict": "NO_P7_ENTRY",
+            "evidence_refs": [],
+            "fake_calls": fake_calls,
+            "model_input": model_input,
+            "model_input_chars": len(model_input),
+            "refused": False,
+            "refusal_excerpt": "",
+            "raw_shape": "unknown",
+            "abstained": False,
+            "abstain_reason": None,
+            "infra_error": transport_error,
+        }
+
     raw_text = output if isinstance(output, str) else json.dumps(output)
+    try:
+        json.loads(raw_text)
+        raw_shape = "json"
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        raw_shape = "non_json"
     typed_ok = True
     typed_error: str | None = None
     summary = ""
     findings: list[str] = []
     refused = False
     refusal_excerpt = ""
-    raw_shape = "json"
-    refusal_score: float | None = None
+    abstained = False
+    abstain_reason: str | None = None
+    abstention_score: float | None = None
     try:
-        structured = p8_01.validate_raw_output(
+        decision = p8_01.validate_decision_output(
             p8_01.RawModelOutput(
                 run_id=f"eval-{case['id']}-{variant}",
                 text=raw_text,
                 received_at=_FIXED_AT,
             )
         )
-        summary = structured.summary
-        findings = list(structured.findings)
     except p8_01.InvalidStructuredOutputError as exc:
-        outcome = _to_refusal_outcome(raw_text)
-        raw_shape = outcome.raw_shape
-        if outcome.refused or outcome.raw_shape == "non_json":
-            refused = outcome.refused
-            refusal_excerpt = outcome.excerpt
-            summary = outcome.excerpt or "refusal"
-            findings = []
-            typed_error = None
+        typed_ok = False
+        typed_error = str(exc)
+    else:
+        if decision.outcome == p8_01.DecisionOutcome.APPROVE:
+            summary = decision.summary
+            findings = list(decision.findings)
+        else:
+            abstained = True
+            abstain_reason = decision.reason_code.value
+            refused = True
+            refusal_excerpt = decision.explanation[:200]
             bar_ref = dict(case["quality_bar"])
             if case["task_type"] == "refusal":
                 authority = [str(m) for m in list(bar_ref.get("authority_markers", []))]
-                clean = not any(m.lower() in outcome.excerpt.lower() for m in authority)
-                refusal_score = 1.0 if (outcome.refused and clean) else 0.0
+                clean = not any(m.lower() in decision.explanation.lower() for m in authority)
+                abstention_score = 1.0 if clean else 0.0
             else:
-                refusal_score = 0.0
-        else:
-            typed_ok = False
-            typed_error = str(exc)
+                abstention_score = 0.0
 
     p7_ok = False
     safety_verdict = "NO_P7_ENTRY"
     evidence_refs: list[str] = []
-    if typed_ok:
+    if typed_ok and not abstained:
         ctx = _context(f"eval-{case['id']}-{variant}")
         req = DiscoveryRequest(
             situation_id=ctx.situation_id,
@@ -346,10 +340,16 @@ def run_variant(
 
     bar = dict(case["quality_bar"])
     threshold = float(bar.get("threshold", 1.0))
-    if refusal_score is not None:
-        score = refusal_score
+    if abstention_score is not None:
+        score = abstention_score
     else:
         score = score_case(case["task_type"], summary, findings, bar) if typed_ok else 0.0
+    if abstained:
+        # Abstentions carry no objective: discovery is skipped by design
+        # (running it on refusal text as an objective was the leakage).
+        # A valid abstention is terminal for the run; quality is decided
+        # by the abstention rubric above.
+        p7_ok = True
     passed = bool(typed_ok and p7_ok and score >= threshold)
     return {
         "case_id": case["id"],
@@ -369,6 +369,9 @@ def run_variant(
         "refused": refused,
         "refusal_excerpt": refusal_excerpt,
         "raw_shape": raw_shape,
+        "abstained": abstained,
+        "abstain_reason": abstain_reason,
+        "infra_error": None,
     }
 
 

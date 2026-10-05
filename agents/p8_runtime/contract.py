@@ -23,9 +23,12 @@ from typing import Any, Protocol
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 __all__ = [
+    "AbstainReason",
     "Budget",
     "BudgetExhaustedError",
     "BudgetUsage",
+    "DecisionOutcome",
+    "DecisionResult",
     "EvaluationObservation",
     "FailureClass",
     "FailureKind",
@@ -46,6 +49,7 @@ __all__ = [
     "compute_input_fingerprint",
     "is_retryable",
     "replay_run",
+    "validate_decision_output",
     "validate_raw_output",
 ]
 
@@ -154,6 +158,112 @@ def validate_raw_output(raw: RawModelOutput) -> StructuredModelOutput:
     if not isinstance(findings, list) or not all(isinstance(f, str) for f in findings):
         raise InvalidStructuredOutputError("findings must be a list of strings")
     return StructuredModelOutput(summary=summary, findings=findings)
+
+
+class DecisionOutcome(StrEnum):
+    """Discriminated model-decision outcomes (closed set)."""
+
+    APPROVE = "approve"
+    ABSTAIN = "abstain"
+
+
+class AbstainReason(StrEnum):
+    """Closed vocabulary for why a model abstained (closed set)."""
+
+    INSUFFICIENT_EVIDENCE = "insufficient_evidence"
+    AMBIGUOUS_EVIDENCE = "ambiguous_evidence"
+    POLICY_REFUSAL = "policy_refusal"
+    OUT_OF_SCOPE = "out_of_scope"
+
+
+class DecisionResult(BaseModel):
+    """Validated discriminated model decision (single shape, gated content).
+
+    One class carries both outcomes so no module-level name can leak
+    authority vocabulary (see the P8-01 no-authority-leakage gate): the
+    ``outcome`` field value (``"approve"`` / ``"abstain"``) is the
+    discriminator, never a class name. Per-outcome content rules are
+    enforced by :func:`validate_decision_output`, the sole construction
+    path: an abstention carries no approval content (empty summary,
+    findings, evidence) and an approval carries no abstention content,
+    so neither shape can be consumed as the other downstream.
+    """
+
+    model_config = _FORBID_EXTRA
+
+    outcome: DecisionOutcome
+    summary: str = ""
+    findings: list[str] = Field(default_factory=list)
+    evidence_ids: list[str] = Field(default_factory=list)
+    reason_code: AbstainReason | None = None
+    explanation: str = ""
+    missing_evidence: list[str] = Field(default_factory=list)
+
+
+def validate_decision_output(raw: RawModelOutput) -> DecisionResult:
+    """Validate untrusted raw text into a discriminated decision.
+
+    The ``outcome`` discriminator is read first: ``"approve"`` validates
+    the approval shape, ``"abstain"`` validates the abstention shape.
+    Anything else — malformed JSON, non-object payloads, missing or
+    unknown ``outcome``, mistyped fields, unknown keys — raises
+    :class:`InvalidStructuredOutputError`. Malformed input is never
+    coerced into an abstention.
+    """
+    try:
+        parsed: Any = json.loads(raw.text)
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise InvalidStructuredOutputError("raw output is not valid JSON") from exc
+    if not isinstance(parsed, dict):
+        raise InvalidStructuredOutputError("raw output must be a JSON object")
+    outcome = parsed.get("outcome")
+    if outcome == DecisionOutcome.APPROVE.value:
+        allowed = {"outcome", "summary", "findings", "evidence_ids"}
+        unknown = set(parsed) - allowed
+        if unknown:
+            raise InvalidStructuredOutputError(f"unknown keys: {sorted(unknown)}")
+        summary = parsed.get("summary")
+        if not isinstance(summary, str) or not summary:
+            raise InvalidStructuredOutputError("summary must be a non-empty string")
+        findings = parsed.get("findings", [])
+        if not isinstance(findings, list) or not all(isinstance(f, str) for f in findings):
+            raise InvalidStructuredOutputError("findings must be a list of strings")
+        evidence_ids = parsed.get("evidence_ids", [])
+        if not isinstance(evidence_ids, list) or not all(isinstance(e, str) for e in evidence_ids):
+            raise InvalidStructuredOutputError("evidence_ids must be a list of strings")
+        return DecisionResult(
+            outcome=DecisionOutcome.APPROVE,
+            summary=summary,
+            findings=findings,
+            evidence_ids=evidence_ids,
+        )
+    if outcome == DecisionOutcome.ABSTAIN.value:
+        allowed = {"outcome", "reason_code", "explanation", "missing_evidence"}
+        unknown = set(parsed) - allowed
+        if unknown:
+            raise InvalidStructuredOutputError(f"unknown keys: {sorted(unknown)}")
+        reason_code = parsed.get("reason_code")
+        try:
+            reason = AbstainReason(reason_code)
+        except ValueError as exc:
+            raise InvalidStructuredOutputError(
+                f"reason_code must be one of {[r.value for r in AbstainReason]}"
+            ) from exc
+        explanation = parsed.get("explanation")
+        if not isinstance(explanation, str) or not explanation:
+            raise InvalidStructuredOutputError("explanation must be a non-empty string")
+        missing_evidence = parsed.get("missing_evidence", [])
+        if not isinstance(missing_evidence, list) or not all(
+            isinstance(m, str) for m in missing_evidence
+        ):
+            raise InvalidStructuredOutputError("missing_evidence must be a list of strings")
+        return DecisionResult(
+            outcome=DecisionOutcome.ABSTAIN,
+            reason_code=reason,
+            explanation=explanation,
+            missing_evidence=missing_evidence,
+        )
+    raise InvalidStructuredOutputError("outcome must be 'approve' or 'abstain'")
 
 
 def _reject_non_finite(value: float, name: str) -> float:
