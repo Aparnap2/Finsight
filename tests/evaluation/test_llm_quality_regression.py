@@ -134,22 +134,48 @@ def test_evidence_context_reaches_model_input() -> None:
     assert "meridian" in rendered
 
 
-def test_refusal_text_maps_to_typed_outcome_for_refusal_bar() -> None:
-    """Assert raw refusal text becomes a passing REF outcome (typed, scored)."""
+def test_raw_refusal_text_is_malformed_not_abstention() -> None:
+    """Assert raw refusal text fails as malformed (never coerced to ABSTAIN)."""
     dataset = load_dataset(REPO_ROOT / GOLDEN_PATH)
     case = _case_by_id(dataset, "REF-01")
     row = run_variant(case, "valid", "I can't help with that request.", repo_root=REPO_ROOT)
+    assert row["typed_ok"] is False
+    assert row["abstained"] is False
+    assert row["refused"] is False
+    assert row["passed"] is False
+
+
+def test_typed_abstain_passes_refusal_bar() -> None:
+    """Assert a valid ABSTAIN outcome passes the REF bar (typed, scored)."""
+    import json as _json
+
+    dataset = load_dataset(REPO_ROOT / GOLDEN_PATH)
+    case = _case_by_id(dataset, "REF-01")
+    row = run_variant(
+        case,
+        "valid",
+        _json.dumps(
+            {
+                "outcome": "abstain",
+                "reason_code": "policy_refusal",
+                "explanation": "declining to authorize without human approval",
+                "missing_evidence": [],
+            }
+        ),
+        repo_root=REPO_ROOT,
+    )
+    assert row["abstained"] is True
+    assert row["abstain_reason"] == "policy_refusal"
     assert row["refused"] is True
-    assert row["raw_shape"] == "non_json"
     assert row["passed"] is True
 
 
-def test_refusal_text_fails_non_refusal_bar() -> None:
-    """Assert refusal text yields no free pass on a non-refusal bar."""
+def test_malformed_text_fails_non_refusal_bar() -> None:
+    """Assert malformed text yields no free pass on a non-refusal bar."""
     dataset = load_dataset(REPO_ROOT / GOLDEN_PATH)
     case = _case_by_id(dataset, "EXT-01")
     row = run_variant(case, "valid", "I can't help with that request.", repo_root=REPO_ROOT)
-    assert row["refused"] is True
+    assert row["refused"] is False
     assert row["score"] == 0.0
     assert row["passed"] is False
 
@@ -172,10 +198,11 @@ def test_digit_grouped_number_matches_plain_marker() -> None:
 
 
 def test_schema_instruction_present_in_build_model_input() -> None:
-    """Assert the live-call prompt demands the exact JSON shape (or refusal)."""
+    """Assert the live-call prompt demands the discriminated outcome shape."""
     dataset = load_dataset(REPO_ROOT / GOLDEN_PATH)
     case = _case_by_id(dataset, "EXT-01")
     rendered = build_model_input(case)
-    assert '{"summary"' in rendered
-    assert '"findings"' in rendered
-    assert "plain-text refusal" in rendered
+    assert '"outcome"' in rendered
+    assert '"abstain"' in rendered
+    assert "reason_code" in rendered
+    assert "plain-text refusal" not in rendered
