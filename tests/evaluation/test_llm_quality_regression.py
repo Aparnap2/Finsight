@@ -53,11 +53,11 @@ def test_report_schema(tmp_path: Path) -> None:
         "case_id",
         "task_type",
         "variant",
-        "typed_ok",
+        "structured_output_valid",
         "score",
         "threshold",
         "passed",
-        "p7_ok",
+        "contract_validation_passed",
         "safety_verdict",
         "fake_calls",
     }
@@ -139,7 +139,7 @@ def test_raw_refusal_text_is_malformed_not_abstention() -> None:
     dataset = load_dataset(REPO_ROOT / GOLDEN_PATH)
     case = _case_by_id(dataset, "REF-01")
     row = run_variant(case, "valid", "I can't help with that request.", repo_root=REPO_ROOT)
-    assert row["typed_ok"] is False
+    assert row["structured_output_valid"] is False
     assert row["abstained"] is False
     assert row["refused"] is False
     assert row["passed"] is False

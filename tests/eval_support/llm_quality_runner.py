@@ -12,6 +12,7 @@ import json
 import re
 import unicodedata
 from datetime import UTC, datetime, timedelta
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
@@ -33,6 +34,40 @@ from shared.llm.types import InvestigationPrompt
 RUNNER_VERSION = "llm-quality-runner-v1"
 MODEL_LABEL = "fake-llm-1"
 PROVIDER_LABEL = "fake"
+
+
+class EvaluationDimension(StrEnum):
+    """UI-facing names for the golden task types (closed set)."""
+
+    EXTERNAL_EVIDENCE = "external_evidence"
+    CONSISTENCY = "consistency"
+    GROUNDING = "grounding"
+    REASONING = "reasoning"
+    REFUSAL_HANDLING = "refusal_handling"
+    SCOPE_COMPLIANCE = "scope_compliance"
+    CALCULATION_ACCURACY = "calculation_accuracy"
+    INJECTION_RESISTANCE = "injection_resistance"
+
+
+_TASK_DIMENSIONS: dict[str, EvaluationDimension] = {
+    "extraction": EvaluationDimension.EXTERNAL_EVIDENCE,
+    "contradiction": EvaluationDimension.CONSISTENCY,
+    "grounding": EvaluationDimension.GROUNDING,
+    "reasoning": EvaluationDimension.REASONING,
+    "refusal": EvaluationDimension.REFUSAL_HANDLING,
+    "scope": EvaluationDimension.SCOPE_COMPLIANCE,
+    "calibration": EvaluationDimension.CALCULATION_ACCURACY,
+    "injection": EvaluationDimension.INJECTION_RESISTANCE,
+}
+
+
+def task_dimension(task_type: str) -> str:
+    """Map a golden task type to its UI-facing dimension value."""
+    try:
+        return _TASK_DIMENSIONS[task_type].value
+    except KeyError as exc:
+        raise ValueError(f"unknown task type {task_type!r}") from exc
+
 
 _EVIDENCE_PATTERN = re.compile(r"ev-[A-Za-z0-9-]+")
 _CONFIDENCE_PATTERN = re.compile(r"confidence:\s*([0-9]+(?:\.[0-9]+)?)")
@@ -252,13 +287,14 @@ def run_variant(
         return {
             "case_id": case["id"],
             "task_type": case["task_type"],
+            "dimension": task_dimension(case["task_type"]),
             "variant": variant,
-            "typed_ok": False,
+            "structured_output_valid": False,
             "typed_error": f"transport: {transport_error}",
             "score": 0.0,
             "threshold": float(bar.get("threshold", 1.0)),
             "passed": False,
-            "p7_ok": False,
+            "contract_validation_passed": False,
             "safety_verdict": "NO_P7_ENTRY",
             "evidence_refs": [],
             "fake_calls": fake_calls,
@@ -278,7 +314,7 @@ def run_variant(
         raw_shape = "json"
     except (json.JSONDecodeError, UnicodeDecodeError):
         raw_shape = "non_json"
-    typed_ok = True
+    structured_output_valid = True
     typed_error: str | None = None
     summary = ""
     findings: list[str] = []
@@ -296,7 +332,7 @@ def run_variant(
             )
         )
     except p8_01.InvalidStructuredOutputError as exc:
-        typed_ok = False
+        structured_output_valid = False
         typed_error = str(exc)
     else:
         if decision.outcome == p8_01.DecisionOutcome.APPROVE:
@@ -317,10 +353,10 @@ def run_variant(
             else:
                 abstention_score = 0.0
 
-    p7_ok = False
+    contract_validation_passed = False
     safety_verdict = "NO_P7_ENTRY"
     evidence_refs: list[str] = []
-    if typed_ok and not abstained:
+    if structured_output_valid and not abstained:
         ctx = _context(f"eval-{case['id']}-{variant}")
         req = DiscoveryRequest(
             situation_id=ctx.situation_id,
@@ -333,8 +369,8 @@ def run_variant(
         disc = discover(req, context=ctx)
         rea = reason(disc, context=ctx)
         br = brief(rea, context=ctx)
-        p7_ok = bool(disc.success and rea.success and br.success)
-        if p7_ok:
+        contract_validation_passed = bool(disc.success and rea.success and br.success)
+        if contract_validation_passed:
             safety_verdict = evaluate(
                 "E", "E1", context=ctx, discovery=disc, reasoning=rea, brief=br
             )
@@ -345,24 +381,28 @@ def run_variant(
     if abstention_score is not None:
         score = abstention_score
     else:
-        score = score_case(case["task_type"], summary, findings, bar) if typed_ok else 0.0
+        if structured_output_valid:
+            score = score_case(case["task_type"], summary, findings, bar)
+        else:
+            score = 0.0
     if abstained:
         # Abstentions carry no objective: discovery is skipped by design
         # (running it on refusal text as an objective was the leakage).
         # A valid abstention is terminal for the run; quality is decided
         # by the abstention rubric above.
-        p7_ok = True
-    passed = bool(typed_ok and p7_ok and score >= threshold)
+        contract_validation_passed = True
+    passed = bool(structured_output_valid and contract_validation_passed and score >= threshold)
     return {
         "case_id": case["id"],
         "task_type": case["task_type"],
+        "dimension": task_dimension(case["task_type"]),
         "variant": variant,
-        "typed_ok": typed_ok,
+        "structured_output_valid": structured_output_valid,
         "typed_error": typed_error,
         "score": score,
         "threshold": threshold,
         "passed": passed,
-        "p7_ok": p7_ok,
+        "contract_validation_passed": contract_validation_passed,
         "safety_verdict": safety_verdict,
         "evidence_refs": evidence_refs,
         "fake_calls": fake_calls,
