@@ -39,13 +39,13 @@ PROVIDER_LABEL = "fake"
 class EvaluationDimension(StrEnum):
     """UI-facing names for the golden task types (closed set)."""
 
-    EXTERNAL_EVIDENCE = "external_evidence"
-    CONSISTENCY = "consistency"
-    GROUNDING = "grounding"
-    REASONING = "reasoning"
-    REFUSAL_HANDLING = "refusal_handling"
+    EXTERNAL_EVIDENCE = "extraction_accuracy"
+    CONSISTENCY = "contract_compliance"
+    GROUNDING = "groundedness"
+    REASONING = "reasoning_quality"
+    REFUSAL_HANDLING = "refusal_correctness"
     SCOPE_COMPLIANCE = "scope_compliance"
-    CALCULATION_ACCURACY = "calculation_accuracy"
+    CALIBRATION = "calibration"
     INJECTION_RESISTANCE = "injection_resistance"
 
 
@@ -56,7 +56,7 @@ _TASK_DIMENSIONS: dict[str, EvaluationDimension] = {
     "reasoning": EvaluationDimension.REASONING,
     "refusal": EvaluationDimension.REFUSAL_HANDLING,
     "scope": EvaluationDimension.SCOPE_COMPLIANCE,
-    "calibration": EvaluationDimension.CALCULATION_ACCURACY,
+    "calibration": EvaluationDimension.CALIBRATION,
     "injection": EvaluationDimension.INJECTION_RESISTANCE,
 }
 
@@ -289,12 +289,12 @@ def run_variant(
             "task_type": case["task_type"],
             "dimension": task_dimension(case["task_type"]),
             "variant": variant,
-            "structured_output_valid": False,
+            "output_schema_valid": False,
             "typed_error": f"transport: {transport_error}",
-            "score": 0.0,
+            "quality_score": 0.0,
             "threshold": float(bar.get("threshold", 1.0)),
             "passed": False,
-            "contract_validation_passed": False,
+            "decision_contract_valid": False,
             "safety_verdict": "NO_P7_ENTRY",
             "evidence_refs": [],
             "fake_calls": fake_calls,
@@ -314,7 +314,7 @@ def run_variant(
         raw_shape = "json"
     except (json.JSONDecodeError, UnicodeDecodeError):
         raw_shape = "non_json"
-    structured_output_valid = True
+    output_schema_valid = True
     typed_error: str | None = None
     summary = ""
     findings: list[str] = []
@@ -332,7 +332,7 @@ def run_variant(
             )
         )
     except p8_01.InvalidStructuredOutputError as exc:
-        structured_output_valid = False
+        output_schema_valid = False
         typed_error = str(exc)
     else:
         if decision.outcome == p8_01.DecisionOutcome.APPROVE:
@@ -353,10 +353,10 @@ def run_variant(
             else:
                 abstention_score = 0.0
 
-    contract_validation_passed = False
+    decision_contract_valid = False
     safety_verdict = "NO_P7_ENTRY"
     evidence_refs: list[str] = []
-    if structured_output_valid and not abstained:
+    if output_schema_valid and not abstained:
         ctx = _context(f"eval-{case['id']}-{variant}")
         req = DiscoveryRequest(
             situation_id=ctx.situation_id,
@@ -369,8 +369,8 @@ def run_variant(
         disc = discover(req, context=ctx)
         rea = reason(disc, context=ctx)
         br = brief(rea, context=ctx)
-        contract_validation_passed = bool(disc.success and rea.success and br.success)
-        if contract_validation_passed:
+        decision_contract_valid = bool(disc.success and rea.success and br.success)
+        if decision_contract_valid:
             safety_verdict = evaluate(
                 "E", "E1", context=ctx, discovery=disc, reasoning=rea, brief=br
             )
@@ -379,30 +379,30 @@ def run_variant(
     bar = dict(case["quality_bar"])
     threshold = float(bar.get("threshold", 1.0))
     if abstention_score is not None:
-        score = abstention_score
+        quality_score = abstention_score
     else:
-        if structured_output_valid:
-            score = score_case(case["task_type"], summary, findings, bar)
+        if output_schema_valid:
+            quality_score = score_case(case["task_type"], summary, findings, bar)
         else:
-            score = 0.0
+            quality_score = 0.0
     if abstained:
         # Abstentions carry no objective: discovery is skipped by design
         # (running it on refusal text as an objective was the leakage).
         # A valid abstention is terminal for the run; quality is decided
         # by the abstention rubric above.
-        contract_validation_passed = True
-    passed = bool(structured_output_valid and contract_validation_passed and score >= threshold)
+        decision_contract_valid = True
+    passed = bool(output_schema_valid and decision_contract_valid and quality_score >= threshold)
     return {
         "case_id": case["id"],
         "task_type": case["task_type"],
         "dimension": task_dimension(case["task_type"]),
         "variant": variant,
-        "structured_output_valid": structured_output_valid,
+        "output_schema_valid": output_schema_valid,
         "typed_error": typed_error,
-        "score": score,
+        "quality_score": quality_score,
         "threshold": threshold,
         "passed": passed,
-        "contract_validation_passed": contract_validation_passed,
+        "decision_contract_valid": decision_contract_valid,
         "safety_verdict": safety_verdict,
         "evidence_refs": evidence_refs,
         "fake_calls": fake_calls,
@@ -445,7 +445,7 @@ def run_suite(
             arg = dict(raw_output) if isinstance(raw_output, dict) else str(raw_output)
             rows.append(run_variant(case, variant, arg, repo_root=repo_root))
     passed = sum(1 for r in rows if r["passed"])
-    mean_score = sum(float(r["score"]) for r in rows) / len(rows) if rows else 0.0
+    mean_score = sum(float(r["quality_score"]) for r in rows) / len(rows) if rows else 0.0
     return {
         "model": MODEL_LABEL,
         "provider": PROVIDER_LABEL,
