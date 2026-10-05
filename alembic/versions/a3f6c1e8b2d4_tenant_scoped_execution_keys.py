@@ -10,16 +10,18 @@ a cross-tenant request could observe or graft another tenant's execution.
 
 Identity is now the ordered pair (tenant_id, idempotency_key):
 
-* ``execution_records``: add ``tenant_id`` column (NOT NULL, default ''),
-  upgrade primary key to (tenant_id, idempotency_key).
+* ``execution_records``: add ``tenant_id`` column (NOT NULL,
+  backfilled, server default removed after backfill), upgrade primary
+  key to (tenant_id, idempotency_key).
 * ``idempotency_keys``: same treatment.
 
-In production, on an existing table ALTER would need to drop and recreate
-the PK constraint; backfill ``tenant_id=''`` for rows pre-dating this
-change and set the application tenant explicitly before importing new
-rrows. In dev/sqlite, a rebuild of the table is required for the
-constraint; the SQL that does this is below for Postgres and a table
-swap-guarded variant for sqlite.
+Pre-existing rows keep ``tenant_id=''`` and must be tenant-remapped by
+an explicit data pass before cutover: the application rejects empty
+tenant ids, so unmapped rows are invisible orphans, not live data.
+
+On Postgres, ``batch_alter_table`` emits plain ``ALTER TABLE``
+statements; every step below takes ``ACCESS EXCLUSIVE``. Deploy only
+with writers quiesced.
 """
 
 from collections.abc import Sequence
@@ -36,26 +38,48 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    """Tenant-scope the execution record and idempotency ledger tables."""
+    """Tenant-scope the execution record and idempotency ledger tables.
+
+    DEPLOY ONLY WITH WRITERS QUIESCED: every statement below takes
+    ACCESS EXCLUSIVE on its table (PK drop/recreate + full unique-index
+    build are non-concurrent). Never run downgrade() in production —
+    it destroys the tenant boundary; forward-fix only.
+    """
+    op.execute("UPDATE execution_records SET tenant_id = '' WHERE tenant_id IS NULL")
     with op.batch_alter_table("execution_records") as batch:
-        batch.add_column(sa.Column("tenant_id", sa.String(), nullable=True))
-        batch.execute("UPDATE execution_records SET tenant_id = '' WHERE tenant_id IS NULL")
-        batch.alter_column("tenant_id", existing_type=sa.String(), nullable=False)
+        batch.add_column(sa.Column("tenant_id", sa.String(), nullable=True, server_default=""))
+    op.execute("UPDATE execution_records SET tenant_id = '' WHERE tenant_id IS NULL")
+    with op.batch_alter_table("execution_records") as batch:
+        batch.alter_column(
+            "tenant_id",
+            existing_type=sa.String(),
+            nullable=False,
+            server_default=None,
+        )
         batch.drop_constraint("execution_records_pkey", type_="primary")
         batch.create_primary_key("execution_records_pkey", ["tenant_id", "idempotency_key"])
         batch.alter_column("idempotency_key", existing_type=sa.String(), nullable=False)
 
     with op.batch_alter_table("idempotency_keys") as batch:
-        batch.add_column(sa.Column("tenant_id", sa.String(), nullable=True))
-        batch.execute("UPDATE idempotency_keys SET tenant_id = '' WHERE tenant_id IS NULL")
-        batch.alter_column("tenant_id", existing_type=sa.String(), nullable=False)
+        batch.add_column(sa.Column("tenant_id", sa.String(), nullable=True, server_default=""))
+    op.execute("UPDATE idempotency_keys SET tenant_id = '' WHERE tenant_id IS NULL")
+    with op.batch_alter_table("idempotency_keys") as batch:
+        batch.alter_column(
+            "tenant_id",
+            existing_type=sa.String(),
+            nullable=False,
+            server_default=None,
+        )
         batch.drop_constraint("idempotency_keys_pkey", type_="primary")
         batch.create_primary_key("idempotency_keys_pkey", ["tenant_id", "idempotency_key"])
         batch.alter_column("idempotency_key", existing_type=sa.String(), nullable=False)
 
 
 def downgrade() -> None:
-    """Restore the single-key ledger (best-effort; tenant isolation lost)."""
+    """NEVER RUN IN PRODUCTION. Restores the single-key ledger, which
+    destroys the tenant boundary and fails outright if any cross-tenant
+    key collision exists. Production rollback is restore-from-backup /
+    forward-fix only."""
     with op.batch_alter_table("idempotency_keys") as batch:
         batch.drop_constraint("idempotency_keys_pkey", type_="primary")
         batch.create_primary_key("idempotency_keys_pkey", ["idempotency_key"])
