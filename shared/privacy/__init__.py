@@ -7,6 +7,12 @@ from shared.privacy.inventory import (
     SourceEntry,
     completeness_gaps,
 )
+from shared.privacy.sanitize import (
+    sanitize_for_eval,
+    sanitize_for_llm,
+    sanitize_for_log,
+    sanitize_for_ui,
+)
 
 __all__ = [
     "SOURCE_REGISTRY",
@@ -14,4 +20,8 @@ __all__ = [
     "InventoryRow",
     "SourceEntry",
     "completeness_gaps",
+    "sanitize_for_eval",
+    "sanitize_for_llm",
+    "sanitize_for_log",
+    "sanitize_for_ui",
 ]
