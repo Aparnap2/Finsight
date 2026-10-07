@@ -68,6 +68,25 @@ class OpenAICompatibleProvider:
         """Return the resolved config (read-only)."""
         return self._config
 
+    @property
+    def structured_output_mode(self) -> str:
+        """Report the wire format honestly: json_schema iff strict is set."""
+        return "json_schema" if self._config.strict_structured_output else "json_object"
+
+    def _response_format(self, response_schema: type[BaseModel]) -> dict[str, Any]:
+        """Build the response_format payload for the configured mode."""
+        if not self._config.strict_structured_output:
+            return {"type": "json_object"}
+        schema_name = getattr(response_schema, "__name__", "response")
+        return {
+            "type": "json_schema",
+            "json_schema": {
+                "name": schema_name,
+                "strict": True,
+                "schema": response_schema.model_json_schema(),
+            },
+        }
+
     def _get_client(self) -> Any:
         """Lazy OpenAI client (created once, thread-safe for single-thread)."""
         if self._openai_client is None:
@@ -151,8 +170,9 @@ class OpenAICompatibleProvider:
     ) -> T:
         """Call chat completions and return strictly validated output.
 
-        Uses ``response_format={"type": "json_object"}`` for structured output.
-        Validates through :func:`validate_structured_output` at the boundary —
+        Uses ``json_object`` by default, or ``json_schema``/strict when
+        the config opts into ``strict_structured_output``. Validates
+        through :func:`validate_structured_output` at the boundary —
         unknown fields are always rejected regardless of schema ``extra``.
 
         Raises:
@@ -189,7 +209,7 @@ class OpenAICompatibleProvider:
                     model=self._config.model,
                     messages=messages,
                     temperature=0,
-                    response_format={"type": "json_object"},
+                    response_format=self._response_format(response_schema),
                 )
                 content = self._extract_content(response)
                 result = validate_structured_output(content, response_schema)

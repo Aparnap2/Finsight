@@ -80,6 +80,11 @@ class GroqProvider:
     def call_log(self) -> list[ProviderCallLog]:
         return self._call_log
 
+    @property
+    def structured_output_mode(self) -> str:
+        """Report the wire format honestly: this adapter is json_object-only."""
+        return "json_object"
+
     def _resolve_model(self) -> str:
         if self._model_override:
             return self._model_override

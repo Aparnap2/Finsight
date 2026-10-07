@@ -55,6 +55,11 @@ class FakeLLM:
         """Alias for :attr:`journal` (model/cost metadata only)."""
         return self.journal
 
+    @property
+    def structured_output_mode(self) -> str:
+        """Report honestly: scripted payloads validated locally, no wire."""
+        return "local_validation"
+
     def script_response(self, schema_name: str, payload: dict[str, Any] | BaseModel | str) -> None:
         """Script the payload returned for ``schema_name``."""
         self._scripted[schema_name] = payload
