@@ -1,6 +1,9 @@
-from typing import Any
+from __future__ import annotations
 
-from openai import OpenAI
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:  # pragma: no cover - import only for type checking
+    from openai import OpenAI
 
 from shared.config import get_settings
 
@@ -15,6 +18,10 @@ class LLMClient:
         self._provider = "poolside"
 
     def _get_client(self) -> OpenAI:
+        # Deferred SDK import: importing this module must not load the
+        # network stack (integration purity gates assert on sys.modules).
+        from openai import OpenAI
+
         if self._client is not None:
             return self._client
 
