@@ -24,6 +24,7 @@ transitions, no proposals. Provider-independent (no Groq/OpenAI imports);
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import re
 import time
@@ -67,6 +68,7 @@ except ImportError:  # pragma: no cover
 
     def sanitize_output(x):  # type: ignore[no-redef]
         return x
+
 
 logger = logging.getLogger(__name__)
 
@@ -264,7 +266,7 @@ class CapabilityExecutor:
                     )
                 )
                 if trace_ctx is not None:
-                    try:
+                    with contextlib.suppress(Exception):
                         self._tracer.tool(
                             trace_ctx,
                             f"capability:{call.capability}",
@@ -272,12 +274,10 @@ class CapabilityExecutor:
                             {"deduped": True, "order_index": call.order_index},
                             {"tenant_id": tenant_id, "deduped": True},
                         )
-                    except Exception:
-                        pass
                 continue
             # Observability: sanitized capability call span
             if trace_ctx is not None:
-                try:
+                with contextlib.suppress(Exception):
                     self._tracer.tool(
                         trace_ctx,
                         f"capability:{call.capability}",
@@ -285,13 +285,11 @@ class CapabilityExecutor:
                         {"order_index": call.order_index},
                         {"tenant_id": tenant_id},
                     )
-                except Exception:
-                    pass
             outcome = self._execute_once(
                 call.capability, dict(call.args), tenant_id, call.order_index
             )
             if trace_ctx is not None:
-                try:
+                with contextlib.suppress(Exception):
                     self._tracer.tool(
                         trace_ctx,
                         f"capability_result:{call.capability}",
@@ -305,8 +303,6 @@ class CapabilityExecutor:
                         ),
                         {"tenant_id": tenant_id, "success": outcome.success},
                     )
-                except Exception:
-                    pass
             cache[fingerprint] = outcome.result
             first_index[fingerprint] = call.order_index
             outcomes.append(outcome)

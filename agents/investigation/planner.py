@@ -26,6 +26,7 @@ identically through the injected seam.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import re
 
@@ -53,6 +54,7 @@ except ImportError:  # pragma: no cover - tracing optional in import cycle
     def sanitize_output(x):  # type: ignore[no-redef]
         return x
 
+
 _SYSTEM_PROMPT = (
     "You are the FinSight investigation planner. Return ONE candidate "
     "InvestigationPlan as JSON with exactly these fields: hypothesis_text, "
@@ -62,7 +64,7 @@ _SYSTEM_PROMPT = (
     '"args" (an OBJECT mapping string keys to string values — never a bare '
     "string, never a list, never null), "
     'and "order_index" (integer starting at 0). '
-    "Example args: {\"payment_id\": \"pay_123\", \"provider\": \"stripe\"}. "
+    'Example args: {"payment_id": "pay_123", "provider": "stripe"}. '
     "Allowed acts only: semantic interpretation, hypothesis generation, "
     "investigation planning, capability selection from the provided allowlist, "
     "evidence synthesis. "
@@ -209,7 +211,7 @@ class Planner:
         )
         # Observability: planner span (tenant-safe, bounded, no bodies)
         if trace_ctx is not None:
-            try:
+            with contextlib.suppress(Exception):
                 self._tracer.span(
                     trace_ctx,
                     "planner",
@@ -225,8 +227,6 @@ class Planner:
                     {"status": "planning", "evidence_count": len(request.evidence_ids)},
                     {"correlation_id": request.exception_id, "tenant_id": request.tenant_id},
                 )
-            except Exception:
-                pass
         import time
 
         _start = time.monotonic()
