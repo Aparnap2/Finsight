@@ -9,7 +9,7 @@ legitimate-looking value.
 from datetime import UTC, datetime
 
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import Table, create_engine
 from sqlalchemy.pool import StaticPool
 
 from finance.exceptions.aggregate import ExceptionAggregate
@@ -48,7 +48,9 @@ class TestRepositoryPersistenceFailure:
         engine = _engine()
         repo = ExceptionRepository(engine)  # type: ignore[arg-type]
         _seed(repo)
-        ExceptionRow.__table__.drop(engine)  # type: ignore[arg-type]
+        _drop_table = ExceptionRow.__table__
+        assert isinstance(_drop_table, Table)
+        _drop_table.drop(engine)
         with pytest.raises(PersistenceError):
             repo.get("exc-pe-1")
 
@@ -60,7 +62,9 @@ class TestRepositoryPersistenceFailure:
         _seed(repo)
         snapshot = repo.get("exc-pe-1")
         assert snapshot is not None
-        ExceptionAuditRow.__table__.drop(engine)  # type: ignore[arg-type]
+        _drop_table = ExceptionAuditRow.__table__
+        assert isinstance(_drop_table, Table)
+        _drop_table.drop(engine)
         with pytest.raises(PersistenceError):
             repo.apply(snapshot, ExceptionState.PROPOSED, actor="tester")
         # The row UPDATE must have been rolled back, not partially committed.
@@ -77,7 +81,9 @@ class TestRepositoryPersistenceFailure:
         _seed(repo)
         snapshot = repo.get("exc-pe-1")
         assert snapshot is not None
-        ExceptionAuditRow.__table__.drop(engine)  # type: ignore[arg-type]
+        _drop_table = ExceptionAuditRow.__table__
+        assert isinstance(_drop_table, Table)
+        _drop_table.drop(engine)
         with pytest.raises(PersistenceError):
             repo.apply(snapshot, ExceptionState.PROPOSED, actor="tester")
         row = ExceptionRepository(engine).get("exc-pe-1")  # type: ignore[arg-type]
@@ -92,7 +98,9 @@ class TestIdempotencyStorePersistenceFailure:
 
         engine = _engine()
         store = IdempotencyStore(engine)  # type: ignore[arg-type]
-        IdempotencyRow.__table__.drop(engine)  # type: ignore[arg-type]
+        _drop_table = IdempotencyRow.__table__
+        assert isinstance(_drop_table, Table)
+        _drop_table.drop(engine)
         with pytest.raises(PersistenceError):
             store.seen("t-acme", "k")
 
@@ -102,7 +110,9 @@ class TestIdempotencyStorePersistenceFailure:
 
         engine = _engine()
         store = IdempotencyStore(engine)  # type: ignore[arg-type]
-        IdempotencyRow.__table__.drop(engine)  # type: ignore[arg-type]
+        _drop_table = IdempotencyRow.__table__
+        assert isinstance(_drop_table, Table)
+        _drop_table.drop(engine)
         with pytest.raises(PersistenceError):
             store.payload_hash_for("t-acme", "k")
 
@@ -112,6 +122,8 @@ class TestIdempotencyStorePersistenceFailure:
 
         engine = _engine()
         store = IdempotencyStore(engine)  # type: ignore[arg-type]
-        IdempotencyRow.__table__.drop(engine)  # type: ignore[arg-type]
+        _drop_table = IdempotencyRow.__table__
+        assert isinstance(_drop_table, Table)
+        _drop_table.drop(engine)
         with pytest.raises(PersistenceError):
             store.claim("t-acme", "k", "h")

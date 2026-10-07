@@ -12,6 +12,7 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+from sqlalchemy import Table
 
 from finance.accounting.errors import TransientError
 from finance.accounting.mock import MockQuickBooksAdapter
@@ -33,7 +34,9 @@ class TestIntentCommitBoundary:
         seed = _Seed(engine)
         executor = _make_executor(adapter, engine)
 
-        ExceptionAuditRow.__table__.drop(engine)  # type: ignore[arg-type]
+        audit_table = ExceptionAuditRow.__table__
+        assert isinstance(audit_table, Table)
+        audit_table.drop(engine)
         r1 = executor.run(seed.approved, seed.proposal, seed.approval, "key-fi-1")
         # COMMIT of row+audit+intent is atomic → nothing persisted
         assert str(r1.result) == "REJECTED"
@@ -90,7 +93,9 @@ class TestAdapterFailureSeams:
         from finance.execution.models import ExecutionRow as _Row
         from shared.safety.errors import PersistenceError
 
-        _Row.__table__.drop(engine)  # type: ignore[arg-type]
+        row_table = _Row.__table__
+        assert isinstance(row_table, Table)
+        row_table.drop(engine)
         with pytest.raises(PersistenceError):
             executor._update_row("tenant-acme", "key-fi-row", external_reference="x")
 
@@ -105,7 +110,7 @@ class TestAdapterFailureSeams:
         def _persist_failed(*a: Any, **k: Any) -> Any:
             raise PersistenceError("simulated local persist failure of external_reference")
 
-        executor._update_row = _persist_failed  # type: ignore[assignment]
+        executor._update_row = _persist_failed
         raised = None
         r1 = None
         try:
@@ -115,6 +120,7 @@ class TestAdapterFailureSeams:
 
         # RED: was raw OperationalError during _update_row; now typed REJECTED
         assert raised is None, f"raw {type(raised).__name__}"
+        assert r1 is not None
         assert str(r1.result) == "REJECTED"
 
         # The adapter write is committed but unrecognized locally: exception
@@ -150,7 +156,7 @@ class TestAdapterFailureSeams:
                 raise RuntimeError("process interrupted")
             return original(*args, **kwargs)
 
-        executor._cas = _cas_crash_once  # type: ignore[assignment]
+        executor._cas = _cas_crash_once
         with pytest.raises(RuntimeError, match="process interrupted"):
             executor.run(seed.approved, seed.proposal, seed.approval, "key-fi-4")
 
