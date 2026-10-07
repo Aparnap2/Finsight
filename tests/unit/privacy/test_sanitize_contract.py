@@ -61,12 +61,19 @@ class TestLogSurface:
         assert out["body"] == "[REDACTED]"
         assert "rahul@example.com" not in str(out)
 
-    def test_payment_ids_preserved(self) -> None:
+    def test_payment_ids_preserved_with_classification(self) -> None:
+        from shared.privacy.inventory import DataClassification
         from shared.privacy.sanitize import sanitize_for_log
 
+        classifications = {
+            "payment_id": DataClassification.INTERNAL,
+            "charge": DataClassification.INTERNAL,
+            "execution_id": DataClassification.INTERNAL,
+        }
         out = sanitize_for_log(
             {"payment_id": "pay_123", "charge": "ch_001", "execution_id": "exec-1"},
             tenant_id="acme",
+            classifications=classifications,
         )
         assert out == {
             "payment_id": "pay_123",
@@ -74,26 +81,69 @@ class TestLogSurface:
             "execution_id": "exec-1",
         }
 
-    def test_amounts_preserved_exactly(self) -> None:
+    def test_amounts_masked_in_logs(self) -> None:
+        from shared.privacy.inventory import DataClassification
         from shared.privacy.sanitize import sanitize_for_log
 
-        out = sanitize_for_log({"gross": Decimal("15000.00")}, tenant_id="acme")
-        assert out["gross"] == Decimal("15000.00")
+        out = sanitize_for_log(
+            {"gross": Decimal("15000.00")},
+            tenant_id="acme",
+            classifications={"gross": DataClassification.FINANCIAL_SENSITIVE},
+        )
+        assert out["gross"] == "[FINANCIAL_SENSITIVE]"
+
+    def test_unclassified_string_fails_closed(self) -> None:
+        from shared.privacy.sanitize import sanitize_for_log
+
+        out = sanitize_for_log({"note": "hello"}, tenant_id="acme")
+        assert out["note"] == "[REDACTED]"
+
+    def test_unclassified_number_fails_closed(self) -> None:
+        from shared.privacy.sanitize import sanitize_for_log
+
+        out = sanitize_for_log({"count": 3}, tenant_id="acme")
+        assert out["count"] == "[REDACTED]"
+
+    def test_explicit_preserve_opt_in(self) -> None:
+        from shared.privacy.sanitize import sanitize_for_log
+
+        out = sanitize_for_log({"note": "hello"}, tenant_id="acme", unknown="preserve")
+        assert out["note"] == "hello"
+        hostile = sanitize_for_log(
+            {"note": "hello", "api_key": "sk-live-abc123xyz"},
+            tenant_id="acme",
+            unknown="preserve",
+        )
+        assert hostile["api_key"] != "sk-live-abc123xyz"
+
+    def test_invalid_unknown_mode_rejected(self) -> None:
+        from shared.privacy.sanitize import sanitize_for_log
+
+        with pytest.raises(ValueError):
+            sanitize_for_log({"a": 1}, tenant_id="acme", unknown="whatever")
 
     def test_log_injection_neutralized(self) -> None:
         from shared.privacy.sanitize import sanitize_for_log
 
-        out = sanitize_for_log({"note": "a\nb\r\nc"}, tenant_id="acme")
-        assert "\n" not in out["note"] and "\r" not in out["note"]
+        out = sanitize_for_log({"note": "a\nb\r\nc"}, tenant_id="acme", unknown="preserve")
+        assert out["note"] == "a b c"
+
+    def test_ui_neutralizes_newlines(self) -> None:
+        from shared.privacy.sanitize import sanitize_for_ui
+
+        out = sanitize_for_ui({"note": "a\nb"}, tenant_id="acme", unknown="preserve")
+        assert out["note"] == "a b"
 
 
 class TestLlmSurface:
     def test_evidence_text_kept_but_scrubbed(self) -> None:
+        from shared.privacy.inventory import DataClassification
         from shared.privacy.sanitize import sanitize_for_llm
 
         out = sanitize_for_llm(
             {"evidence": "invoice total $100, contact rahul@example.com, key sk-live-abc123xyz"},
             tenant_id="acme",
+            classifications={"evidence": DataClassification.INTERNAL},
         )
         assert "invoice total $100" in out["evidence"]
         assert "rahul@example.com" not in out["evidence"]
@@ -106,10 +156,33 @@ class TestLlmSurface:
         assert len(out["snippet"]) <= 500
         assert out["snippet"] != "[REDACTED]"
 
-    def test_explicit_name_classification_tokenizes(self) -> None:
+    def test_llm_preserves_semantic_newlines(self) -> None:
+        from shared.privacy.inventory import DataClassification
         from shared.privacy.sanitize import sanitize_for_llm
 
+        out = sanitize_for_llm(
+            {"evidence": "line one\nline two"},
+            tenant_id="acme",
+            classifications={"evidence": DataClassification.INTERNAL},
+        )
+        assert out["evidence"] == "line one\nline two"
+
+    def test_amounts_preserved_exactly_on_permit_surfaces(self) -> None:
         from shared.privacy.inventory import DataClassification
+        from shared.privacy.sanitize import sanitize_for_eval, sanitize_for_llm, sanitize_for_ui
+
+        classifications = {"gross": DataClassification.FINANCIAL_SENSITIVE}
+        for fn in (sanitize_for_llm, sanitize_for_eval, sanitize_for_ui):
+            out = fn(
+                {"gross": Decimal("15000.00")},
+                tenant_id="acme",
+                classifications=classifications,
+            )
+            assert out["gross"] == Decimal("15000.00")
+
+    def test_explicit_name_classification_tokenizes(self) -> None:
+        from shared.privacy.inventory import DataClassification
+        from shared.privacy.sanitize import sanitize_for_llm
 
         out = sanitize_for_llm(
             {"customer_name": "Rahul Sharma"},
@@ -119,9 +192,8 @@ class TestLlmSurface:
         assert out["customer_name"] != "Rahul Sharma"
 
     def test_secret_classification_excludes_value(self) -> None:
-        from shared.privacy.sanitize import sanitize_for_llm
-
         from shared.privacy.inventory import DataClassification
+        from shared.privacy.sanitize import sanitize_for_llm
 
         out = sanitize_for_llm(
             {"webhook_secret": "whsec_abc"},
@@ -172,9 +244,8 @@ class TestUiSurface:
         assert out["account"] == "******9012"
 
     def test_name_masked_for_display(self) -> None:
-        from shared.privacy.sanitize import sanitize_for_ui
-
         from shared.privacy.inventory import DataClassification
+        from shared.privacy.sanitize import sanitize_for_ui
 
         out = sanitize_for_ui(
             {"customer_name": "Rahul Sharma"},
@@ -185,9 +256,14 @@ class TestUiSurface:
         assert "Rahul" not in out["customer_name"]
 
     def test_amounts_visible_to_operators(self) -> None:
+        from shared.privacy.inventory import DataClassification
         from shared.privacy.sanitize import sanitize_for_ui
 
-        out = sanitize_for_ui({"gross": Decimal("15000.00")}, tenant_id="acme")
+        out = sanitize_for_ui(
+            {"gross": Decimal("15000.00")},
+            tenant_id="acme",
+            classifications={"gross": DataClassification.FINANCIAL_SENSITIVE},
+        )
         assert out["gross"] == Decimal("15000.00")
 
 
