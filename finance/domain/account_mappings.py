@@ -68,9 +68,7 @@ ACCOUNT_MAPPINGS: tuple[AccountMapping, ...] = (
 )
 """The frozen six-row mapping table (no runtime mutation)."""
 
-VALID_COBOL_CODES: frozenset[str] = frozenset(
-    mapping.cobol_gl_code for mapping in ACCOUNT_MAPPINGS
-)
+VALID_COBOL_CODES: frozenset[str] = frozenset(mapping.cobol_gl_code for mapping in ACCOUNT_MAPPINGS)
 """Codes a legacy record may reference; anything else is rejected."""
 
 

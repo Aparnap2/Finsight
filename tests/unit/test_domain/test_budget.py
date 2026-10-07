@@ -123,7 +123,7 @@ class TestBudgetLine:
                 account_id="acc-1000",
                 amount=Decimal("1000.00"),
                 period_id="2026-07",
-                version="draft", 
+                version="draft",
             )
 
     def test_revised_version_constructs(self) -> None:

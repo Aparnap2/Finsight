@@ -63,8 +63,9 @@ STATUS_IGNORED = "IGNORED"
 class SignatureError(ValueError):
     """Raised when a webhook signature is missing, malformed, or invalid."""
 
-    def __init__(self, reason: Literal["missing", "malformed", "mismatch", "expired"],
-                 detail: str) -> None:
+    def __init__(
+        self, reason: Literal["missing", "malformed", "mismatch", "expired"], detail: str
+    ) -> None:
         """Record the machine-readable reason alongside the message."""
         self.reason = reason
         super().__init__(detail)
@@ -135,8 +136,7 @@ def verify_stripe_signature(
     if abs(now - timestamp) > tolerance:
         raise SignatureError(
             "expired",
-            f"Timestamp outside tolerance: skew={abs(now - timestamp)}s "
-            f"exceeds {tolerance}s.",
+            f"Timestamp outside tolerance: skew={abs(now - timestamp)}s exceeds {tolerance}s.",
         )
     return timestamp
 
@@ -174,9 +174,7 @@ def parse_envelope(raw: bytes) -> dict[str, Any]:
     return decoded
 
 
-def resolve_tenant(
-    envelope: Mapping[str, Any], mapping: Mapping[str, object]
-) -> TenantResolution:
+def resolve_tenant(envelope: Mapping[str, Any], mapping: Mapping[str, object]) -> TenantResolution:
     """Resolve an envelope to a tenant through the explicit trusted map.
 
     The Stripe connected-account id is read from the top-level ``account``
@@ -217,9 +215,7 @@ def resolve_tenant(
     if isinstance(target, list):
         names = [item for item in target if isinstance(item, str) and item.strip()]
         if len(names) == 1:
-            return TenantResolution(
-                outcome="resolved", tenant_id=names[0], stripe_account=account
-            )
+            return TenantResolution(outcome="resolved", tenant_id=names[0], stripe_account=account)
         logger.warning("Ambiguous tenant: account %s maps to %d tenants.", account, len(names))
         return TenantResolution(outcome="ambiguous", tenant_id=None, stripe_account=account)
     if isinstance(target, str) and target.strip():
@@ -308,7 +304,8 @@ def get_db_session() -> Iterator[Session]:
 
 @router.post("/webhooks/stripe")
 async def stripe_webhook(
-    request: Request, session: Session = Depends(get_db_session)  # noqa: B008
+    request: Request,
+    session: Session = Depends(get_db_session),  # noqa: B008
 ) -> JSONResponse:
     """Ingest one raw Stripe delivery: verify -> tenant -> persist -> ack."""
     raw = await request.body()

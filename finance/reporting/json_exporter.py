@@ -39,8 +39,8 @@ class JSONExporter:
         # Pydantic serialises UTC-aware datetimes with 'Z' suffix;
         # replace with '+00:00' to match consumer expectations.
         json_str = re.sub(
-            r'(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})Z',
-            r'\1+00:00',
+            r"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})Z",
+            r"\1+00:00",
             json_str,
         )
         return json_str

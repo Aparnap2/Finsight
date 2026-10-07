@@ -184,9 +184,7 @@ def derive_file_seq(situation_id: str) -> str:
     return seq
 
 
-def derive_file_name(
-    processing_date: str, situation_id: str, file_seq: str | None = None
-) -> str:
+def derive_file_name(processing_date: str, situation_id: str, file_seq: str | None = None) -> str:
     """Return ``CORRECTION_<YYYYMMDD>_<SEQ>.DAT`` (A5 generic rule)."""
     if not PROCESSING_DATE_RE.match(processing_date):
         raise ArtifactRefusedError(f"bad processing_date {processing_date!r}")
@@ -257,9 +255,7 @@ def _parse_amount_window(payload: str, line_no: int) -> Decimal:
 # ---------------------------------------------------------------------------
 
 
-def verify_outbound_lines(
-    lines: Sequence[str], *, batch_id: str, control_total: Decimal
-) -> None:
+def verify_outbound_lines(lines: Sequence[str], *, batch_id: str, control_total: Decimal) -> None:
     """Self-verify wire lines; refuse naming the first bad line/field.
 
     Checks 80-char width, 21-char wire-id escape (A1), legal record types,
@@ -294,9 +290,7 @@ def verify_outbound_lines(
         except LegacyParseError as exc:
             raise ArtifactRefusedError(f"line {index}: parse failure ({exc})") from exc
         if parsed.batch_id != batch_id:
-            raise ArtifactRefusedError(
-                f"line {index}: batch {parsed.batch_id!r} != {batch_id!r}"
-            )
+            raise ArtifactRefusedError(f"line {index}: batch {parsed.batch_id!r} != {batch_id!r}")
         sequences.append(parsed.sequence)
         parsed_types.append(record_type)
         payload = record_raw[2:]
@@ -367,17 +361,13 @@ def build_artifact(
     if coerced.execution_id != coerced.idempotency_key:
         raise ArtifactRefusedError("execution_id != idempotency_key")
     if coerced.scope_batch is not None and coerced.scope_batch != batch_id:
-        raise ArtifactRefusedError(
-            f"scope_batch {coerced.scope_batch!r} != batch_id {batch_id!r}"
-        )
+        raise ArtifactRefusedError(f"scope_batch {coerced.scope_batch!r} != batch_id {batch_id!r}")
     if not BATCH_ID_RE.match(batch_id):
         raise ArtifactRefusedError(f"bad batch_id {batch_id!r}")
 
     file_name = derive_file_name(processing_date, coerced.situation_id, file_seq)
     # Key-shape check via the frozen tenant validator (no network here).
-    validate_s3_key_tenant(
-        f"{coerced.company_id}/{batch_id}/{file_name}", coerced.company_id
-    )
+    validate_s3_key_tenant(f"{coerced.company_id}/{batch_id}/{file_name}", coerced.company_id)
 
     amount = _quantize_or_refuse(coerced.amount_exact, "record 1 amount")
     control_total = amount.quantize(_TWO_DP)

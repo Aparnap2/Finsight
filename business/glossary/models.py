@@ -113,10 +113,7 @@ class GlossaryEntry(BaseModel):
         """Validate that aliases don't duplicate the primary term."""
         normalized_aliases = {a.lower().strip() for a in self.aliases}
         if self.term.lower().strip() in normalized_aliases:
-            msg = (
-                f"Alias list for '{self.term_id}' contains the primary "
-                f"term '{self.term}'"
-            )
+            msg = f"Alias list for '{self.term_id}' contains the primary term '{self.term}'"
             raise ValueError(msg)
 
 

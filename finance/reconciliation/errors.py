@@ -43,9 +43,7 @@ class CurrencyMismatch(ReconciliationError, TypeError):  # noqa: N818 -- frozen 
         self.left = left
         self.right = right
         self.operation = operation
-        super().__init__(
-            f"Cannot {operation} {left} and {right}: currencies do not match"
-        )
+        super().__init__(f"Cannot {operation} {left} and {right}: currencies do not match")
 
 
 class ToleranceError(ReconciliationError, ValueError):

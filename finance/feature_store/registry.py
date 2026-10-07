@@ -45,6 +45,7 @@ _NAMES_ATTR = "FEATURE_NAMES"
 #: Source-table contract each group module must define.
 _SOURCE_ATTR = "SOURCE_TABLE"
 
+
 #: Builder callable name per group (``build_<group>_features``).
 def _builder_name(group: str) -> str:
     return f"build_{group}_features"
@@ -64,15 +65,12 @@ class FeatureLookupError(FeatureStoreError, KeyError):
     """Raised when a feature group is unknown or its module is broken."""
 
 
-def _require_group_attr(
-    module: ModuleType, attr: str, group: str
-) -> str | tuple[str, ...]:
+def _require_group_attr(module: ModuleType, attr: str, group: str) -> str | tuple[str, ...]:
     """Return a required module constant, raising on a broken contract."""
     value = getattr(module, attr, None)
     if value is None:
         raise FeatureLookupError(
-            f"feature group {group!r} module {module.__name__} must define "
-            f"{attr!r}"
+            f"feature group {group!r} module {module.__name__} must define {attr!r}"
         )
     return cast("str | tuple[str, ...]", value)
 
@@ -110,9 +108,7 @@ class FeatureRegistry:
         module = self._import_module(group)
         version = _require_group_attr(module, _VERSION_ATTR, group)
         if not isinstance(version, str):
-            raise FeatureLookupError(
-                f"feature group {group!r} FEATURE_VERSION must be a string"
-            )
+            raise FeatureLookupError(f"feature group {group!r} FEATURE_VERSION must be a string")
         return version
 
     def feature_names(self, group: str) -> tuple[str, ...]:
@@ -125,9 +121,7 @@ class FeatureRegistry:
         module = self._import_module(group)
         names = _require_group_attr(module, _NAMES_ATTR, group)
         if not isinstance(names, tuple):
-            raise FeatureLookupError(
-                f"feature group {group!r} FEATURE_NAMES must be a tuple"
-            )
+            raise FeatureLookupError(f"feature group {group!r} FEATURE_NAMES must be a tuple")
         return names
 
     def source_table(self, group: str) -> str:
@@ -140,9 +134,7 @@ class FeatureRegistry:
         module = self._import_module(group)
         table = _require_group_attr(module, _SOURCE_ATTR, group)
         if not isinstance(table, str):
-            raise FeatureLookupError(
-                f"feature group {group!r} SOURCE_TABLE must be a string"
-            )
+            raise FeatureLookupError(f"feature group {group!r} SOURCE_TABLE must be a string")
         return table
 
     def builder(self, group: str) -> Callable[[pl.DataFrame], pl.DataFrame]:
@@ -242,9 +234,7 @@ class FeatureRegistry:
                 warnings.append(f"feature group key {group!r} is not snake_case")
             for name in self.feature_names(group):
                 if not _is_snake_case_id(name):
-                    warnings.append(
-                        f"feature name {name!r} in group {group!r} is not snake_case"
-                    )
+                    warnings.append(f"feature name {name!r} in group {group!r} is not snake_case")
         return warnings
 
     # ------------------------------------------------------------------

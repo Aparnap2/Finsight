@@ -203,15 +203,10 @@ class VarianceAnalysis(BaseModel):
         """
         result = list(self.variances)
         if amount_threshold is not None:
-            result = [
-                v for v in result
-                if abs(v.amount) >= amount_threshold
-            ]
+            result = [v for v in result if abs(v.amount) >= amount_threshold]
         if pct_threshold is not None:
             result = [
-                v for v in result
-                if v.percentage is not None
-                and v.percentage >= pct_threshold
+                v for v in result if v.percentage is not None and v.percentage >= pct_threshold
             ]
         return result
 

@@ -89,9 +89,7 @@ class RiskDecisionProvider(RiskProvider):
         reasons: list[str] = []
 
         if score >= self._high_score:
-            reasons.append(
-                f"score {score:.2f} >= high threshold {self._high_score:.2f}"
-            )
+            reasons.append(f"score {score:.2f} >= high threshold {self._high_score:.2f}")
         if score >= self._review_score and confidence >= self._high_confidence:
             reasons.append(
                 f"score {score:.2f} >= review threshold {self._review_score:.2f} "

@@ -224,9 +224,7 @@ class ReservationStore:
             outcome_payload=row.get("outcome_payload"),
         )
 
-    def _claim_sql(
-        self, execution_id: str, bound: ReservationBinding
-    ) -> ClaimResult:
+    def _claim_sql(self, execution_id: str, bound: ReservationBinding) -> ClaimResult:
         """Claim via conditional insert; losers read the winner's row.
 
         Creatorship comes from the INSERT outcome itself, never from
@@ -252,11 +250,15 @@ class ReservationStore:
             except IntegrityError:
                 session.rollback()
                 created = False
-            winner = session.execute(
-                reservation_table.select().where(
-                    reservation_table.c.execution_id == execution_id
+            winner = (
+                session.execute(
+                    reservation_table.select().where(
+                        reservation_table.c.execution_id == execution_id
+                    )
                 )
-            ).mappings().first()
+                .mappings()
+                .first()
+            )
             if winner is None:  # pragma: no cover - insert+select race guard
                 raise KeyError(f"No reservation row for {execution_id!r}.")
             row = self._row_to_reservation(dict(winner))
@@ -324,11 +326,15 @@ class ReservationStore:
                 )
             )
             session.commit()
-            current = session.execute(
-                reservation_table.select().where(
-                    reservation_table.c.execution_id == execution_id
+            current = (
+                session.execute(
+                    reservation_table.select().where(
+                        reservation_table.c.execution_id == execution_id
+                    )
                 )
-            ).mappings().first()
+                .mappings()
+                .first()
+            )
             if current is None:
                 raise KeyError(f"No reservation row for {execution_id!r}.")
             row = self._row_to_reservation(dict(current))
@@ -352,11 +358,15 @@ class ReservationStore:
         """
         if self._engine is not None:
             with Session(self._engine) as session:
-                found = session.execute(
-                    reservation_table.select().where(
-                        reservation_table.c.execution_id == execution_id
+                found = (
+                    session.execute(
+                        reservation_table.select().where(
+                            reservation_table.c.execution_id == execution_id
+                        )
                     )
-                ).mappings().first()
+                    .mappings()
+                    .first()
+                )
                 return self._row_to_reservation(dict(found)) if found else None
         with self._lock:
             return self._rows.get(execution_id)
@@ -397,9 +407,7 @@ class ReservationStore:
             row = self._rows[execution_id]
             if row.state is not ReservationState.RESERVED:
                 return row
-            advanced = row.model_copy(
-                update={"state": ReservationState.RECEIPT_RECORDED}
-            )
+            advanced = row.model_copy(update={"state": ReservationState.RECEIPT_RECORDED})
             self._rows[execution_id] = advanced
             return advanced
 

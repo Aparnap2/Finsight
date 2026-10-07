@@ -255,9 +255,7 @@ class TestSourceAndCapabilityEscapes:
         boundary = AuthorityBoundary()
         before = boundary.audit_log()
         with pytest.raises(AuthorityError):
-            validate_proposal_dict(
-                payload, now=NOW, registry=reg, boundary=boundary
-            )
+            validate_proposal_dict(payload, now=NOW, registry=reg, boundary=boundary)
         assert boundary.audit_log() == before
 
     def test_capability_verb_as_proposal_intent_refused(self) -> None:
@@ -278,9 +276,7 @@ class TestSourceAndCapabilityEscapes:
             "amount": 10000,
         }
         with pytest.raises(AuthorityError):
-            validate_proposal_dict(
-                dict(payload), now=NOW, registry=reg
-            )
+            validate_proposal_dict(dict(payload), now=NOW, registry=reg)
 
     def test_stale_ref_helper_raises(self) -> None:
         """A stale pointer fails require_fresh with no partial effect."""

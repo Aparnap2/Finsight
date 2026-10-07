@@ -48,14 +48,9 @@ class ToolRouterNode:
         raw_variances = state.context.get("variances")
         if raw_variances:
             assessments = self._materiality.assess_batch(raw_variances)
-            state_updates["materiality_assessments"] = [
-                a.model_dump() for a in assessments
-            ]
+            state_updates["materiality_assessments"] = [a.model_dump() for a in assessments]
             material_count = sum(1 for a in assessments if a.is_material)
-            messages.append(
-                f"Assessed {len(assessments)} variances, "
-                f"{material_count} material"
-            )
+            messages.append(f"Assessed {len(assessments)} variances, {material_count} material")
             engine_count += 1
             for a in assessments:
                 pct = abs(a.variance_pct)
@@ -71,9 +66,7 @@ class ToolRouterNode:
                         value=a.variance_abs,
                         confidence=0.9,
                         support_level=(
-                            SupportLevel.VERIFIED
-                            if a.is_material
-                            else SupportLevel.PROBABLE
+                            SupportLevel.VERIFIED if a.is_material else SupportLevel.PROBABLE
                         ),
                     )
                 )
@@ -83,15 +76,9 @@ class ToolRouterNode:
         if seed_inputs and self._formula_evaluator is not None:
             ctx = self._formula_evaluator.evaluate(seed_inputs)
             if not ctx.errors:
-                kpi_results = {
-                    k: float(v)
-                    for k, v in ctx.values.items()
-                    if k not in seed_inputs
-                }
+                kpi_results = {k: float(v) for k, v in ctx.values.items() if k not in seed_inputs}
                 state_updates["kpi_results"] = kpi_results
-                messages.append(
-                    f"Evaluated {len(ctx.evaluated)} formulas"
-                )
+                messages.append(f"Evaluated {len(ctx.evaluated)} formulas")
                 engine_count += 1
                 for name, value in kpi_results.items():
                     assertions.append(
@@ -107,21 +94,15 @@ class ToolRouterNode:
                     )
             else:
                 state_updates["formula_errors"] = [str(e) for e in ctx.errors]
-                messages.append(
-                    f"Formula evaluation errors: {len(ctx.errors)}"
-                )
+                messages.append(f"Formula evaluation errors: {len(ctx.errors)}")
 
         # ── 3. Evidence Engine ─────────────────────────────────────────────
         account_id = state.context.get("account_id", "")
         period_id = state.context.get("period_id", "")
         if account_id and period_id:
             evidence_items = self._evidence.collect(account_id, period_id)
-            state_updates["evidence_items"] = [
-                e.model_dump() for e in evidence_items
-            ]
-            messages.append(
-                f"Collected {len(evidence_items)} evidence items"
-            )
+            state_updates["evidence_items"] = [e.model_dump() for e in evidence_items]
+            messages.append(f"Collected {len(evidence_items)} evidence items")
             engine_count += 1
 
         # ── 4. Validation Suite ────────────────────────────────────────────
@@ -141,8 +122,7 @@ class ToolRouterNode:
                             id=f"val_{r.validator_name}",
                             type=AssertionType.NUMERIC,
                             text=(
-                                f"Validation '{r.validator_name}' "
-                                f"failed: {'; '.join(r.messages)}"
+                                f"Validation '{r.validator_name}' failed: {'; '.join(r.messages)}"
                             ),
                             confidence=0.3,
                             support_level=SupportLevel.INSUFFICIENT,
@@ -163,11 +143,7 @@ class ToolRouterNode:
             )
 
         avg_confidence = (
-            round(
-                sum(a.confidence for a in assertions) / len(assertions), 4
-            )
-            if assertions
-            else 0.8
+            round(sum(a.confidence for a in assertions) / len(assertions), 4) if assertions else 0.8
         )
 
         return NodeResult(

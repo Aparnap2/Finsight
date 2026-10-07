@@ -23,9 +23,7 @@ class DependencyResolver:
 
     # ── Public API ───────────────────────────────────────────────────────────
 
-    def resolve(
-        self, formula_registry: FormulaRegistry, seed_inputs: set[str]
-    ) -> list[str]:
+    def resolve(self, formula_registry: FormulaRegistry, seed_inputs: set[str]) -> list[str]:
         """Return formula names in evaluation order (topological sort).
 
         *seed_inputs* are the names of raw input values (account codes, KPIs)
@@ -46,9 +44,7 @@ class DependencyResolver:
         except ValueError:
             return True
 
-    def depends_on(
-        self, formula_name: str, formula_registry: FormulaRegistry
-    ) -> list[str]:
+    def depends_on(self, formula_name: str, formula_registry: FormulaRegistry) -> list[str]:
         """Return the list of formula names that *formula_name* depends on."""
         formula = formula_registry.get(formula_name)
         deps: list[str] = []
@@ -60,9 +56,7 @@ class DependencyResolver:
 
     # ── Internal helpers ────────────────────────────────────────────────────
 
-    def _build_graph(
-        self, formula_registry: FormulaRegistry
-    ) -> dict[str, set[str]]:
+    def _build_graph(self, formula_registry: FormulaRegistry) -> dict[str, set[str]]:
         """Build adjacency list: formula → set of formulas it depends on."""
         graph: dict[str, set[str]] = {}
         for name, formula in formula_registry._registry.items():
@@ -76,9 +70,7 @@ class DependencyResolver:
 
     def _topological_sort(self, graph: dict[str, set[str]]) -> list[str]:
         """Kahn's algorithm — returns names in dependency order."""
-        in_degree: dict[str, int] = {
-            name: len(deps) for name, deps in graph.items()
-        }
+        in_degree: dict[str, int] = {name: len(deps) for name, deps in graph.items()}
         reverse_deps: dict[str, list[str]] = defaultdict(list)
         for name, deps in graph.items():
             for dep in deps:
@@ -96,7 +88,5 @@ class DependencyResolver:
                     queue.append(dependent)
 
         if len(order) != len(graph):
-            raise ValueError(
-                "Circular dependency detected in formula registry"
-            )
+            raise ValueError("Circular dependency detected in formula registry")
         return order

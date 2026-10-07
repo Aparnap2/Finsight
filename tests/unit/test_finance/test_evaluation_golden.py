@@ -1,4 +1,5 @@
 """Tests for golden regression harness — reference engines, tolerances, CI CLI."""
+
 from __future__ import annotations
 
 from decimal import Decimal
@@ -262,9 +263,7 @@ class TestGoldenRegressionHarness:
         )
         ds1.input.context["history"] = [100, 110, 121]
         ds1.input.context["forecast_horizon"] = 2
-        reports = GoldenRegressionHarness(
-            forecast_model=ReferenceForecastModel()
-        ).run_all([ds1])
+        reports = GoldenRegressionHarness(forecast_model=ReferenceForecastModel()).run_all([ds1])
         assert isinstance(reports[0], GoldenRegressionReport)
         assert reports[0].dataset_id == "unit_golden"
 
@@ -312,9 +311,7 @@ class TestGoldenRegressionCli:
         def _boom(*args: Any, **kwargs: Any) -> None:
             raise GoldenRegressionError("synthetic regression failure")
 
-        monkeypatch.setattr(
-            "finance.evaluation.runner.run_golden_regression", _boom
-        )
+        monkeypatch.setattr("finance.evaluation.runner.run_golden_regression", _boom)
         code = main(["--dataset-id", "regression_forecast_naive"])
         captured = capsys.readouterr()
         assert code == 1

@@ -106,6 +106,7 @@ def _gate_cls():
 
 # A — direct execution is impossible from an advisory bundle.
 
+
 class TestANoDirectExecution:
     def test_a1_agent_bundle_has_no_execution_authority(self) -> None:
         gate = _gate_cls()()
@@ -142,13 +143,12 @@ class TestANoDirectExecution:
             "execution_id",
             "verification",
         }
-        assert not forbidden_values.intersection(
-            {str(value) for value in payload.values()}
-        )
+        assert not forbidden_values.intersection({str(value) for value in payload.values()})
         assert not forbidden_keys.intersection(payload)
 
 
 # B — advisory fields cannot become approval commands.
+
 
 class TestBAdvisoryCannotBecomeApproval:
     def test_b1_advisory_proposal_never_becomes_approval(self) -> None:
@@ -184,6 +184,7 @@ class TestBAdvisoryCannotBecomeApproval:
 
 # C — evidence references may cross, but evidence authority cannot.
 
+
 class TestCEvidenceBoundary:
     def test_c1_hmac_ref_remains_a_reference(self) -> None:
         discovery = _valid_discovery()
@@ -212,6 +213,7 @@ class TestCEvidenceBoundary:
 
 
 # D — confidence is metadata, never policy authority.
+
 
 class TestDConfidenceBoundary:
     def test_d1_confidence_does_not_change_gate_kind(self) -> None:
@@ -255,6 +257,7 @@ class TestDConfidenceBoundary:
 
 
 # E — context and tenant/situation/time scope cannot escape.
+
 
 class TestEContextBoundary:
     def test_e1_cross_situation_bundle_is_blocked(self) -> None:
@@ -305,6 +308,7 @@ class TestEContextBoundary:
 
 
 # F — failures and contradictions remain explicit.
+
 
 class TestFFailClosedAgentFailures:
     def test_f1_failed_discovery_cannot_enter_p6(self) -> None:
@@ -412,6 +416,7 @@ class TestFFailClosedAgentFailures:
 
 # G — the integration seam cannot manufacture P6 authority.
 
+
 class TestGP6SoleAuthority:
     def test_g1_no_authority_constructors_in_integration(self) -> None:
         package = Path("agents/integration")
@@ -439,6 +444,7 @@ class TestGP6SoleAuthority:
 
 # H — P6-08 verification remains independent.
 
+
 class TestHIndependentVerification:
     def test_h1_agent_bundle_cannot_assert_verification(self) -> None:
         result = _gate_cls()().admit(
@@ -459,6 +465,7 @@ class TestHIndependentVerification:
 
 
 # I — only non-authoritative handoff can leave the gate.
+
 
 class TestIExecutionAdmission:
     def test_i1_missing_advisory_artifact_is_blocked(self) -> None:
@@ -485,6 +492,7 @@ class TestIExecutionAdmission:
 
 
 # J — the integration package itself has no probabilistic runtime/I/O stack.
+
 
 class TestJStaticBoundary:
     def test_j1_no_llm_or_infrastructure_imports(self) -> None:
@@ -531,6 +539,7 @@ class TestJStaticBoundary:
 
 # K — source-control isolation.
 
+
 class TestKIsolation:
     def test_k1_only_p7_08_paths_changed(self) -> None:
         diff = subprocess.run(
@@ -557,6 +566,7 @@ class TestKIsolation:
 
 
 # L — P6-08 handoff cannot be synthesized from agent prose.
+
 
 class TestLVerificationSeam:
     def test_l1_poisoned_agent_text_cannot_be_used_as_verification(self) -> None:

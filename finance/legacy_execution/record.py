@@ -122,10 +122,12 @@ class ExecutionRecordStore:
         existing = self._rows.get(execution_id)
         if existing is None:
             row = ExecutionRecord(
-                execution_id=execution_id, binding_digest=binding_digest,
-                company_id=company_id, situation_id=situation_id,
-                batch_id=batch_id, expires_at=_require_tz_aware(
-                    "expires_at", expires_at),
+                execution_id=execution_id,
+                binding_digest=binding_digest,
+                company_id=company_id,
+                situation_id=situation_id,
+                batch_id=batch_id,
+                expires_at=_require_tz_aware("expires_at", expires_at),
             )
             self._rows[execution_id] = row
             return row, True
@@ -135,11 +137,7 @@ class ExecutionRecordStore:
                 "Pre-existing row carries a foreign authorization binding; "
                 "escalate for operator triage, never merge.",
             )
-        if (
-            batch_id is not None
-            and existing.batch_id is not None
-            and batch_id != existing.batch_id
-        ):
+        if batch_id is not None and existing.batch_id is not None and batch_id != existing.batch_id:
             raise ApprovalRefused(
                 RefusalCode.AUTHORIZATION_REPLAYED,
                 "E1",
@@ -152,9 +150,7 @@ class ExecutionRecordStore:
             return row, False
         return existing, False
 
-    def attach_receipt(
-        self, execution_id: str, receipt: ReceiptView
-    ) -> ExecutionRecord:
+    def attach_receipt(self, execution_id: str, receipt: ReceiptView) -> ExecutionRecord:
         """Attach the transport receipt (RESERVED -> RECEIPTED, A2).
 
         Same key plus digest replays idempotently (R-2). Differing bytes
@@ -164,11 +160,13 @@ class ExecutionRecordStore:
         row = self._require_row(execution_id)
         if receipt.execution_id != execution_id:
             raise RecordTransitionError(
-                execution_id, "Receipt execution seam skew; refuse, change nothing.",
+                execution_id,
+                "Receipt execution seam skew; refuse, change nothing.",
             )
         if row.batch_id is not None and receipt.batch_id != row.batch_id:
             raise RecordTransitionError(
-                execution_id, "Receipt batch seam skew; refuse, change nothing.",
+                execution_id,
+                "Receipt batch seam skew; refuse, change nothing.",
             )
         if row.receipt_key is not None:
             if (row.receipt_key, row.receipt_sha256) == (receipt.key, receipt.sha256):
@@ -190,9 +188,7 @@ class ExecutionRecordStore:
         self._rows[execution_id] = updated
         return updated
 
-    def attach_outcome(
-        self, execution_id: str, outcome: IngestionOutcome
-    ) -> ExecutionRecord:
+    def attach_outcome(self, execution_id: str, outcome: IngestionOutcome) -> ExecutionRecord:
         """Attach the ingestion outcome (-> DECIDED, X38-X40).
 
         Byte-identical replays return the recorded row with a bumped replay
@@ -203,13 +199,12 @@ class ExecutionRecordStore:
         row = self._require_row(execution_id)
         if outcome.execution_id != execution_id:
             raise RecordTransitionError(
-                execution_id, "Outcome execution seam skew; refuse, change nothing.",
+                execution_id,
+                "Outcome execution seam skew; refuse, change nothing.",
             )
         if row.outcome is not None:
             if outcome_fingerprint(row.outcome) == outcome_fingerprint(outcome):
-                updated = row.model_copy(
-                    update={"replay_count": row.replay_count + 1}
-                )
+                updated = row.model_copy(update={"replay_count": row.replay_count + 1})
                 self._rows[execution_id] = updated
                 return updated
             if row.outcome.outcome == "UNKNOWN" and outcome.outcome != "UNKNOWN":
@@ -227,9 +222,7 @@ class ExecutionRecordStore:
                 "A distinct outcome is already recorded; replay-read "
                 "the original instead of recording a second effect.",
             )
-        updated = row.model_copy(
-            update={"state": RecordState.DECIDED, "outcome": outcome}
-        )
+        updated = row.model_copy(update={"state": RecordState.DECIDED, "outcome": outcome})
         self._rows[execution_id] = updated
         return updated
 
@@ -261,13 +254,10 @@ class ExecutionRecordStore:
                 raise ApprovalRefused(
                     RefusalCode.AUTHORIZATION_EXPIRED,
                     "E1",
-                    "Replay presented after expires_at; "
-                    "renewal is a fresh P6-06 decision.",
+                    "Replay presented after expires_at; renewal is a fresh P6-06 decision.",
                 )
         if row.outcome is not None:
-            self._rows[execution_id] = row.model_copy(
-                update={"replay_count": row.replay_count + 1}
-            )
+            self._rows[execution_id] = row.model_copy(update={"replay_count": row.replay_count + 1})
         current = self._rows[execution_id]
         return current.outcome
 
@@ -281,16 +271,13 @@ class ExecutionRecordStore:
         row = self._require_row(execution_id)
         if row.outcome is None:
             raise RecordTransitionError(
-                execution_id, "Ledger DU with no recorded outcome to resolve to.",
+                execution_id,
+                "Ledger DU with no recorded outcome to resolve to.",
             )
-        self._rows[execution_id] = row.model_copy(
-            update={"replay_count": row.replay_count + 1}
-        )
+        self._rows[execution_id] = row.model_copy(update={"replay_count": row.replay_count + 1})
         return row.outcome
 
-    def refuse_new_batch(
-        self, execution_id: str, attempted_batch_id: str
-    ) -> ExecutionRecord:
+    def refuse_new_batch(self, execution_id: str, attempted_batch_id: str) -> ExecutionRecord:
         """Enforce one batch id per execution id (R-4/X21/X32).
 
         Re-presenting the bound batch id returns the row; attempting a new
@@ -311,6 +298,7 @@ class ExecutionRecordStore:
         row = self._rows.get(execution_id)
         if row is None:
             raise RecordTransitionError(
-                execution_id, "No reservation row; E1 claim must come first.",
+                execution_id,
+                "No reservation row; E1 claim must come first.",
             )
         return row

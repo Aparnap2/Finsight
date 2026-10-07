@@ -56,8 +56,7 @@ def _require_provenance(provenance: FactProvenance) -> None:
         or not provenance.correlation_id.strip()
     ):
         raise ValueError(
-            "PROVENANCE_MISSING: adapter/endpoint/correlation_id "
-            "must all be non-blank."
+            "PROVENANCE_MISSING: adapter/endpoint/correlation_id must all be non-blank."
         )
 
 
@@ -174,10 +173,7 @@ def fact_to_evidence(fact: object, *, case_id: str) -> ConvertedEvidence:
             source_type="quickbooks",
             source_id=fact.fact_id,
             batch_id=fact.batch_id,
-            body=(
-                f"period={fact.period} open={fact.period_open} "
-                f"total={fact.qb_total} INR{extra}"
-            ),
+            body=(f"period={fact.period} open={fact.period_open} total={fact.qb_total} INR{extra}"),
             amount=fact.qb_total,
             provenance=fact.provenance,
         )
@@ -192,16 +188,10 @@ def fact_to_evidence(fact: object, *, case_id: str) -> ConvertedEvidence:
                 f"reason={fact.rejected_reason or '-'} "
                 f"account={fact.account_code or '-'} INR"
             ),
-            amount=(
-                fact.rejected_total
-                if fact.rejected_total != 0
-                else fact.accepted_total
-            ),
+            amount=(fact.rejected_total if fact.rejected_total != 0 else fact.accepted_total),
             provenance=fact.provenance,
         )
-    raise ValueError(
-        f"unknown fact shape for evidence conversion: {type(fact).__name__}."
-    )
+    raise ValueError(f"unknown fact shape for evidence conversion: {type(fact).__name__}.")
 
 
 def _convert(
@@ -216,9 +206,7 @@ def _convert(
     """Build one converted unit from rendered parts."""
     _require_provenance(provenance)
     trust_class = trust_class_for(source_type)
-    content_full = _render_fact_content(
-        source_type, source_id, batch_id, body, trust_class
-    )
+    content_full = _render_fact_content(source_type, source_id, batch_id, body, trust_class)
     return ConvertedEvidence(
         item=EvidenceItem(
             claim=content_full,

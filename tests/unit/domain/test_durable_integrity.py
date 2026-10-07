@@ -79,17 +79,29 @@ def test_event_version_must_equal_new_bump(repo: SituationRepository) -> None:
     with pytest.raises(ValueError, match="stale audit event"):
         repo.save(
             _situation(status=SituationStatus.TRIAGED),
-            audit_events=[_audit(
-                "EVT-STALE", from_status="DETECTED", to_status="TRIAGED",
-                version=1,
-            )],
+            audit_events=[
+                _audit(
+                    "EVT-STALE",
+                    from_status="DETECTED",
+                    to_status="TRIAGED",
+                    version=1,
+                )
+            ],
         )
-    assert repo.save(
-        _situation(status=SituationStatus.TRIAGED),
-        audit_events=[_audit(
-            "EVT-OK", from_status="DETECTED", to_status="TRIAGED", version=2,
-        )],
-    ) == 2
+    assert (
+        repo.save(
+            _situation(status=SituationStatus.TRIAGED),
+            audit_events=[
+                _audit(
+                    "EVT-OK",
+                    from_status="DETECTED",
+                    to_status="TRIAGED",
+                    version=2,
+                )
+            ],
+        )
+        == 2
+    )
 
 
 def test_from_to_must_agree_with_stored_transition(
@@ -100,10 +112,14 @@ def test_from_to_must_agree_with_stored_transition(
     with pytest.raises(ValueError, match="disagrees"):
         repo.save(
             _situation(status=SituationStatus.TRIAGED),
-            audit_events=[_audit(
-                "EVT-LIE", from_status="TRIAGED", to_status="CLOSED",
-                version=2,
-            )],
+            audit_events=[
+                _audit(
+                    "EVT-LIE",
+                    from_status="TRIAGED",
+                    to_status="CLOSED",
+                    version=2,
+                )
+            ],
         )
     assert repo.get_for_company("meridian", SID_1) == _situation()
 
@@ -135,9 +151,7 @@ def _proven_closed() -> FinancialSituation:
     """CLOSED aggregate carrying the full D1 close proof (FS-231)."""
     from finance.domain.verification import VerificationReport, VerificationVerdict
 
-    recorded = _situation(status=SituationStatus.VERIFYING).record_verification(
-        Decimal("992500")
-    )
+    recorded = _situation(status=SituationStatus.VERIFYING).record_verification(Decimal("992500"))
     report = VerificationReport(
         situation_id=SID_1,
         execution_id="LEGACY-20260916-0042",
@@ -178,12 +192,14 @@ def test_fresh_closed_with_failed_report_rejected(
         verdict=VerificationVerdict.FAILED,
         checked_at=AT_1,
     )
-    bad = base.model_copy(update={
-        "status": SituationStatus.CLOSED,
-        "verification": failed,
-        "closed_at": AT_1,
-        "verified_total": Decimal("992500"),
-    })
+    bad = base.model_copy(
+        update={
+            "status": SituationStatus.CLOSED,
+            "verification": failed,
+            "closed_at": AT_1,
+            "verified_total": Decimal("992500"),
+        }
+    )
     with pytest.raises(ValueError, match="unaccepted"):
         repo.save(bad)
     assert repo.get_for_company("meridian", SID_1) is None
@@ -204,12 +220,14 @@ def test_fresh_closed_with_wrong_situation_rejected(
         verdict=VerificationVerdict.VERIFIED,
         checked_at=AT_1,
     )
-    bad = base.model_copy(update={
-        "status": SituationStatus.CLOSED,
-        "verification": foreign,
-        "closed_at": AT_1,
-        "verified_total": Decimal("992500"),
-    })
+    bad = base.model_copy(
+        update={
+            "status": SituationStatus.CLOSED,
+            "verification": foreign,
+            "closed_at": AT_1,
+            "verified_total": Decimal("992500"),
+        }
+    )
     with pytest.raises(ValueError, match="another situation"):
         repo.save(bad)
     assert repo.get_for_company("meridian", SID_1) is None
@@ -230,12 +248,14 @@ def test_fresh_closed_with_over_tolerance_residual_rejected(
         verdict=VerificationVerdict.VERIFIED,
         checked_at=AT_1,
     )
-    bad = base.model_copy(update={
-        "status": SituationStatus.CLOSED,
-        "verification": loose,
-        "closed_at": AT_1,
-        "verified_total": Decimal("992500"),
-    })
+    bad = base.model_copy(
+        update={
+            "status": SituationStatus.CLOSED,
+            "verification": loose,
+            "closed_at": AT_1,
+            "verified_total": Decimal("992500"),
+        }
+    )
     with pytest.raises(ValueError, match="tolerance"):
         repo.save(bad)
     assert repo.get_for_company("meridian", SID_1) is None
@@ -256,12 +276,14 @@ def test_fresh_closed_without_closed_at_rejected(
         verdict=VerificationVerdict.VERIFIED,
         checked_at=AT_1,
     )
-    bad = base.model_copy(update={
-        "status": SituationStatus.CLOSED,
-        "verification": report,
-        "closed_at": None,
-        "verified_total": Decimal("992500"),
-    })
+    bad = base.model_copy(
+        update={
+            "status": SituationStatus.CLOSED,
+            "verification": report,
+            "closed_at": None,
+            "verified_total": Decimal("992500"),
+        }
+    )
     with pytest.raises(ValueError, match="closed_at"):
         repo.save(bad)
     assert repo.get_for_company("meridian", SID_1) is None
@@ -284,9 +306,7 @@ def test_fresh_closed_with_accepted_report_persisted(
 def test_nonterminal_to_closed_without_proof_impossible() -> None:
     """7. The aggregate transition path cannot close without verification."""
     with pytest.raises(ValueError, match="Cannot close"):
-        _situation(status=SituationStatus.VERIFYING).transition_to(
-            SituationStatus.CLOSED
-        )
+        _situation(status=SituationStatus.VERIFYING).transition_to(SituationStatus.CLOSED)
 
 
 def test_persisted_closed_rejects_any_save(repo: SituationRepository) -> None:
@@ -312,10 +332,12 @@ def test_variance_snapshot_and_prev_hash_round_trip(
     """Durable evidence fields persist and rehydrate exactly."""
     repo.save(
         _situation(),
-        audit_events=[{
-            **_audit("EVT-EV"),
-            "variance_snapshot": Decimal("10000"),
-        }],
+        audit_events=[
+            {
+                **_audit("EVT-EV"),
+                "variance_snapshot": Decimal("10000"),
+            }
+        ],
     )
     trail = repo.audit_trail("meridian", SID_1)
     assert len(trail) == 1
@@ -329,13 +351,17 @@ def test_forged_prev_hash_detected(repo: SituationRepository) -> None:
     repo.save(_situation(), audit_events=[_audit("EVT-A")])
     repo.save(
         _situation(status=SituationStatus.TRIAGED),
-        audit_events=[{
-            **_audit(
-                "EVT-B", from_status="DETECTED", to_status="TRIAGED",
-                version=2,
-            ),
-            "prev_hash": "0" * 64,
-        }],
+        audit_events=[
+            {
+                **_audit(
+                    "EVT-B",
+                    from_status="DETECTED",
+                    to_status="TRIAGED",
+                    version=2,
+                ),
+                "prev_hash": "0" * 64,
+            }
+        ],
     )
     assert repo.verify_durable_chain("meridian", SID_1) is False
 
@@ -344,25 +370,29 @@ def test_old_p6_01_rows_rehydrate() -> None:
     """Seven-key P6-01 payloads load with extension defaults."""
     engine = create_engine("sqlite:///:memory:")
     repo = SituationRepository(engine)
-    legacy_payload = json.dumps({
-        "company_id": "meridian",
-        "expected": "1000000",
-        "legacy": "982500",
-        "quickbooks": "982500",
-        "razorpay_net": "972500",
-        "situation_id": SID_1,
-        "status": "DETECTED",
-    })
+    legacy_payload = json.dumps(
+        {
+            "company_id": "meridian",
+            "expected": "1000000",
+            "legacy": "982500",
+            "quickbooks": "982500",
+            "razorpay_net": "972500",
+            "situation_id": SID_1,
+            "status": "DETECTED",
+        }
+    )
     from sqlalchemy.orm import Session as OrmSession
 
     with OrmSession(engine) as session:
-        session.add(SituationRow(
-            company_id="meridian",
-            situation_id=SID_1,
-            status="DETECTED",
-            version=1,
-            payload=legacy_payload,
-        ))
+        session.add(
+            SituationRow(
+                company_id="meridian",
+                situation_id=SID_1,
+                status="DETECTED",
+                version=1,
+                payload=legacy_payload,
+            )
+        )
         session.commit()
     loaded = repo.get_for_company("meridian", SID_1)
     assert loaded == _situation()
@@ -373,10 +403,22 @@ def test_canonical_payload_covers_all_fields() -> None:
     text = canonical_payload_bytes(_situation()).decode("utf-8")
     data = json.loads(text)
     assert set(data) == {
-        "closed_at", "company_id", "decider_role", "evidence_ids",
-        "expected", "hypothesis_count", "legacy", "proposal_hash",
-        "proposal_ref", "proposal_version", "quickbooks", "razorpay_net",
-        "rejection_reason", "situation_id", "status", "verification",
+        "closed_at",
+        "company_id",
+        "decider_role",
+        "evidence_ids",
+        "expected",
+        "hypothesis_count",
+        "legacy",
+        "proposal_hash",
+        "proposal_ref",
+        "proposal_version",
+        "quickbooks",
+        "razorpay_net",
+        "rejection_reason",
+        "situation_id",
+        "status",
+        "verification",
         "verified_total",
     }
     assert data["verification"] is None

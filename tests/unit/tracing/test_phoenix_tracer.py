@@ -100,8 +100,9 @@ def make_phoenix_tracer(
 
     mock_register = MagicMock(return_value=mock_provider)
 
-    with patch("phoenix.otel.register", mock_register), patch(
-        "opentelemetry.trace.get_tracer", return_value=mock_tracer
+    with (
+        patch("phoenix.otel.register", mock_register),
+        patch("opentelemetry.trace.get_tracer", return_value=mock_tracer),
     ):
         # Reimport to ensure fresh class uses patched deps
         import shared.tracing.phoenix_tracer as mod  # noqa: E501
@@ -151,15 +152,29 @@ class TestCriterion1CompleteTrajectory:
         )
         obs.verifier(ctx, status="ACCEPTED", reason_codes=(), latency_ms=2)
         obs.capability_call(
-            ctx, capability="get_stripe_payment", args={"payment_id": "pay_1"}, order_index=0, latency_ms=10  # noqa: E501
+            ctx,
+            capability="get_stripe_payment",
+            args={"payment_id": "pay_1"},
+            order_index=0,
+            latency_ms=10,  # noqa: E501
         )
         obs.capability_result(
-            ctx, capability="get_stripe_payment", result_summary={"row_count": 1}, success=True, latency_ms=8  # noqa: E501
+            ctx,
+            capability="get_stripe_payment",
+            result_summary={"row_count": 1},
+            success=True,
+            latency_ms=8,  # noqa: E501
         )
         obs.replan(ctx, attempt=1, reason_codes=("grounding_violation",), latency_ms=4)
         obs.final_candidate(ctx, hypothesis_ref="hypo-1", evidence_required=("ev-1",), latency_ms=1)
         obs.policy(ctx, decision="ALLOW", latency_ms=1)
-        obs.approval(ctx, decision="APPROVED", approver_ref="approver-1", idempotency_key="appr-1", latency_ms=1)  # noqa: E501
+        obs.approval(
+            ctx,
+            decision="APPROVED",
+            approver_ref="approver-1",
+            idempotency_key="appr-1",
+            latency_ms=1,
+        )  # noqa: E501
         obs.execution(ctx, idempotency_key="exec-1", status="executed", latency_ms=12)
         obs.verification(ctx, status="VERIFIED", latency_ms=2)
         obs.flush()
@@ -209,7 +224,9 @@ class TestCriterion2ToolCorrelation:
         )
         ctx = obs.start_case()
         obs.capability_call(ctx, capability="search_gmail", args={"query": "refund"}, order_index=0)
-        obs.capability_result(ctx, capability="search_gmail", result_summary={"row_count": 1}, success=True)  # noqa: E501
+        obs.capability_result(
+            ctx, capability="search_gmail", result_summary={"row_count": 1}, success=True
+        )  # noqa: E501
 
         spans = tracer.spans  # type: ignore[attr-defined]
         tool_spans = [s for s in spans if "search_gmail" in s["name"]]
@@ -250,8 +267,12 @@ class TestCriterion3Latency:
             latency_ms=99.9,
         )
         obs.verifier(ctx, status="ACCEPTED", latency_ms=1.1)
-        obs.capability_call(ctx, capability="get_stripe_payment", args={}, order_index=0, latency_ms=7)  # noqa: E501
-        obs.capability_result(ctx, capability="get_stripe_payment", result_summary={}, success=True, latency_ms=6)  # noqa: E501
+        obs.capability_call(
+            ctx, capability="get_stripe_payment", args={}, order_index=0, latency_ms=7
+        )  # noqa: E501
+        obs.capability_result(
+            ctx, capability="get_stripe_payment", result_summary={}, success=True, latency_ms=6
+        )  # noqa: E501
         obs.policy(ctx, decision="ALLOW", latency_ms=0.5)
         obs.flush()
 
@@ -325,7 +346,12 @@ class TestCriterion5EvaluationAttach:
             "evaluation",
             {"correlation_id": "CASE-1027", "eval_score": 0.92, "rubric": "grounding"},
             {"status": "passed", "feedback": "well grounded"},
-            {"correlation_id": "CASE-1027", "tenant_id": "tenant-a", "case_id": "CASE-1027", "eval_score": 0.92},  # noqa: E501
+            {
+                "correlation_id": "CASE-1027",
+                "tenant_id": "tenant-a",
+                "case_id": "CASE-1027",
+                "eval_score": 0.92,
+            },  # noqa: E501
         )
         spans = tracer.spans  # type: ignore[attr-defined]
         eval_span = next(s for s in spans if s["name"] == "evaluation")
@@ -462,7 +488,9 @@ class TestCriterion8LocalDeploymentNoSaaS:
         tracer, mock_reg, _ = make_phoenix_tracer()
         # Patch factory's lazy import to return our mock tracer instance
         with patch("shared.tracing.phoenix_tracer.PhoenixTracer", return_value=tracer):  # noqa: E501
-            t = create_tracer(_env={"PHOENIX_COLLECTOR_ENDPOINT": "http://localhost:6006/v1/traces"})  # noqa: E501
+            t = create_tracer(
+                _env={"PHOENIX_COLLECTOR_ENDPOINT": "http://localhost:6006/v1/traces"}
+            )  # noqa: E501
             assert t is tracer
         # Without PHOENIX env, fallback to NoOp
         from shared.tracing.noop import NoOpTracer  # noqa: E501
@@ -511,7 +539,9 @@ class TestCriterion9OTelExport:
         assert hasattr(tracer, "_tracer")  # type: ignore[attr-defined]
 
     def test_source_uses_phoenix_otel_register(self) -> None:
-        src = Path(inspect.getfile(importlib.import_module("shared.tracing.phoenix_tracer"))).read_text()  # noqa: E501
+        src = Path(
+            inspect.getfile(importlib.import_module("shared.tracing.phoenix_tracer"))
+        ).read_text()  # noqa: E501
         assert "phoenix.otel" in src
         assert "register" in src
         assert "project_name" in src
@@ -541,10 +571,16 @@ class TestCriterion10BackendSwap:
         ctx = obs.start_case()
         obs.context_assembly(ctx, evidence_ids=("ev-1",), latency_ms=1)
         obs.planner(ctx, allowlist=("get_stripe_payment",))  # noqa: E501
-        obs.llm_generation(ctx, name="gen", model="groq", input_data={"x": 1}, output={"y": 1}, usage={})  # noqa: E501
+        obs.llm_generation(
+            ctx, name="gen", model="groq", input_data={"x": 1}, output={"y": 1}, usage={}
+        )  # noqa: E501
         obs.verifier(ctx, status="ACCEPTED")
-        obs.capability_call(ctx, capability="get_stripe_payment", args={"payment_id": "pay_1"}, order_index=0)  # noqa: E501
-        obs.capability_result(ctx, capability="get_stripe_payment", result_summary={"ok": True}, success=True)  # noqa: E501
+        obs.capability_call(
+            ctx, capability="get_stripe_payment", args={"payment_id": "pay_1"}, order_index=0
+        )  # noqa: E501
+        obs.capability_result(
+            ctx, capability="get_stripe_payment", result_summary={"ok": True}, success=True
+        )  # noqa: E501
         obs.policy(ctx, decision="ALLOW")
         obs.approval(ctx, decision="APPROVED", idempotency_key="appr-1")
         obs.execution(ctx, idempotency_key="exec-1")
@@ -570,7 +606,9 @@ class TestCriterion10BackendSwap:
         from shared.tracing.factory import create_tracer  # noqa: E501
 
         with patch("shared.tracing.phoenix_tracer.PhoenixTracer", return_value=phoenix):  # noqa: E501
-            t_phoenix = create_tracer(_env={"PHOENIX_COLLECTOR_ENDPOINT": "http://localhost:6006/v1/traces"})  # noqa: E501
+            t_phoenix = create_tracer(
+                _env={"PHOENIX_COLLECTOR_ENDPOINT": "http://localhost:6006/v1/traces"}
+            )  # noqa: E501
             t_noop = create_tracer(_env={})
             for t in (t_phoenix, t_noop):
                 ctx = self._run_trajectory(t)
@@ -583,7 +621,9 @@ class TestCriterion10BackendSwap:
 
     def test_no_financial_authority(self) -> None:
         """PhoenixTracer must not import or mutate finance modules."""
-        src = Path(inspect.getfile(importlib.import_module("shared.tracing.phoenix_tracer"))).read_text()  # noqa: E501
+        src = Path(
+            inspect.getfile(importlib.import_module("shared.tracing.phoenix_tracer"))
+        ).read_text()  # noqa: E501
         tree = ast.parse(src)
         imports = []
         for node in ast.walk(tree):
@@ -608,13 +648,17 @@ class TestCriterion10BackendSwap:
 
 class TestCredentialSafeNoFinancialAuthority:
     def test_no_secrets_in_source(self) -> None:
-        src = Path(inspect.getfile(importlib.import_module("shared.tracing.phoenix_tracer"))).read_text()  # noqa: E501
+        src = Path(
+            inspect.getfile(importlib.import_module("shared.tracing.phoenix_tracer"))
+        ).read_text()  # noqa: E501
         # No hardcoded secrets — only references to redaction
         assert "sanitize" in src
         assert "redaction" in src.lower()
 
     def test_all_methods_sanitize(self) -> None:
-        src = Path(inspect.getfile(importlib.import_module("shared.tracing.phoenix_tracer"))).read_text()  # noqa: E501
+        src = Path(
+            inspect.getfile(importlib.import_module("shared.tracing.phoenix_tracer"))
+        ).read_text()  # noqa: E501
         # Every protocol method must sanitize
         for method in ("generation", "tool", "guardrail", "span", "trace"):
             assert method in src

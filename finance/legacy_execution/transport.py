@@ -164,9 +164,7 @@ def derive_outbound_key(company_id: str, batch_id: str, file_name: str) -> str:
     return key
 
 
-def _key_for(
-    artifact: Any, company_id: str, bucket_outbound: str, now: datetime
-) -> str:
+def _key_for(artifact: Any, company_id: str, bucket_outbound: str, now: datetime) -> str:
     """Run every pre-network gate; return the deterministic OUTBOUND key."""
     if not isinstance(bucket_outbound, str) or not bucket_outbound.strip():
         raise ValueError("bucket_outbound must be a non-empty string")
@@ -177,9 +175,7 @@ def _key_for(
     company = _require_clean_company(company_id)
     artifact_company = getattr(artifact, "company_id", None)
     if artifact_company is not None and artifact_company != company:
-        raise PrefixEscapeError(
-            f"company {company!r} != artifact company {artifact_company!r}"
-        )
+        raise PrefixEscapeError(f"company {company!r} != artifact company {artifact_company!r}")
     return derive_outbound_key(company, artifact.batch_id, artifact.file_name)
 
 
@@ -252,8 +248,7 @@ def put_verified(
     if probed is not None:
         if probed != payload or hashlib.sha256(probed).hexdigest() != want:
             raise HashMismatchError(
-                f"probe collision for {key!r}: stored bytes differ from "
-                f"{want_short(artifact)}"
+                f"probe collision for {key!r}: stored bytes differ from {want_short(artifact)}"
             )
         return _receipt_for(artifact, key, now)
     last_error: Exception | None = None

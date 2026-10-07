@@ -51,9 +51,7 @@ class LLMClient:
 
         return self._client
 
-    def generate(
-        self, prompt: str, max_tokens: int = 512, temperature: float = 0.3
-    ) -> str:
+    def generate(self, prompt: str, max_tokens: int = 512, temperature: float = 0.3) -> str:
         client = self._get_client()
         request_kwargs: dict[str, Any] = {
             "model": self.model,
@@ -62,9 +60,7 @@ class LLMClient:
             "temperature": temperature,
         }
         if self._provider == "poolside":
-            request_kwargs["extra_body"] = {
-                "chat_template_kwargs": {"enable_thinking": False}
-            }
+            request_kwargs["extra_body"] = {"chat_template_kwargs": {"enable_thinking": False}}
 
         response = client.chat.completions.create(**request_kwargs)
         return response.choices[0].message.content or ""

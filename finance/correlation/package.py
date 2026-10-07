@@ -81,13 +81,9 @@ def _package_fingerprint(
     missing: tuple[MissingLeg, ...],
 ) -> str:
     """Fold the package identity inputs into one stable digest."""
-    missing_part = "|".join(
-        f"{leg.source_system}:{leg.key}:{leg.reason}" for leg in missing
-    )
+    missing_part = "|".join(f"{leg.source_system}:{leg.key}:{leg.reason}" for leg in missing)
     return sha256(
-        "|".join(
-            [tenant_id, case_id, batch_id, ",".join(evidence_ids), head_hash]
-        ).encode("utf-8")
+        "|".join([tenant_id, case_id, batch_id, ",".join(evidence_ids), head_hash]).encode("utf-8")
         + b"\x00"
         + missing_part.encode("utf-8")
     ).hexdigest()
@@ -161,8 +157,7 @@ def to_store_dict(
             "content_hash": item.content_hash,
             "retrieved_at": item.retrieved_at,
             "provenance": (
-                f"{provenance.adapter}:{provenance.endpoint}:"
-                f"{provenance.correlation_id}"
+                f"{provenance.adapter}:{provenance.endpoint}:{provenance.correlation_id}"
                 if provenance is not None
                 else ""
             ),
@@ -184,7 +179,6 @@ def check_summary(text: str) -> str:
     """
     if _CAUSAL_PATTERN.search(text) is not None:
         raise ValueError(
-            "CAUSAL_UPGRADE: summaries may correlate evidence, never "
-            "declare causation or proof."
+            "CAUSAL_UPGRADE: summaries may correlate evidence, never declare causation or proof."
         )
     return text

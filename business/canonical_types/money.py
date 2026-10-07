@@ -37,9 +37,7 @@ class CurrencyMismatchError(TypeError):
         self.left = left
         self.right = right
         self.operation = operation
-        super().__init__(
-            f"Cannot {operation} {left} and {right}: currencies do not match"
-        )
+        super().__init__(f"Cannot {operation} {left} and {right}: currencies do not match")
 
 
 class Money(BaseModel):
@@ -77,9 +75,7 @@ class Money(BaseModel):
             raise TypeError(f"Money amount must be Decimal, got {type(v).__name__}")
         quantized = v.quantize(Decimal("0.0001"))
         if quantized != v:
-            raise ValueError(
-                f"Money amount precision exceeds 4 decimal places: {v}"
-            )
+            raise ValueError(f"Money amount precision exceeds 4 decimal places: {v}")
         return quantized
 
     # ── Arithmetic Operations ─────────────────────────────────────────────
@@ -107,9 +103,7 @@ class Money(BaseModel):
             TypeError: If factor is not Decimal or int (e.g., float).
         """
         if isinstance(factor, float):
-            raise TypeError(
-                "Cannot multiply Money by float. Use Decimal for precision."
-            )
+            raise TypeError("Cannot multiply Money by float. Use Decimal for precision.")
         if not isinstance(factor, (Decimal, int)):
             return NotImplemented
         result = self.amount * Decimal(str(factor))

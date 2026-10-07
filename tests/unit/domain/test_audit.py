@@ -60,9 +60,7 @@ def _emit(
     actor: str = "finsight-test-harness",
 ) -> AuditEvent:
     """Emit one audit event for a single-step transition."""
-    return emit_for_transition(
-        _fs231(before), _fs231(after), at=at or BASE_AT, actor=actor
-    )
+    return emit_for_transition(_fs231(before), _fs231(after), at=at or BASE_AT, actor=actor)
 
 
 def test_emit_is_deterministic_same_inputs_same_event_id() -> None:
@@ -77,9 +75,7 @@ def test_event_id_matches_sha256_preimage() -> None:
     """The id is the hex sha256 of situation_id + from + to + at."""
     at = _at()
     event = _emit(at=at)
-    preimage = "|".join(
-        (SITUATION_ID, "DETECTED", "TRIAGED", at.isoformat())
-    )
+    preimage = "|".join((SITUATION_ID, "DETECTED", "TRIAGED", at.isoformat()))
     assert event.event_id == hashlib.sha256(preimage.encode("utf-8")).hexdigest()
 
 
@@ -145,9 +141,7 @@ def test_log_append_only_ordered_readback() -> None:
     """Appends read back in order as an immutable tuple."""
     log = AuditLog()
     first = log.append(_emit(at=_at(0)))
-    second = log.append(
-        _emit(SituationStatus.TRIAGED, SituationStatus.INVESTIGATING, at=_at(1))
-    )
+    second = log.append(_emit(SituationStatus.TRIAGED, SituationStatus.INVESTIGATING, at=_at(1)))
     assert len(log) == 2
     assert log.all_events() == (first, second)
     assert isinstance(log.all_events(), tuple)
@@ -206,12 +200,8 @@ def test_chain_verifies_for_linked_appends() -> None:
     """Default appends auto-link prev_hash, so the chain verifies."""
     log = AuditLog()
     log.append(_emit(at=_at(0)))
-    log.append(
-        _emit(SituationStatus.TRIAGED, SituationStatus.INVESTIGATING, at=_at(1))
-    )
-    log.append(
-        _emit(SituationStatus.INVESTIGATING, SituationStatus.CORRELATED, at=_at(2))
-    )
+    log.append(_emit(SituationStatus.TRIAGED, SituationStatus.INVESTIGATING, at=_at(1)))
+    log.append(_emit(SituationStatus.INVESTIGATING, SituationStatus.CORRELATED, at=_at(2)))
     events = log.all_events()
     assert events[0].prev_hash == ""
     assert events[1].prev_hash == events[0].event_id
@@ -224,9 +214,7 @@ def test_broken_chain_detected() -> None:
     log = AuditLog()
     log.append(_emit(at=_at(0)))
     forged = AuditEvent(
-        event_id=_emit(
-            SituationStatus.TRIAGED, SituationStatus.INVESTIGATING, at=_at(1)
-        ).event_id,
+        event_id=_emit(SituationStatus.TRIAGED, SituationStatus.INVESTIGATING, at=_at(1)).event_id,
         situation_id=SITUATION_ID,
         company_id="meridian",
         from_status=SituationStatus.TRIAGED,

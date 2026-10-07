@@ -68,12 +68,8 @@ CASE_CREATING_CLASSIFICATIONS: frozenset[DetectionClassification] = frozenset(
 
 _P1_TO_CATALOG: dict[ExceptionCode, DetectionClassification] = {
     ExceptionCode.FEE_MISMATCH: DetectionClassification.FEE_MISMATCH,
-    ExceptionCode.PARTIAL_REFUND_ACCOUNTING_LAG: (
-        DetectionClassification.PARTIAL_REFUND_LAG
-    ),
-    ExceptionCode.DUPLICATE_LEDGER_ENTRY: (
-        DetectionClassification.DUPLICATE_LEDGER_ENTRY
-    ),
+    ExceptionCode.PARTIAL_REFUND_ACCOUNTING_LAG: (DetectionClassification.PARTIAL_REFUND_LAG),
+    ExceptionCode.DUPLICATE_LEDGER_ENTRY: (DetectionClassification.DUPLICATE_LEDGER_ENTRY),
 }
 """The closed P1 vocabulary mapped onto catalog labels (no extension)."""
 

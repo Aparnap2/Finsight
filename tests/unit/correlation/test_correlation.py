@@ -85,9 +85,7 @@ def _books_fact(fact_id: str = "qb-231", batch: str = "BATCH-231") -> object:
     )
 
 
-def _expected_fact(
-    fact_id: str = "exp-231", batch: str = "BATCH-231"
-) -> object:
+def _expected_fact(fact_id: str = "exp-231", batch: str = "BATCH-231") -> object:
     """Build the FS-231 advisory expected fact (1000000)."""
     from finance.facts.expected import ExpectedFact
 
@@ -215,9 +213,7 @@ class TestCollector:
             collect_evidence,
         )
 
-        assert SCOPE_REFUSED_MESSAGE == (
-            "evidence out of scope: refused (no existence oracle)."
-        )
+        assert SCOPE_REFUSED_MESSAGE == ("evidence out of scope: refused (no existence oracle).")
         with pytest.raises(ValueError) as exc_a:
             collect_evidence(
                 tenant_id="meridian",
@@ -381,18 +377,14 @@ class TestChain:
             context_refs=[],
         )
         assert len(collected.evidence_ids) == 2
-        markers = detect_conflicts(
-            collected.to_registry(), collected.to_contents()
-        )
+        markers = detect_conflicts(collected.to_registry(), collected.to_contents())
         assert markers
         marker = markers[0]
         assert marker.code == "CONFLICTING_EVIDENCE"
         assert len(marker.ids) == 2
         assert marker.rule
         assert len(marker.hashes) == 2
-        chain = build_chain(
-            collected.evidence_ids, registry=collected.to_registry()
-        )
+        chain = build_chain(collected.evidence_ids, registry=collected.to_registry())
         assert any(m.code == "CONFLICTING_EVIDENCE" for m in chain.markers)
 
 
@@ -412,9 +404,7 @@ class TestPackage:
             facts=[_provider_fact(), _books_fact()],
             context_refs=[],
         )
-        chain = build_chain(
-            collected.evidence_ids, registry=collected.to_registry()
-        )
+        chain = build_chain(collected.evidence_ids, registry=collected.to_registry())
         package = assemble_package(
             tenant_id="meridian",
             case_id="FS-231",
@@ -439,9 +429,7 @@ class TestPackage:
                 facts=[_provider_fact(), _books_fact()],
                 context_refs=[],
             )
-            chain = build_chain(
-                collected.evidence_ids, registry=collected.to_registry()
-            )
+            chain = build_chain(collected.evidence_ids, registry=collected.to_registry())
             package = assemble_package(
                 tenant_id="meridian",
                 case_id="FS-231",
@@ -466,9 +454,7 @@ class TestPackage:
             facts=[_provider_fact(), _books_fact()],
             context_refs=[],
         )
-        chain = build_chain(
-            collected.evidence_ids, registry=collected.to_registry()
-        )
+        chain = build_chain(collected.evidence_ids, registry=collected.to_registry())
         package = assemble_package(
             tenant_id="meridian",
             case_id="FS-231",
@@ -510,16 +496,22 @@ class TestPackage:
 
         collected, _chain, package = self._assemble_two_legs()
         registry = collected.to_registry()  # type: ignore[attr-defined]
-        assert is_verified_eligible(
-            evidence_ids=package.evidence_ids,  # type: ignore[attr-defined]
-            evidence_registry=registry,
-            expected_tenant="meridian",
-        ) is True
-        assert evaluate_ladder(
-            evidence_ids=package.evidence_ids,  # type: ignore[attr-defined]
-            evidence_registry=registry,
-            expected_tenant="meridian",
-        ) == ()
+        assert (
+            is_verified_eligible(
+                evidence_ids=package.evidence_ids,  # type: ignore[attr-defined]
+                evidence_registry=registry,
+                expected_tenant="meridian",
+            )
+            is True
+        )
+        assert (
+            evaluate_ladder(
+                evidence_ids=package.evidence_ids,  # type: ignore[attr-defined]
+                evidence_registry=registry,
+                expected_tenant="meridian",
+            )
+            == ()
+        )
         store = to_store_dict(package=package, collected=collected)  # type: ignore[arg-type]
         request = InvestigationRequest(
             exception_id="FS-231",
@@ -690,16 +682,10 @@ class TestGoldenFS231:
             total_cap=2048,
         )
         assert any("leg-rj-001" in e for e in first.evidence_ids)
-        residual = [
-            item
-            for item in first.to_registry().values()
-            if item.source_id == "leg-rj-001"
-        ]
+        residual = [item for item in first.to_registry().values() if item.source_id == "leg-rj-001"]
         assert residual
         assert residual[0].source_value == Decimal("10000")
-        chain = build_chain(
-            first.evidence_ids, registry=first.to_registry()
-        )
+        chain = build_chain(first.evidence_ids, registry=first.to_registry())
         assert chain.edges
         assert all(e.label == "CORRELATED_WITH" for e in chain.edges)
         package = assemble_package(
@@ -712,11 +698,14 @@ class TestGoldenFS231:
         assert package.complete is True  # type: ignore[attr-defined]
         assert package.missing == ()  # type: ignore[attr-defined]
         registry = first.to_registry()
-        assert is_verified_eligible(
-            evidence_ids=package.evidence_ids,  # type: ignore[attr-defined]
-            evidence_registry=registry,
-            expected_tenant="meridian",
-        ) is True
+        assert (
+            is_verified_eligible(
+                evidence_ids=package.evidence_ids,  # type: ignore[attr-defined]
+                evidence_registry=registry,
+                expected_tenant="meridian",
+            )
+            is True
+        )
         store = to_store_dict(package=package, collected=first)  # type: ignore[arg-type]
         assert set(store) == set(package.evidence_ids)  # type: ignore[attr-defined]
         second = collect_evidence(
@@ -728,9 +717,7 @@ class TestGoldenFS231:
             per_source_cap=2048,
             total_cap=2048,
         )
-        chain2 = build_chain(
-            second.evidence_ids, registry=second.to_registry()
-        )
+        chain2 = build_chain(second.evidence_ids, registry=second.to_registry())
         package2 = assemble_package(
             tenant_id="meridian",
             case_id="FS-2026-0916-00231",
@@ -739,12 +726,14 @@ class TestGoldenFS231:
             chain=chain2,  # type: ignore[arg-type]
         )
         assert package.fingerprint == package2.fingerprint  # type: ignore[attr-defined]
-        assert "INVALID_ACCOUNT_CODE" in second.to_contents()[
-            next(e for e in second.evidence_ids if "leg-rj-001" in e)
-        ]
-        assert "4812" in second.to_contents()[
-            next(e for e in second.evidence_ids if "leg-rj-001" in e)
-        ]
+        assert (
+            "INVALID_ACCOUNT_CODE"
+            in second.to_contents()[next(e for e in second.evidence_ids if "leg-rj-001" in e)]
+        )
+        assert (
+            "4812"
+            in second.to_contents()[next(e for e in second.evidence_ids if "leg-rj-001" in e)]
+        )
 
 
 def test_content_hash_helper_sanity() -> None:

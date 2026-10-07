@@ -174,8 +174,7 @@ def require_proposal_ref_for_approval(situation: FinancialSituation) -> None:
     """
     if not situation.proposal_ref or not situation.proposal_ref.strip():
         raise ValueError(
-            "Cannot approve without proposal_ref: approval must pin "
-            "the immutable proposal hash."
+            "Cannot approve without proposal_ref: approval must pin the immutable proposal hash."
         )
 
 
@@ -205,9 +204,7 @@ def require_tz_aware_closed_at(situation: FinancialSituation) -> None:
         ValueError: If ``closed_at`` is set but naive.
     """
     closed_at = situation.closed_at
-    if closed_at is not None and (
-        closed_at.tzinfo is None or closed_at.utcoffset() is None
-    ):
+    if closed_at is not None and (closed_at.tzinfo is None or closed_at.utcoffset() is None):
         raise ValueError("closed_at must be timezone-aware when set.")
 
 
@@ -266,13 +263,11 @@ def require_decider_authority_for_approval(situation: FinancialSituation) -> Non
     """
     if not situation.proposal_hash or not situation.proposal_hash.strip():
         raise ValueError(
-            "Cannot approve without proposal_hash: approval must pin "
-            "the immutable proposal hash."
+            "Cannot approve without proposal_hash: approval must pin the immutable proposal hash."
         )
     if situation.proposal_version < 1:
         raise ValueError(
-            "Cannot approve without a proposal version: proposal_version "
-            "must be at least 1."
+            "Cannot approve without a proposal version: proposal_version must be at least 1."
         )
     if situation.decider_role not in ALLOWED_DECIDER_ROLES:
         raise ValueError(
@@ -289,9 +284,7 @@ def require_decider_authority_for_approval(situation: FinancialSituation) -> Non
         )
 
 
-def require_proposal_frozen(
-    situation: FinancialSituation, baseline: FinancialSituation
-) -> None:
+def require_proposal_frozen(situation: FinancialSituation, baseline: FinancialSituation) -> None:
     """Require the pinned proposal to be unchanged past approval (D2 freeze).
 
     Once a situation is at or after ``APPROVED``, every subsequent
@@ -420,8 +413,8 @@ def validate_persistable_state(
     """
     from finance.business_rules.meridian import CompanyConfiguration
 
-    status = situation.status.value if isinstance(situation.status, StrEnum) else str(
-        situation.status
+    status = (
+        situation.status.value if isinstance(situation.status, StrEnum) else str(situation.status)
     )
     if status == "CLOSED":
         report = situation.verification

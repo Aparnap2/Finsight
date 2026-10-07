@@ -98,8 +98,7 @@ def build_forecast_features(df: pl.DataFrame) -> pl.DataFrame:
     latest = df.with_columns(
         pl.col("version").max().over(["entity_id", "period", "department"]).alias("_vmax"),
         pl.when(
-            pl.col("version")
-            == pl.col("version").max().over(["entity_id", "period", "department"])
+            pl.col("version") == pl.col("version").max().over(["entity_id", "period", "department"])
         )
         .then(pl.col("amount"))
         .otherwise(_ZERO)
@@ -122,10 +121,7 @@ def build_forecast_features(df: pl.DataFrame) -> pl.DataFrame:
             .alias("_entity_total")
         )
         .with_columns(
-            (
-                pl.col("forecast_amount_total")
-                / pl.col("_entity_total").replace(_ZERO, None)
-            )
+            (pl.col("forecast_amount_total") / pl.col("_entity_total").replace(_ZERO, None))
             .fill_null(_ZERO)
             .alias("forecast_share_of_entity")
         )

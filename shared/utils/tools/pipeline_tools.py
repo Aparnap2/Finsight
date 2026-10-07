@@ -112,18 +112,14 @@ def query_sales_pipeline(
         coverage_pct = round(deals_found / total_distinct_deals, 4)
 
         # ---- freshness: latest expected_close_date ----
-        latest_date = (
-            session.execute(
-                select(func.max(SalesPipeline.expected_close_date)).where(
-                    SalesPipeline.entity_id == tenant_id,
-                    SalesPipeline.period == period,
-                )
-            ).scalar()
-        )
+        latest_date = session.execute(
+            select(func.max(SalesPipeline.expected_close_date)).where(
+                SalesPipeline.entity_id == tenant_id,
+                SalesPipeline.period == period,
+            )
+        ).scalar()
         freshness_seconds: int | None = (
-            int((_now() - latest_date).total_seconds())
-            if latest_date
-            else None
+            int((_now() - latest_date).total_seconds()) if latest_date else None
         )
 
     quality_score = compute_quality_score(coverage_pct, row_count, freshness_seconds)

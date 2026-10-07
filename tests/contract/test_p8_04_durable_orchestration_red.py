@@ -50,9 +50,7 @@ from agents.p8_runtime import contract as p8_01
 from agents.p8_runtime import durability as p8_03
 from agents.p8_runtime import execution as p8_02
 
-WORKFLOW_STATES = frozenset(
-    {"PENDING", "RUNNING", "SUSPENDED", "COMPLETED", "FAILED", "CANCELLED"}
-)
+WORKFLOW_STATES = frozenset({"PENDING", "RUNNING", "SUSPENDED", "COMPLETED", "FAILED", "CANCELLED"})
 EXECUTION_STATES = frozenset({"CREATED", "RUNNING", "SUCCEEDED", "FAILED", "EXHAUSTED"})
 DURABILITY_MARKERS = frozenset({"UNKNOWN", "QUARANTINED"})
 TERMINAL_WORKFLOW = frozenset({"COMPLETED", "FAILED", "CANCELLED"})
@@ -433,13 +431,9 @@ class TestGIdempotency:
         def _monotonic_ms() -> int:
             return ticks[0]
 
-        first = orch.admit_with_clock(
-            "wf-p804-clock-pin", _identity(), _budget(), _monotonic_ms
-        )
+        first = orch.admit_with_clock("wf-p804-clock-pin", _identity(), _budget(), _monotonic_ms)
         ticks[0] += 61_000
-        second = orch.admit_with_clock(
-            "wf-p804-clock-pin", _identity(), _budget(), _monotonic_ms
-        )
+        second = orch.admit_with_clock("wf-p804-clock-pin", _identity(), _budget(), _monotonic_ms)
         assert first.checked == "admit"
         assert second.checked == "no-admit"
 

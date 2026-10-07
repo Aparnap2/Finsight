@@ -38,9 +38,7 @@ from finance.domain.verification import VerificationReport, VerificationVerdict
 from finance.integration.registry import INTEGRATIONS, compare_financial_states
 from finance.reconciliation.models import ExceptionCode, ReconciliationOutcome
 
-MERIDIAN_FIXTURES = (
-    Path(__file__).parents[2] / "fixtures" / "reconciliation" / "meridian"
-)
+MERIDIAN_FIXTURES = Path(__file__).parents[2] / "fixtures" / "reconciliation" / "meridian"
 """Directory holding the FS-231 golden fixtures."""
 
 SITUATION_ID = "FS-2026-0916-00231"
@@ -131,9 +129,7 @@ def test_fs231_legacy_batch_accept_reject_counts() -> None:
     assert int(legacy["records_sent"]) == 500
     assert int(legacy["accepted"]) == 499
     assert int(legacy["rejected"]) == 1
-    assert int(legacy["accepted"]) + int(legacy["rejected"]) == int(
-        legacy["records_sent"]
-    )
+    assert int(legacy["accepted"]) + int(legacy["rejected"]) == int(legacy["records_sent"])
 
 
 def test_fs231_rejected_record_is_4812_invalid_account_code() -> None:
@@ -206,9 +202,7 @@ def test_lifecycle_full_forward_chain() -> None:
     )
     for target in chain[1:]:
         if target is SituationStatus.CLOSED:
-            situation = situation.transition_to(
-                target, at=CLOSE_AT, verification=_close_report()
-            )
+            situation = situation.transition_to(target, at=CLOSE_AT, verification=_close_report())
         else:
             situation = situation.transition_to(target)
         assert situation.status is target
@@ -242,32 +236,21 @@ def test_lifecycle_escalation_and_return() -> None:
     evidenced = escalated.model_copy(
         update={"evidence_ids": ("EV-231-batch",), "hypothesis_count": 1}
     )
-    assert (
-        evidenced.transition_to(SituationStatus.PROPOSED).status
-        is SituationStatus.PROPOSED
-    )
+    assert evidenced.transition_to(SituationStatus.PROPOSED).status is SituationStatus.PROPOSED
 
 
 def test_lifecycle_banned_transitions() -> None:
     """No execution without approval; no close without verification."""
     with pytest.raises(ValueError, match="EXECUTING"):
-        _fs231(status=SituationStatus.INVESTIGATING).transition_to(
-            SituationStatus.EXECUTING
-        )
+        _fs231(status=SituationStatus.INVESTIGATING).transition_to(SituationStatus.EXECUTING)
     with pytest.raises(ValueError, match="EXECUTING"):
-        _fs231(status=SituationStatus.PROPOSED).transition_to(
-            SituationStatus.EXECUTING
-        )
+        _fs231(status=SituationStatus.PROPOSED).transition_to(SituationStatus.EXECUTING)
     with pytest.raises(ValueError, match="CLOSED"):
         _fs231(status=SituationStatus.DETECTED).transition_to(SituationStatus.CLOSED)
     with pytest.raises(ValueError, match="CLOSED"):
-        _fs231(status=SituationStatus.CLOSED).transition_to(
-            SituationStatus.INVESTIGATING
-        )
+        _fs231(status=SituationStatus.CLOSED).transition_to(SituationStatus.INVESTIGATING)
     with pytest.raises(ValueError, match="REJECTED"):
-        _fs231(status=SituationStatus.REJECTED).transition_to(
-            SituationStatus.PROPOSED
-        )
+        _fs231(status=SituationStatus.REJECTED).transition_to(SituationStatus.PROPOSED)
 
 
 def test_refund_approval_tiers() -> None:
@@ -332,15 +315,11 @@ def test_ontology_catalog_has_six_types() -> None:
 def test_ontology_maps_core_types_to_frozen_exception_codes() -> None:
     """Fee, refund-lag and duplicate map onto the frozen P1 I-codes."""
     assert (
-        FinancialOntology(
-            discrepancy=DiscrepancyType.FEE_MISMATCH
-        ).exception_code
+        FinancialOntology(discrepancy=DiscrepancyType.FEE_MISMATCH).exception_code
         is ExceptionCode.FEE_MISMATCH
     )
     assert (
-        FinancialOntology(
-            discrepancy=DiscrepancyType.REFUND_LAG
-        ).exception_code
+        FinancialOntology(discrepancy=DiscrepancyType.REFUND_LAG).exception_code
         is ExceptionCode.PARTIAL_REFUND_ACCOUNTING_LAG
     )
     assert (
@@ -358,16 +337,8 @@ def test_ontology_legacy_rejection_uses_spec_code() -> None:
     )
     assert finding.exception_code is None
     assert finding.spec_code == "I-LEGACY-REJECT"
-    assert (
-        FinancialOntology(
-            discrepancy=DiscrepancyType.TIMING_DIFFERENCE
-        ).spec_code
-        == "I-TIMING"
-    )
-    assert (
-        FinancialOntology(discrepancy=DiscrepancyType.ADJUSTMENT).spec_code
-        == "I-ADJUSTMENT"
-    )
+    assert FinancialOntology(discrepancy=DiscrepancyType.TIMING_DIFFERENCE).spec_code == "I-TIMING"
+    assert FinancialOntology(discrepancy=DiscrepancyType.ADJUSTMENT).spec_code == "I-ADJUSTMENT"
 
 
 def test_ontology_requires_reason_for_legacy_rejection() -> None:
@@ -456,13 +427,9 @@ def test_compare_financial_states_delegates_to_frozen_reconcile() -> None:
         quickbooks=Decimal("982500"),
         legacy=Decimal("982500"),
     )
-    assert (
-        comparison.quickbooks_vs_legacy.outcome is ReconciliationOutcome.MATCHED
-    )
+    assert comparison.quickbooks_vs_legacy.outcome is ReconciliationOutcome.MATCHED
     assert comparison.quickbooks_vs_legacy.variance == Decimal("0")
-    assert (
-        comparison.expected_vs_razorpay.outcome is ReconciliationOutcome.EXCEPTION
-    )
+    assert comparison.expected_vs_razorpay.outcome is ReconciliationOutcome.EXCEPTION
     assert (
         comparison.expected_vs_razorpay.exception_code
         == ExceptionCode.PARTIAL_REFUND_ACCOUNTING_LAG.value

@@ -93,7 +93,5 @@ def fingerprint_pair(expected: PaymentRecord, observed: PaymentRecord) -> str:
     Returns:
         64-character lowercase hex digest identifying the pair.
     """
-    joined = (
-        canonical_payment(expected) + _PAIR_SEPARATOR + canonical_payment(observed)
-    )
+    joined = canonical_payment(expected) + _PAIR_SEPARATOR + canonical_payment(observed)
     return hashlib.sha256(joined.encode("utf-8")).hexdigest()

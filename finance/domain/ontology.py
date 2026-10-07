@@ -104,9 +104,7 @@ class FinancialOntology(BaseModel):
                 "(I-LEGACY-REJECT carries the COBOL reason verbatim)."
             )
         if not is_legacy and self.legacy_reason is not None:
-            raise ValueError(
-                "legacy_reason is only valid for LEGACY_REJECTION findings."
-            )
+            raise ValueError("legacy_reason is only valid for LEGACY_REJECTION findings.")
         return self
 
     @property

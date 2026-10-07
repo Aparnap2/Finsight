@@ -211,23 +211,17 @@ class AgentRuntime:
                     if isinstance(v, Mapping):
                         for k in ("status", "amount", "verdict", "decision"):
                             if k in v:
-                                raise AuthorityError(
-                                    f"Model output smuggles nested key {k!r}."
-                                )
+                                raise AuthorityError(f"Model output smuggles nested key {k!r}.")
             # Deterministic envelope wins: model cannot change case scope.
             for forbidden in ("situation_id", "company_id", "capability"):
-                if forbidden in model_output and str(
-                    model_output[forbidden]
-                ) != str(
+                if forbidden in model_output and str(model_output[forbidden]) != str(
                     {
                         "situation_id": original_situation,
                         "company_id": original_company,
                         "capability": AgentCapability.PROPOSE.value,
                     }.get(forbidden)
                 ):
-                    raise AuthorityError(
-                        f"Model must not redefine {forbidden!r}."
-                    )
+                    raise AuthorityError(f"Model must not redefine {forbidden!r}.")
             # Model cannot expand evidence scope beyond the request.
             model_eids_raw = model_output.get("evidence_ids", evidence_ids)
             if isinstance(model_eids_raw, (list, tuple)):
@@ -296,16 +290,12 @@ class AgentRuntime:
         if capability == AgentCapability.PROPOSE:
             for k in ("status", "amount", "verdict", "decision"):
                 if k in inputs:
-                    raise AuthorityError(
-                        f"Proposal payload smuggles authoritative key {k!r}."
-                    )
+                    raise AuthorityError(f"Proposal payload smuggles authoritative key {k!r}.")
             for v in inputs.values():
                 if isinstance(v, Mapping):
                     for k in ("status", "amount", "verdict", "decision"):
                         if k in v:
-                            raise AuthorityError(
-                                f"Proposal payload smuggles nested key {k!r}."
-                            )
+                            raise AuthorityError(f"Proposal payload smuggles nested key {k!r}.")
         if capability == AgentCapability.READ:
             return self.read(request.evidence_ids)
         if capability == AgentCapability.CORRELATE:
@@ -331,9 +321,7 @@ class AgentRuntime:
             return self.explain(handoff)
         raise AuthorityError(f"Capability {capability!r} is not dispatchable.")
 
-    def dispatch(
-        self, capability: AgentCapability, inputs: Mapping[str, Any]
-    ) -> Any:
+    def dispatch(self, capability: AgentCapability, inputs: Mapping[str, Any]) -> Any:
         """Generic capability-gated dispatch (typed, registry-bound).
 
         For backward compat, accepts ``AgentCapability`` or string;

@@ -191,6 +191,7 @@ class TestRuntimeHandoffExplicit:
 
     def test_model_output_revalidated(self) -> None:
         """Fake model that smuggles status must be re-validated and rejected."""
+
         def smuggling_model(capability: AgentCapability, inputs: dict) -> dict:
             return {
                 "proposal_type": "advisory_note",
@@ -241,6 +242,7 @@ class TestDeterministicPreservation:
             registry=reg,
             boundary=boundary,
         )
+
         # Model contributes only advisory content, not context.
         def normal_model(capability: AgentCapability, inputs: dict) -> dict:
             return {
@@ -261,9 +263,7 @@ class TestDeterministicPreservation:
         assert handoff.situation_id == "sit-preserve-001"
         assert handoff.company_id == "meridian"
         assert handoff.proposal.proposal_type == "advisory_note"
-        assert tuple(r.evidence_id for r in handoff.proposal.evidence_refs) == (
-            "ev-ledger-001",
-        )
+        assert tuple(r.evidence_id for r in handoff.proposal.evidence_refs) == ("ev-ledger-001",)
         # Model contributed content is present but context/scope unchanged.
         assert "Model rationale" in handoff.proposal.rationale
 

@@ -273,7 +273,8 @@ def discover(
                     hypotheses=None,
                     proposals=None,
                     failure=DiscoveryFailure(
-                        code=result.failure.code, detail=result.failure.detail  # type: ignore[union-attr]
+                        code=result.failure.code,
+                        detail=result.failure.detail,  # type: ignore[union-attr]
                     ),
                 )
             # Preserve ambiguity — summary is advisory, not verdict.

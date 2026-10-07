@@ -164,9 +164,7 @@ class TestCBudgetExhaustion:
     def test_c2_partial_attempts_recorded_never_half_applied(self) -> None:
         """I9: interrupted attempt recorded with usage, kind, no output."""
         execution = _execution()
-        record = execution.execute_run(
-            _identity(), _budget(), p8_01.RetryPolicy(max_retries=1)
-        )
+        record = execution.execute_run(_identity(), _budget(), p8_01.RetryPolicy(max_retries=1))
         partial = record.attempts[-1]
         assert partial.failure_kind == p8_01.FailureKind.BUDGET_EXHAUSTED
         assert partial.validated_output is None
@@ -175,9 +173,7 @@ class TestCBudgetExhaustion:
     def test_c3_no_provider_invocation_after_exhaustion(self) -> None:
         """I8: nothing invoked once BudgetExhaustedError terminates the run."""
         execution = _execution()
-        calls = execution.execute_run(
-            _identity(), _budget(), p8_01.RetryPolicy(max_retries=2)
-        )
+        calls = execution.execute_run(_identity(), _budget(), p8_01.RetryPolicy(max_retries=2))
         assert calls.invocations_after_exhaustion == 0
         assert calls.terminal_state == "EXHAUSTED"
 
@@ -257,9 +253,7 @@ class TestDAttemptIdentity:
     def test_d2_retry_chains_share_run_id_distinct_runs_never_merge(self) -> None:
         """I11: one run shares run_id; distinct run_ids never merge/renumber."""
         execution = _execution()
-        record = execution.execute_run(
-            _identity(), _budget(), p8_01.RetryPolicy(max_retries=2)
-        )
+        record = execution.execute_run(_identity(), _budget(), p8_01.RetryPolicy(max_retries=2))
         assert {attempt.run_id for attempt in record.attempts} == {_identity().run_id}
 
     def test_adversarial_attempts_across_runs_cannot_merge(self) -> None:
@@ -277,9 +271,7 @@ class TestDAttemptIdentity:
         """I10/I11: attempts share run_id with distinct numbers; no cross-run merge."""
         execution = _execution()
         identity = _identity()
-        record = execution.execute_run(
-            identity, _budget(), p8_01.RetryPolicy(max_retries=2)
-        )
+        record = execution.execute_run(identity, _budget(), p8_01.RetryPolicy(max_retries=2))
         numbers = [attempt.attempt_number for attempt in record.attempts]
         assert {attempt.run_id for attempt in record.attempts} == {identity.run_id}
         assert numbers == sorted(numbers)
@@ -538,9 +530,7 @@ class TestHReplayIdempotency:
         """I18: replay never calls complete, creates no attempts, None if new."""
         execution = _execution()
         assert execution.replay_run(_identity()) is None
-        recorded = execution.execute_run(
-            _identity(), _budget(), p8_01.RetryPolicy(max_retries=0)
-        )
+        recorded = execution.execute_run(_identity(), _budget(), p8_01.RetryPolicy(max_retries=0))
         assert execution.replay_run(_identity()) == recorded.terminal_outcome
 
     def test_h2_idempotency_keyed_on_run_identity(self) -> None:

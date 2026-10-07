@@ -142,16 +142,12 @@ class CompiledFormula:
         required = set(self.inputs) | set(self.source_inputs)
         missing = [i for i in required if i not in input_values]
         if missing:
-            msg = (
-                f"Formula '{self.formula_id}' missing inputs: "
-                f"{', '.join(sorted(missing))}"
-            )
+            msg = f"Formula '{self.formula_id}' missing inputs: {', '.join(sorted(missing))}"
             raise FormulaEvaluationError(msg)
 
         functions = _function_map()
         scope: dict[str, Decimal | Any] = {
-            name: input_values[formula_id]
-            for name, formula_id in self._name_map.items()
+            name: input_values[formula_id] for name, formula_id in self._name_map.items()
         }
         for source_name in self.source_inputs:
             scope[source_name] = input_values[source_name]

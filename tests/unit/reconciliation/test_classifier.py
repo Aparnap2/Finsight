@@ -112,10 +112,7 @@ class TestThreeTypesOnly:
             refund=Decimal("0.00"),
             net=Decimal("50000.00"),
         )
-        assert (
-            classify(expected, observed, duplicate=True)
-            is ExceptionCode.DUPLICATE_LEDGER_ENTRY
-        )
+        assert classify(expected, observed, duplicate=True) is ExceptionCode.DUPLICATE_LEDGER_ENTRY
 
 
 class TestMixedBreakLargestComponent:

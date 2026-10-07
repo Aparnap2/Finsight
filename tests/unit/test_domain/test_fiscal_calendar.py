@@ -160,9 +160,7 @@ class TestFiscalCalendar:
 
     def test_multiple_periods_stored(self) -> None:
         """A calendar carries multiple periods."""
-        calendar = _calendar(
-            periods=[_period(), _period(id="2026-07", period_number=7)]
-        )
+        calendar = _calendar(periods=[_period(), _period(id="2026-07", period_number=7)])
         assert len(calendar.periods) == 2
 
     def test_periods_are_fiscal_period_instances(self) -> None:

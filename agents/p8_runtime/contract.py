@@ -174,8 +174,9 @@ class Budget(BaseModel):
     deadline_seconds: float = Field(ge=0)
     max_retries: int = Field(ge=0)
 
-    @field_validator("max_model_calls", "max_tokens", "max_tool_calls", "max_retries",
-                       mode="before")
+    @field_validator(
+        "max_model_calls", "max_tokens", "max_tool_calls", "max_retries", mode="before"
+    )
     @classmethod
     def _reject_bool_bounds(cls, value: Any) -> Any:
         """Reject bools so True/False never pose as numeric bounds."""

@@ -29,30 +29,36 @@ def _build_prompt(variance: Variance) -> str:
 
 def _parse_llm_response(text: str) -> dict[str, Any]:
     import re
+
     result = {"summary": "", "evidence": [], "confidence_score": 0.5, "recommended_action": ""}
 
-    m = re.search(r'SUMMARY:\s*(.+)', text, re.IGNORECASE)
+    m = re.search(r"SUMMARY:\s*(.+)", text, re.IGNORECASE)
     if m:
         result["summary"] = m.group(1).strip()
 
-    m = re.search(r'CONFIDENCE:\s*([\d.]+)', text, re.IGNORECASE)
+    m = re.search(r"CONFIDENCE:\s*([\d.]+)", text, re.IGNORECASE)
     if m:
         with contextlib.suppress(ValueError):
             result["confidence_score"] = float(m.group(1))
 
-    m = re.search(r'ACTION:\s*(.+)', text, re.IGNORECASE)
+    m = re.search(r"ACTION:\s*(.+)", text, re.IGNORECASE)
     if m:
         result["recommended_action"] = m.group(1).strip()
 
-    m = re.search(r'EVIDENCE:\s*(.+)', text, re.IGNORECASE)
+    m = re.search(r"EVIDENCE:\s*(.+)", text, re.IGNORECASE)
     if m:
         items = [e.strip() for e in m.group(1).split(",")]
         result["evidence"] = [
             EvidenceItem(
-                source_table="llm_analysis", record_id="", field="observation",
-                value=0.0, period="", description=e,
+                source_table="llm_analysis",
+                record_id="",
+                field="observation",
+                value=0.0,
+                period="",
+                description=e,
             )
-            for e in items if e
+            for e in items
+            if e
         ]
 
     return result
@@ -90,9 +96,7 @@ def investigate_root_causes(
     return findings
 
 
-def root_cause_node(
-    state: PipelineState, llm_client: LLMClient | None = None
-) -> dict[str, Any]:
+def root_cause_node(state: PipelineState, llm_client: LLMClient | None = None) -> dict[str, Any]:
     if llm_client is None:
         llm_client = LLMClient()
     material_variances = [v for v in state.get("variances", []) if v.is_material]

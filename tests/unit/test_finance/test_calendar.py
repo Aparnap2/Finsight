@@ -2,6 +2,7 @@
 
 TDD: Tests written first (Red), then implemented (Green).
 """
+
 from datetime import date, datetime
 
 from finance.validation.calendar import FiscalCalendar

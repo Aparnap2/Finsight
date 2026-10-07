@@ -19,6 +19,7 @@ class TestJobHandlerProtocol:
 
     def test_handler_must_have_handle(self) -> None:
         """A class without handle() is NOT a JobHandler."""
+
         class NotAHandler:
             pass
 

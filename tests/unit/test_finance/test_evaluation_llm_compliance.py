@@ -6,6 +6,7 @@ provider only ever sees assertions (never raw data), enforces the
 ``CommentaryOutput`` schema, and degrades deterministically on any
 non-compliant response.
 """
+
 from __future__ import annotations
 
 import json

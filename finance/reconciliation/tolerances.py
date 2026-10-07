@@ -44,9 +44,7 @@ class ReconciliationTolerance:
                     f"got {type(value).__name__}."
                 )
             if value < Decimal("0"):
-                raise ToleranceError(
-                    f"Tolerance '{field_name}' must be non-negative, got {value}."
-                )
+                raise ToleranceError(f"Tolerance '{field_name}' must be non-negative, got {value}.")
 
     def apply(self, base: Decimal) -> Decimal:
         """Compute the allowed ``abs(difference)`` for a leg net ``base``.
@@ -72,8 +70,7 @@ class ReconciliationTolerance:
             )
         if not isinstance(base_value, Decimal) or not base_value.is_finite():
             raise ToleranceError(
-                "Tolerance base must be a finite Decimal, "
-                f"got {type(base_value).__name__}."
+                f"Tolerance base must be a finite Decimal, got {type(base_value).__name__}."
             )
         return self.absolute + abs(self.percent * base_value)
 
@@ -90,8 +87,7 @@ class ReconciliationTolerance:
         difference_value: object = difference
         if isinstance(difference_value, (bool, float)):
             raise FloatMoneyError(
-                "Tolerance difference must be Decimal, "
-                f"got {type(difference_value).__name__}."
+                f"Tolerance difference must be Decimal, got {type(difference_value).__name__}."
             )
         if not isinstance(difference_value, Decimal) or not difference_value.is_finite():
             raise ToleranceError(

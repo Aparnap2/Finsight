@@ -1,4 +1,5 @@
 """Tests for forecast error metrics — MAE, RMSE, MAPE, Precision@K."""
+
 from __future__ import annotations
 
 from decimal import Decimal

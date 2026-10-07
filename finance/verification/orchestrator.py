@@ -320,9 +320,7 @@ def verify_execution(
         )
         audit_log.append(entry)
 
-    def _refuse(
-        code: str | None, message: str, digests: tuple[str, ...] = ()
-    ) -> NoReturn:
+    def _refuse(code: str | None, message: str, digests: tuple[str, ...] = ()) -> NoReturn:
         _audit("INCOMPLETE", code, None, digests)
         raise VerificationRefused(code, message)
 
@@ -395,9 +393,7 @@ def verify_execution(
         _refuse(VERIFY_RESULT_MISSING, "UNKNOWN handoff or absent RESULT; incomplete.")
 
     try:
-        clock_code = assess_clock(
-            checked_at=checked_at, recorded_at=handoff.recorded_at, now=now
-        )
+        clock_code = assess_clock(checked_at=checked_at, recorded_at=handoff.recorded_at, now=now)
     except ValueError as exc:
         _refuse(VERIFY_HANDOFF_CORRUPT, f"handoff recorded_at not tz-aware: {exc}.")
     if clock_code is not None:

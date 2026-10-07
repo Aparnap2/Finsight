@@ -37,17 +37,14 @@ class TestExampleCatalog:
 
     def test_edge_classification(self) -> None:
         """Edge examples cover boundary conditions."""
-        edge = {
-            e.example_id for e in EXAMPLE_CATALOG.by_classification(ExampleClassification.EDGE)
-        }
+        edge = {e.example_id for e in EXAMPLE_CATALOG.by_classification(ExampleClassification.EDGE)}
         assert "zero_budget_variance" in edge
         assert "invoice_negative_amount" in edge
 
     def test_malicious_classification(self) -> None:
         """Malicious examples cover adversarial input."""
         malicious = {
-            e.example_id
-            for e in EXAMPLE_CATALOG.by_classification(ExampleClassification.MALICIOUS)
+            e.example_id for e in EXAMPLE_CATALOG.by_classification(ExampleClassification.MALICIOUS)
         }
         assert "invoice_cross_tenant" in malicious
         assert "invoice_tampered" in malicious
@@ -61,9 +58,7 @@ class TestExampleCatalog:
 
     def test_classify_defaults_to_good(self) -> None:
         """Unclassified sets default to good."""
-        assert (
-            EXAMPLE_CATALOG.classify("never_registered") == ExampleClassification.GOOD
-        )
+        assert EXAMPLE_CATALOG.classify("never_registered") == ExampleClassification.GOOD
 
     def test_every_classification_has_examples(self) -> None:
         """All four categories are populated."""

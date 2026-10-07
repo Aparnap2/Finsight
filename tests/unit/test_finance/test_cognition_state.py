@@ -54,9 +54,7 @@ class TestReasoningState:
     def test_state_serialization_with_loop_fields(self) -> None:
         from finance.cognition.state.models import ReasoningState
 
-        state = ReasoningState(
-            query="test", loop_decision="finalize", overall_confidence=0.85
-        )
+        state = ReasoningState(query="test", loop_decision="finalize", overall_confidence=0.85)
         state.record_step(node_name="planner", result={"plan": ["a"]})
         d = state.model_dump()
         restored = ReasoningState.model_validate(d)
@@ -71,9 +69,7 @@ class TestReasoningState:
         state = ReasoningState(query="test")
         state.add_assertions(
             [
-                Assertion(
-                    id="a1", type=AssertionType.NUMERIC, text="test", confidence=0.5
-                ),
+                Assertion(id="a1", type=AssertionType.NUMERIC, text="test", confidence=0.5),
             ]
         )
         assert len(state.assertions) == 1
@@ -85,9 +81,7 @@ class TestNodeProtocol:
     def test_node_result_creation(self) -> None:
         from finance.cognition.state.node import NodeResult
 
-        r = NodeResult(
-            node_name="planner", state_updates={"plan": ["a"]}, confidence=0.8
-        )
+        r = NodeResult(node_name="planner", state_updates={"plan": ["a"]}, confidence=0.8)
         assert r.success is True
         assert r.state_updates["plan"] == ["a"]
 
@@ -116,9 +110,7 @@ class TestNodeProtocol:
         r = NodeResult(
             node_name="verifier",
             new_assertions=[
-                Assertion(
-                    id="v1", type=AssertionType.NUMERIC, text="Verified", confidence=0.9
-                ),
+                Assertion(id="v1", type=AssertionType.NUMERIC, text="Verified", confidence=0.9),
             ],
         )
         assert len(r.new_assertions) == 1

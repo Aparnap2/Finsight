@@ -57,9 +57,7 @@ class PromptRegistry:
             ValueError: If a template with *name* is already registered.
         """
         if name in self._templates:
-            raise ValueError(
-                f"Prompt '{name}' is already registered"
-            )
+            raise ValueError(f"Prompt '{name}' is already registered")
         self._templates[name] = PromptTemplate(
             name=name,
             version=version,

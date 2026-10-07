@@ -125,7 +125,7 @@ class TestEngineVarianceConstruction:
                 budget_amount=Decimal("100.00"),
                 variance_amount=Decimal("0.00"),
                 variance_pct=Decimal("0.00"),
-                direction="sideways", 
+                direction="sideways",
                 period_id="2026-07",
             )
 
@@ -503,9 +503,7 @@ class TestVarianceAnalysis:
             label="Q3", period=_fiscal_period(), variances=self._three_variances()
         )
         # All three variances are 20% or 30%; a 25% threshold keeps only Cloud Costs.
-        big = analysis.variances_above_threshold(
-            pct_threshold=Percentage(value=Decimal("0.25"))
-        )
+        big = analysis.variances_above_threshold(pct_threshold=Percentage(value=Decimal("0.25")))
         assert [v.account_name for v in big] == ["Cloud Costs"]
 
     def test_no_threshold_returns_all(self) -> None:

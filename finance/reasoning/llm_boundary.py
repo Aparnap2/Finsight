@@ -172,12 +172,8 @@ class NullCommentaryProvider:
             lines.append("No assertions were produced from the available evidence.")
             return "\n".join(lines)
 
-        verified = sum(
-            1 for a in assertions if a.support_level == SupportLevel.VERIFIED
-        )
-        probable = sum(
-            1 for a in assertions if a.support_level == SupportLevel.PROBABLE
-        )
+        verified = sum(1 for a in assertions if a.support_level == SupportLevel.VERIFIED)
+        probable = sum(1 for a in assertions if a.support_level == SupportLevel.PROBABLE)
         weak = sum(
             1
             for a in assertions

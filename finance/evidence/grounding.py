@@ -176,12 +176,15 @@ def is_verified_eligible(
         return False
     if evidence_registry is None:
         return False
-    return evaluate_ladder(
-        evidence_ids=evidence_ids,
-        evidence_registry=evidence_registry,
-        expected_tenant=expected_tenant,
-        content_bytes=content_bytes,
-    ) == ()
+    return (
+        evaluate_ladder(
+            evidence_ids=evidence_ids,
+            evidence_registry=evidence_registry,
+            expected_tenant=expected_tenant,
+            content_bytes=content_bytes,
+        )
+        == ()
+    )
 
 
 def classify_tier(

@@ -39,9 +39,7 @@ class ReasoningTelemetry:
             "context_keys": list(state.context.keys()),
             "action_traces": state.context.get("action_traces", []),
             "plan_history": (
-                [p.model_dump() for p in state.plan_history]
-                if state.plan_history
-                else []
+                [p.model_dump() for p in state.plan_history] if state.plan_history else []
             ),
         }
         path = self._dir / f"{run_id}.json"

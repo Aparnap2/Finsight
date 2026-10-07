@@ -154,8 +154,7 @@ class InferenceRegistry:
         if name not in self._providers:
             return False
         return all(
-            FEATURE_REGISTRY.is_enabled(cfg, feature)
-            for feature in self.required_features(name)
+            FEATURE_REGISTRY.is_enabled(cfg, feature) for feature in self.required_features(name)
         )
 
     def get_for_tenant(self, name: str, cfg: TenantConfig) -> RiskProvider:
@@ -168,9 +167,7 @@ class InferenceRegistry:
             return self.get(name)
         return NullPredictiveProvider(name, reason=self._unavailability_reason(name, cfg))
 
-    def get_predictive_for_tenant(
-        self, name: str, cfg: TenantConfig
-    ) -> PredictiveProvider:
+    def get_predictive_for_tenant(self, name: str, cfg: TenantConfig) -> PredictiveProvider:
         """Predictive variant of :meth:`get_for_tenant` (degraded fallback)."""
         if self.is_available_for_tenant(name, cfg):
             return self.get_predictive(name)
@@ -184,6 +181,4 @@ class InferenceRegistry:
             for feature in self.required_features(name)
             if not FEATURE_REGISTRY.is_enabled(cfg, feature)
         ]
-        return (
-            f"tenant {cfg.tenant_id} has feature flag(s) disabled: {', '.join(disabled)}"
-        )
+        return f"tenant {cfg.tenant_id} has feature flag(s) disabled: {', '.join(disabled)}"

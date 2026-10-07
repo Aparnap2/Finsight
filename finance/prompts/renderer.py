@@ -41,9 +41,7 @@ class PromptRenderer:
         placeholders = self._VARIABLE_PATTERN.findall(template)
         missing = [p for p in placeholders if p not in variables]
         if missing:
-            raise ValueError(
-                f"Missing variable(s) in template: {', '.join(sorted(missing))}"
-            )
+            raise ValueError(f"Missing variable(s) in template: {', '.join(sorted(missing))}")
 
         def _replace(match: re.Match[str]) -> str:
             key = match.group(1)

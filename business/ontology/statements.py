@@ -177,10 +177,7 @@ class BalanceSheet(BaseModel):
         )
 
     def __str__(self) -> str:
-        return (
-            f"Balance Sheet: {self.entity} as of {self.as_of_date} "
-            f"({self.currency})"
-        )
+        return f"Balance Sheet: {self.entity} as of {self.as_of_date} ({self.currency})"
 
 
 class IncomeStatement(BaseModel):
@@ -230,18 +227,12 @@ class IncomeStatement(BaseModel):
         """Net Income = Operating Income +/- Other Income/Expense."""
         if self.operating_income is None:
             return None
-        if (
-            self.other_income_expenses.items
-            and self.other_income_expenses.total is not None
-        ):
+        if self.other_income_expenses.items and self.other_income_expenses.total is not None:
             return self.operating_income + self.other_income_expenses.total
         return self.operating_income
 
     def __str__(self) -> str:
-        return (
-            f"Income Statement: {self.entity} for {self.period} "
-            f"({self.currency})"
-        )
+        return f"Income Statement: {self.entity} for {self.period} ({self.currency})"
 
 
 class CashFlowStatement(BaseModel):
@@ -307,10 +298,7 @@ class CashFlowStatement(BaseModel):
         return self.beginning_cash + self.net_change_in_cash
 
     def __str__(self) -> str:
-        return (
-            f"Cash Flow Statement: {self.entity} for {self.period} "
-            f"({self.currency})"
-        )
+        return f"Cash Flow Statement: {self.entity} for {self.period} ({self.currency})"
 
 
 # Resolve forward references

@@ -120,9 +120,7 @@ def test_close_with_naive_at_raises() -> None:
     """Close with a naive timestamp refuses (tz-aware only)."""
     naive = datetime(2026, 9, 16, 12, 0, 0)
     with pytest.raises(ValueError, match="timezone-aware"):
-        _verifying().transition_to(
-            SituationStatus.CLOSED, at=naive, verification=_report()
-        )
+        _verifying().transition_to(SituationStatus.CLOSED, at=naive, verification=_report())
 
 
 def test_close_without_verification_raises() -> None:
@@ -213,27 +211,21 @@ def test_approve_with_pinned_manager_proposal_succeeds() -> None:
 def test_approve_without_hash_fails(blank: str | None) -> None:
     """Approval without a pinned proposal hash refuses."""
     with pytest.raises(ValueError, match="proposal_hash"):
-        _proposed_for_approval(proposal_hash=blank).transition_to(
-            SituationStatus.APPROVED
-        )
+        _proposed_for_approval(proposal_hash=blank).transition_to(SituationStatus.APPROVED)
 
 
 @pytest.mark.parametrize("version", [0, -1])
 def test_approve_without_version_fails(version: int) -> None:
     """Approval below proposal version 1 refuses."""
     with pytest.raises(ValueError, match="proposal_version"):
-        _proposed_for_approval(proposal_version=version).transition_to(
-            SituationStatus.APPROVED
-        )
+        _proposed_for_approval(proposal_version=version).transition_to(SituationStatus.APPROVED)
 
 
 @pytest.mark.parametrize("role", [None, "", "auto", "analyst", "MANAGER"])
 def test_approve_without_authorised_role_fails(role: str | None) -> None:
     """Approval needs a recorded manager or director decider role."""
     with pytest.raises(ValueError, match="decider_role"):
-        _proposed_for_approval(decider_role=role).transition_to(
-            SituationStatus.APPROVED
-        )
+        _proposed_for_approval(decider_role=role).transition_to(SituationStatus.APPROVED)
 
 
 def test_approve_manager_above_band_fails_director_succeeds() -> None:
@@ -249,10 +241,7 @@ def test_approve_manager_above_band_fails_director_succeeds() -> None:
     with pytest.raises(ValueError, match="director"):
         big.transition_to(SituationStatus.APPROVED)
     director = big.model_copy(update={"decider_role": "director"})
-    assert (
-        director.transition_to(SituationStatus.APPROVED).status
-        is SituationStatus.APPROVED
-    )
+    assert director.transition_to(SituationStatus.APPROVED).status is SituationStatus.APPROVED
 
 
 def test_approve_director_may_decide_small_amount() -> None:
@@ -281,9 +270,9 @@ def test_propose_with_empty_evidence_fails() -> None:
 def test_propose_without_hypothesis_fails() -> None:
     """Evidence alone is not enough: at least one hypothesis is required."""
     with pytest.raises(ValueError, match="hypothesis"):
-        _fs231(
-            SituationStatus.EXPLAINED, evidence_ids=("EV-231-batch",)
-        ).transition_to(SituationStatus.PROPOSED)
+        _fs231(SituationStatus.EXPLAINED, evidence_ids=("EV-231-batch",)).transition_to(
+            SituationStatus.PROPOSED
+        )
 
 
 def test_freeze_swap_hash_after_approved_fails() -> None:
@@ -321,12 +310,8 @@ def test_freeze_preserved_on_legal_post_approval_move() -> None:
 
 def test_close_is_byte_deterministic_for_same_inputs() -> None:
     """Two closes from the same inputs serialise to identical bytes."""
-    first = _verifying().transition_to(
-        SituationStatus.CLOSED, at=AT, verification=_report()
-    )
-    second = _verifying().transition_to(
-        SituationStatus.CLOSED, at=AT, verification=_report()
-    )
+    first = _verifying().transition_to(SituationStatus.CLOSED, at=AT, verification=_report())
+    second = _verifying().transition_to(SituationStatus.CLOSED, at=AT, verification=_report())
     assert first.model_dump_json() == second.model_dump_json()
     assert first.model_dump() == second.model_dump()
     assert first == second

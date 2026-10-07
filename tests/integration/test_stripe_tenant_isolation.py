@@ -105,9 +105,7 @@ def tenant_rows(engine: sqlalchemy.Engine) -> Generator[tuple[str, str], None, N
     yield key_a, key_b
 
 
-def _scoped_count(
-    engine: sqlalchemy.Engine, tenant_id: str, key: str
-) -> int:
+def _scoped_count(engine: sqlalchemy.Engine, tenant_id: str, key: str) -> int:
     """Count rows for one key inside one tenant scope."""
     with engine.connect() as conn:
         return int(

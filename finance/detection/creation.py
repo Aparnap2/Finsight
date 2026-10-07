@@ -45,9 +45,7 @@ def allocate_situation_id(date_str: str, seq: int) -> str:
     """
     match = _DATE_PATTERN.fullmatch(date_str.strip())
     if match is None:
-        raise ValueError(
-            f"date_str must be YYYY-MM-DD, got {date_str!r}."
-        )
+        raise ValueError(f"date_str must be YYYY-MM-DD, got {date_str!r}.")
     if seq < 1:
         raise ValueError(f"seq must be positive, got {seq!r}.")
     year, month, day = match.groups()

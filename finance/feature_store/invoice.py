@@ -106,11 +106,15 @@ def build_invoice_features(df: pl.DataFrame) -> pl.DataFrame:
     assert_columns(df, SOURCE_COLUMNS)
     assert_money_columns(df, ("amount",))
 
-    paid = df.filter(pl.col("status") == "paid").group_by(["entity_id", "period"]).agg(
-        pl.col("amount").sum().alias("invoice_paid_amount")
+    paid = (
+        df.filter(pl.col("status") == "paid")
+        .group_by(["entity_id", "period"])
+        .agg(pl.col("amount").sum().alias("invoice_paid_amount"))
     )
-    draft = df.filter(pl.col("status") == "draft").group_by(["entity_id", "period"]).agg(
-        pl.col("amount").sum().alias("_draft_amount")
+    draft = (
+        df.filter(pl.col("status") == "draft")
+        .group_by(["entity_id", "period"])
+        .agg(pl.col("amount").sum().alias("_draft_amount"))
     )
 
     out = (
@@ -128,8 +132,9 @@ def build_invoice_features(df: pl.DataFrame) -> pl.DataFrame:
         .with_columns(
             pl.col("invoice_paid_amount").fill_null(_ZERO),
             pl.col("_draft_amount").fill_null(_ZERO),
-            (pl.col("invoice_amount_total") / pl.col("invoice_count_total"))
-            .alias("invoice_amount_avg"),
+            (pl.col("invoice_amount_total") / pl.col("invoice_count_total")).alias(
+                "invoice_amount_avg"
+            ),
             (pl.col("invoice_paid_amount") / pl.col("invoice_amount_total").replace(_ZERO, None))
             .fill_null(_ZERO)
             .alias("invoice_share_paid"),

@@ -179,9 +179,7 @@ class TestSensitivity:
             refund=Decimal("0.00"),
             net=Decimal("50000.00"),
         )
-        assert fingerprint_pair(expected, observed) != fingerprint_pair(
-            expected, drifted
-        )
+        assert fingerprint_pair(expected, observed) != fingerprint_pair(expected, drifted)
 
 
 class TestPairDirection:

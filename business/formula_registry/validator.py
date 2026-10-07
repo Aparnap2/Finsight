@@ -93,9 +93,7 @@ def validate_registry(records: list[dict[str, Any]]) -> list[str]:
 
         missing = _REQUIRED_FIELDS - set(record)
         if missing:
-            problems.append(
-                f"formula '{formula_id}' missing fields: {', '.join(sorted(missing))}"
-            )
+            problems.append(f"formula '{formula_id}' missing fields: {', '.join(sorted(missing))}")
             continue
 
         if formula_id in seen_ids:
@@ -104,30 +102,21 @@ def validate_registry(records: list[dict[str, Any]]) -> list[str]:
 
         if not _semver_ok(str(record["version"])):
             problems.append(
-                f"formula '{formula_id}' version '{record['version']}' "
-                "is not MAJOR.MINOR.PATCH"
+                f"formula '{formula_id}' version '{record['version']}' is not MAJOR.MINOR.PATCH"
             )
 
         if record["category"] not in _CATEGORIES:
-            problems.append(
-                f"formula '{formula_id}' unknown category '{record['category']}'"
-            )
+            problems.append(f"formula '{formula_id}' unknown category '{record['category']}'")
 
         if record["output"] not in _OUTPUTS:
-            problems.append(
-                f"formula '{formula_id}' unknown output '{record['output']}'"
-            )
+            problems.append(f"formula '{formula_id}' unknown output '{record['output']}'")
 
         if record["status"] not in _STATUSES:
-            problems.append(
-                f"formula '{formula_id}' unknown status '{record['status']}'"
-            )
+            problems.append(f"formula '{formula_id}' unknown status '{record['status']}'")
 
         for dep in record["dependencies"]:
             if dep not in id_map:
-                problems.append(
-                    f"formula '{formula_id}' depends on unknown '{dep}'"
-                )
+                problems.append(f"formula '{formula_id}' depends on unknown '{dep}'")
 
     # Cycle detection over the whole registry.
     try:
@@ -189,8 +178,7 @@ def validate_expression(
         if not record.get("dependencies"):
             return problems
         problems.append(
-            f"formula '{formula_id}' expression is not evaluable: "
-            f"{compiled.unsupported_reason}"
+            f"formula '{formula_id}' expression is not evaluable: {compiled.unsupported_reason}"
         )
         return problems
 
@@ -202,8 +190,7 @@ def validate_expression(
     unreferenced = declared - referenced
     if unreferenced:
         problems.append(
-            f"formula '{formula_id}' declares unused inputs: "
-            f"{', '.join(sorted(unreferenced))}"
+            f"formula '{formula_id}' declares unused inputs: {', '.join(sorted(unreferenced))}"
         )
 
     return problems

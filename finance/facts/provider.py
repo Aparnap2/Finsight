@@ -96,9 +96,7 @@ class ProviderNetFact(BaseModel):
         here (tracked apart from bookable net) so FS-231 decomposes
         1000000 / 7500 / 2500 / 10000 / 7500 to exactly 972500.
         """
-        return (
-            self.gross - self.fee - self.refund - self.adjustment - self.pending
-        )
+        return self.gross - self.fee - self.refund - self.adjustment - self.pending
 
 
 def decompose_provider_net(

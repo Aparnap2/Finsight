@@ -25,9 +25,7 @@ _FORBIDDEN_LABELS = frozenset({"CAUSED_BY", "PROVES", "VERIFIES"})
 
 def _check_label(label: str) -> str:
     """Accept only CORRELATED_WITH (exact); refuse causal labels."""
-    if label != _CORRELATED_WITH or any(
-        forbidden in label for forbidden in _FORBIDDEN_LABELS
-    ):
+    if label != _CORRELATED_WITH or any(forbidden in label for forbidden in _FORBIDDEN_LABELS):
         raise ValueError(
             "edge label must be CORRELATED_WITH; causal labels "
             f"(CAUSED_BY/PROVES/VERIFIES) are forbidden, got {label!r}."
@@ -182,14 +180,11 @@ def build_chain(
     """
     ordered = tuple(sorted(evidence_ids))
     edges = tuple(
-        make_edge(first, second)
-        for first, second in zip(ordered, ordered[1:], strict=False)
+        make_edge(first, second) for first, second in zip(ordered, ordered[1:], strict=False)
     )
     markers: tuple[ConflictMarker, ...] = ()
     if registry is not None:
-        contents = {
-            eid: registry[eid].claim for eid in ordered if eid in registry
-        }
+        contents = {eid: registry[eid].claim for eid in ordered if eid in registry}
         markers = tuple(detect_conflicts(registry, contents))
     return EvidenceChain(
         edges=edges,

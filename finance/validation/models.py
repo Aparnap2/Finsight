@@ -1,4 +1,5 @@
 """Financial Period domain models."""
+
 from datetime import date
 from enum import StrEnum
 

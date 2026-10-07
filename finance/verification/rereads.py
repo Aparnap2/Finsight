@@ -295,20 +295,17 @@ def _parse_accepted_amount(detail: str, sequence: int) -> Decimal:
         amount = Decimal(parts[0])
     except InvalidOperation as exc:
         raise CorruptResultRead(
-            f"AC line {sequence} amount {parts[0]!r} is not Decimal; "
-            "VERIFY_RESULT_MUTATED."
+            f"AC line {sequence} amount {parts[0]!r} is not Decimal; VERIFY_RESULT_MUTATED."
         ) from exc
     if not amount.is_finite():
         raise CorruptResultRead(
-            f"AC line {sequence} amount {parts[0]!r} is non-finite; "
-            "VERIFY_RESULT_MUTATED."
+            f"AC line {sequence} amount {parts[0]!r} is non-finite; VERIFY_RESULT_MUTATED."
         )
     try:
         quantized = amount.quantize(_TWO_DP)
     except InvalidOperation as exc:
         raise CorruptResultRead(
-            f"AC line {sequence} amount {parts[0]!r} is not 2-dp money; "
-            "VERIFY_RESULT_MUTATED."
+            f"AC line {sequence} amount {parts[0]!r} is not 2-dp money; VERIFY_RESULT_MUTATED."
         ) from exc
     if amount != quantized or amount < 0:
         raise CorruptResultRead(
@@ -349,9 +346,7 @@ def derive_accepted_total(
     try:
         text = result_bytes.decode("ascii")
     except UnicodeDecodeError as exc:
-        raise CorruptResultRead(
-            "RESULT bytes are not ascii; VERIFY_RESULT_MUTATED."
-        ) from exc
+        raise CorruptResultRead("RESULT bytes are not ascii; VERIFY_RESULT_MUTATED.") from exc
     lines = text.split("\n")
     if lines and lines[-1] == "":
         lines = lines[:-1]
@@ -360,9 +355,7 @@ def derive_accepted_total(
     parsed: list[LegacyRecordResult] = []
     for position, line in enumerate(lines, start=1):
         if len(line) != 80:
-            raise CorruptResultRead(
-                f"RESULT line {position} width != 80; VERIFY_RESULT_MUTATED."
-            )
+            raise CorruptResultRead(f"RESULT line {position} width != 80; VERIFY_RESULT_MUTATED.")
         try:
             parsed.append(LegacyRecordResult.from_line(line))
         except (LegacyChecksumError, LegacyParseError) as exc:
@@ -371,19 +364,14 @@ def derive_accepted_total(
             ) from exc
     for entry in parsed:
         if entry.version != PROTOCOL_VERSION:
-            raise CountSkewRead(
-                f"RESULT version skew {entry.version!r}; VERIFY_COUNT_SKEW."
-            )
+            raise CountSkewRead(f"RESULT version skew {entry.version!r}; VERIFY_COUNT_SKEW.")
         if entry.batch_id != batch_id:
             raise WrongBatchRead(
-                f"RESULT batch skew {entry.batch_id!r} != {batch_id!r}; "
-                "VERIFY_BATCH_SKEW."
+                f"RESULT batch skew {entry.batch_id!r} != {batch_id!r}; VERIFY_BATCH_SKEW."
             )
     sequences = sorted(entry.sequence for entry in parsed)
     if sequences != list(range(1, len(parsed) + 1)):
-        raise CountSkewRead(
-            f"RESULT sequence skew got {sequences}; VERIFY_COUNT_SKEW."
-        )
+        raise CountSkewRead(f"RESULT sequence skew got {sequences}; VERIFY_COUNT_SKEW.")
     accepted_total = Decimal("0.00")
     accepted_count = 0
     rejected_count = 0
@@ -398,7 +386,9 @@ def derive_accepted_total(
             duplicate_count += 1
     logger.info(
         "R2 accepted derivation batch=%s lines=%d accepted=%s",
-        batch_id, len(parsed), accepted_total,
+        batch_id,
+        len(parsed),
+        accepted_total,
     )
     return AcceptedDerivation(
         batch_id=batch_id,

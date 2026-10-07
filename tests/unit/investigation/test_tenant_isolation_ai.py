@@ -44,9 +44,7 @@ def test_evidence_required_subset_tenant_scoped():
     verifier = Verifier()
     plan = InvestigationPlan(
         hypothesis_text="possible refund lag",
-        capability_calls=(
-            {"capability": "get_stripe_payment", "args": {}, "order_index": 0},
-        ),
+        capability_calls=({"capability": "get_stripe_payment", "args": {}, "order_index": 0},),
         evidence_required=("ev-001",),
         escalation=False,
     )
@@ -62,9 +60,7 @@ def test_evidence_required_cross_tenant_unknown_uniform():
     verifier = Verifier()
     plan = InvestigationPlan(
         hypothesis_text="hypothesis",
-        capability_calls=(
-            {"capability": "get_stripe_payment", "args": {}, "order_index": 0},
-        ),
+        capability_calls=({"capability": "get_stripe_payment", "args": {}, "order_index": 0},),
         evidence_required=("ev-bad-001",),
         escalation=False,
     )
@@ -104,9 +100,7 @@ def test_proposal_tenant_not_llm_selected():
     verifier = Verifier()
     plan = InvestigationPlan(
         hypothesis_text="hypothesis",
-        capability_calls=(
-            {"capability": "get_stripe_payment", "args": {}, "order_index": 0},
-        ),
+        capability_calls=({"capability": "get_stripe_payment", "args": {}, "order_index": 0},),
         evidence_required=("ev-bad-tenant-b",),
         escalation=False,
     )

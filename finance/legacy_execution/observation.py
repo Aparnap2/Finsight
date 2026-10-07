@@ -66,9 +66,7 @@ class ObservedBatch(BaseModel):
     """SHA-256 over the exact RESULT bytes observed."""
 
 
-def observe_legacy_result(
-    result_bytes: bytes, *, batch_id: str, company_id: str
-) -> ObservedBatch:
+def observe_legacy_result(result_bytes: bytes, *, batch_id: str, company_id: str) -> ObservedBatch:
     """Parse RESULT bytes into verbatim per-record observations (E5).
 
     Decodes ascii, enforces 80-char lines, and parses each line with
@@ -95,11 +93,12 @@ def observe_legacy_result(
     except UnicodeDecodeError as exc:
         logger.warning(
             "E5 observe: non-ascii RESULT bytes company=%s batch=%s sha=%s size=%d",
-            company_id, batch_id, raw_sha256, len(result_bytes),
+            company_id,
+            batch_id,
+            raw_sha256,
+            len(result_bytes),
         )
-        raise ObservationRefused(
-            f"RESULT bytes are not ascii for {batch_id!r}."
-        ) from exc
+        raise ObservationRefused(f"RESULT bytes are not ascii for {batch_id!r}.") from exc
     lines = text.split("\n")
     if lines and lines[-1] == "":
         lines = lines[:-1]
@@ -107,11 +106,12 @@ def observe_legacy_result(
         if len(line) != 80:
             logger.warning(
                 "E5 observe: bad line width company=%s batch=%s sha=%s lines=%d",
-                company_id, batch_id, raw_sha256, len(lines),
+                company_id,
+                batch_id,
+                raw_sha256,
+                len(lines),
             )
-            raise ObservationRefused(
-                f"RESULT line width != 80 for {batch_id!r}; raw bytes logged."
-            )
+            raise ObservationRefused(f"RESULT line width != 80 for {batch_id!r}; raw bytes logged.")
     records: list[ObservedRecord] = []
     for position, line in enumerate(lines, start=1):
         try:
@@ -119,11 +119,13 @@ def observe_legacy_result(
         except (LegacyChecksumError, LegacyParseError) as exc:
             logger.warning(
                 "E5 observe: line %d unparseable company=%s batch=%s sha=%s",
-                position, company_id, batch_id, raw_sha256,
+                position,
+                company_id,
+                batch_id,
+                raw_sha256,
             )
             raise ObservationRefused(
-                f"RESULT line {position} fails shape/checksum "
-                f"for {batch_id!r}."
+                f"RESULT line {position} fails shape/checksum for {batch_id!r}."
             ) from exc
         records.append(
             ObservedRecord(

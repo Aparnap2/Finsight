@@ -164,9 +164,7 @@ def collect_evidence(
         group = sorted(grouped[source_type], key=lambda c: c.item.source_id)
         if len(group) > per_source_cap:
             dropped.append(
-                DroppedSource(
-                    source_type=source_type, dropped=len(group) - per_source_cap
-                )
+                DroppedSource(source_type=source_type, dropped=len(group) - per_source_cap)
             )
             markers.append(
                 f"CAP_EXCEEDED {source_type}: dropped "
@@ -181,14 +179,9 @@ def collect_evidence(
                 f"{conv.item.source_id}: non-authoritative claim "
                 "stripped to CONTEXT"
             )
-    pairs = sorted(
-        ((evidence_id_for(conv), conv) for conv in kept), key=lambda pair: pair[0]
-    )
+    pairs = sorted(((evidence_id_for(conv), conv) for conv in kept), key=lambda pair: pair[0])
     if len(pairs) > total_cap:
-        markers.append(
-            f"CAP_EXCEEDED total: dropped {len(pairs) - total_cap} "
-            f"over cap {total_cap}"
-        )
+        markers.append(f"CAP_EXCEEDED total: dropped {len(pairs) - total_cap} over cap {total_cap}")
         pairs = pairs[:total_cap]
     ids = tuple(eid for eid, _ in pairs)
     items = {eid: conv.item for eid, conv in pairs}
@@ -203,14 +196,11 @@ def collect_evidence(
     )
 
 
-def _conflict_strings(
-    items: dict[str, EvidenceItem], contents: dict[str, str]
-) -> list[str]:
+def _conflict_strings(items: dict[str, EvidenceItem], contents: dict[str, str]) -> list[str]:
     """Render conflict markers for same-source diverging content."""
     from finance.correlation.chain import detect_conflicts
 
     return [
-        f"CONFLICTING_EVIDENCE {','.join(marker.ids)}: "
-        f"{len(marker.ids)} variants preserved"
+        f"CONFLICTING_EVIDENCE {','.join(marker.ids)}: {len(marker.ids)} variants preserved"
         for marker in detect_conflicts(items, contents)
     ]

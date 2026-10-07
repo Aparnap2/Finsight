@@ -272,9 +272,7 @@ class TestFiscalPeriodProperties:
     def test_ordering_is_total(self) -> None:
         """Periods order by (year, period) for every generated pair."""
         periods = [
-            FiscalPeriod(year=y, period=m, type="month")
-            for y in (2025, 2026)
-            for m in (1, 6, 12)
+            FiscalPeriod(year=y, period=m, type="month") for y in (2025, 2026) for m in (1, 6, 12)
         ]
         for i, p in enumerate(periods):
             for j, q in enumerate(periods):
@@ -394,13 +392,10 @@ class TestLineItemAggregationProperties:
         item = LineItem(
             label="Total",
             sub_items=[
-                LineItem(label=f"L-{i}", amount=_money(a_str))
-                for i, a_str in enumerate(_AMOUNTS)
+                LineItem(label=f"L-{i}", amount=_money(a_str)) for i, a_str in enumerate(_AMOUNTS)
             ],
         )
-        expected = Money(
-            amount=sum(amounts, Decimal("0")), currency=CurrencyCode(code="USD")
-        )
+        expected = Money(amount=sum(amounts, Decimal("0")), currency=CurrencyCode(code="USD"))
         assert item.total == expected
 
     def test_nested_aggregation_matches_flat_aggregation(self) -> None:

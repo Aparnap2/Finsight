@@ -34,9 +34,7 @@ def _event_id(
     with ``|`` separators, so identical inputs always yield the identical
     id and any input change yields a different one.
     """
-    preimage = "|".join(
-        (situation_id, from_status.value, to_status.value, at.isoformat())
-    )
+    preimage = "|".join((situation_id, from_status.value, to_status.value, at.isoformat()))
     return hashlib.sha256(preimage.encode("utf-8")).hexdigest()
 
 
@@ -101,8 +99,7 @@ class AuditEvent(BaseModel):
         """Enforce the single-company boundary (meridian only)."""
         if value != "meridian":
             raise ValueError(
-                "company_id must be 'meridian' (single-company boundary), "
-                f"got {value!r}."
+                f"company_id must be 'meridian' (single-company boundary), got {value!r}."
             )
         return value
 
@@ -111,10 +108,7 @@ class AuditEvent(BaseModel):
     def _validate_version(cls, value: int | None) -> int | None:
         """Require a positive version whenever one is pinned."""
         if value is not None and value < 1:
-            raise ValueError(
-                "version must be >= 1 when set, "
-                f"got {value!r}."
-            )
+            raise ValueError(f"version must be >= 1 when set, got {value!r}.")
         return value
 
     @field_validator("at")
@@ -137,9 +131,7 @@ class AuditEvent(BaseModel):
     def _validate_statuses_differ(self) -> "AuditEvent":
         """Reject no-op records: a transition must move state."""
         if self.from_status == self.to_status:
-            raise ValueError(
-                f"from_status and to_status must differ, got {self.from_status}."
-            )
+            raise ValueError(f"from_status and to_status must differ, got {self.from_status}.")
         return self
 
 
@@ -229,14 +221,10 @@ class AuditLog:
             The stored event (a linked copy when auto-linking applied).
         """
         if not isinstance(event, AuditEvent):
-            raise TypeError(
-                f"AuditLog only stores AuditEvent, got {type(event).__name__}."
-            )
+            raise TypeError(f"AuditLog only stores AuditEvent, got {type(event).__name__}.")
         stored = event
         if self._events and not event.prev_hash:
-            stored = event.model_copy(
-                update={"prev_hash": self._events[-1].event_id}
-            )
+            stored = event.model_copy(update={"prev_hash": self._events[-1].event_id})
         self._events.append(stored)
         return stored
 

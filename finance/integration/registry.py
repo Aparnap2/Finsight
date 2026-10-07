@@ -136,9 +136,7 @@ def _require_money(field_name: str, value: object) -> Decimal:
             f"{type(value).__name__}: float/bool money is rejected."
         )
     if not value.is_finite():
-        raise FloatMoneyError(
-            f"Correlator field '{field_name}' must be finite, got {value}."
-        )
+        raise FloatMoneyError(f"Correlator field '{field_name}' must be finite, got {value}.")
     return value
 
 

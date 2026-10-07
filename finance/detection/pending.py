@@ -72,13 +72,9 @@ def emit_pending(
     Raises:
         ValueError: If no missing field is named.
     """
-    cleaned = frozenset(
-        field.strip() for field in missing_fields if field.strip()
-    )
+    cleaned = frozenset(field.strip() for field in missing_fields if field.strip())
     if len(cleaned) == 0:
         raise ValueError("missing_fields must name at least one field.")
     canonical = "|".join([fact_id, ",".join(sorted(cleaned)), fingerprint_source])
     digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
-    return PendingAttempt(
-        fact_id=fact_id, missing_fields=cleaned, fingerprint=digest
-    )
+    return PendingAttempt(fact_id=fact_id, missing_fields=cleaned, fingerprint=digest)

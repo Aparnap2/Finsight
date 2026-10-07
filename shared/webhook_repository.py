@@ -36,8 +36,7 @@ def _require_money(field_name: str, value: object) -> Decimal | None:
     if isinstance(value, str):
         return Decimal(value.strip())
     raise ValueError(
-        f"Field '{field_name}' must be Decimal, int, str, or None, "
-        f"got {type(value).__name__}."
+        f"Field '{field_name}' must be Decimal, int, str, or None, got {type(value).__name__}."
     )
 
 

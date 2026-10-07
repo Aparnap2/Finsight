@@ -41,13 +41,9 @@ class JournalLine(BaseModel):
         has_debit = self.debit is not None
         has_credit = self.credit is not None
         if has_debit and has_credit:
-            raise ValueError(
-                "Journal line cannot have both debit and credit amounts"
-            )
+            raise ValueError("Journal line cannot have both debit and credit amounts")
         if not has_debit and not has_credit:
-            raise ValueError(
-                "Journal line must have either a debit or credit amount"
-            )
+            raise ValueError("Journal line must have either a debit or credit amount")
         return self
 
     @property
@@ -115,8 +111,7 @@ class JournalEntry(BaseModel):
             raise ValueError("Journal entry must have at least one line")
         if len(self.lines) < 2:
             raise ValueError(
-                "Journal entry must have at least two lines "
-                "(double-entry bookkeeping)"
+                "Journal entry must have at least two lines (double-entry bookkeeping)"
             )
         total_debits: Money | None = None
         total_credits: Money | None = None
@@ -135,16 +130,10 @@ class JournalEntry(BaseModel):
                     f"found {curr} and {reference_currency}"
                 )
             if line.debit is not None:
-                total_debits = (
-                    total_debits + line.debit
-                    if total_debits is not None
-                    else line.debit
-                )
+                total_debits = total_debits + line.debit if total_debits is not None else line.debit
             if line.credit is not None:
                 total_credits = (
-                    total_credits + line.credit
-                    if total_credits is not None
-                    else line.credit
+                    total_credits + line.credit if total_credits is not None else line.credit
                 )
 
         if total_debits is None or total_credits is None:
@@ -158,10 +147,7 @@ class JournalEntry(BaseModel):
         return self
 
     def __str__(self) -> str:
-        return (
-            f"JournalEntry({self.entry_id}, {self.entry_date}, "
-            f"{len(self.lines)} lines)"
-        )
+        return f"JournalEntry({self.entry_id}, {self.entry_date}, {len(self.lines)} lines)"
 
 
 class GeneralLedger(BaseModel):
@@ -217,15 +203,11 @@ class GeneralLedger(BaseModel):
             for line in entry.lines:
                 if line.debit is not None:
                     total_debits = (
-                        total_debits + line.debit
-                        if total_debits is not None
-                        else line.debit
+                        total_debits + line.debit if total_debits is not None else line.debit
                     )
                 if line.credit is not None:
                     total_credits = (
-                        total_credits + line.credit
-                        if total_credits is not None
-                        else line.credit
+                        total_credits + line.credit if total_credits is not None else line.credit
                     )
 
         if total_debits is None or total_credits is None:
@@ -252,7 +234,4 @@ class GeneralLedger(BaseModel):
         return result
 
     def __str__(self) -> str:
-        return (
-            f"GeneralLedger({self.entity_id}, FY{self.fiscal_year}, "
-            f"{len(self.entries)} entries)"
-        )
+        return f"GeneralLedger({self.entity_id}, FY{self.fiscal_year}, {len(self.entries)} entries)"

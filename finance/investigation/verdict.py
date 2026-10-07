@@ -23,8 +23,7 @@ from pydantic import BaseModel, ConfigDict, model_validator
 from finance.correlation.converter import trust_class_for
 
 NON_CAUSAL_BANNER = (
-    "CORRELATED_WITH only: co-occurrence for investigation, "
-    "never causation or proof (E26)."
+    "CORRELATED_WITH only: co-occurrence for investigation, never causation or proof (E26)."
 )
 """Banner every correlation must carry verbatim (P6-04 E26)."""
 
@@ -116,8 +115,7 @@ def coerce_sequences(data: object) -> object:
     """
     if isinstance(data, Mapping):
         return {
-            key: (tuple(value) if isinstance(value, list) else value)
-            for key, value in data.items()
+            key: (tuple(value) if isinstance(value, list) else value) for key, value in data.items()
         }
     return data
 
@@ -127,9 +125,7 @@ _FINDING_MARKERS = frozenset(
 )
 """Keys distinctive to FACTUAL_FINDING payloads."""
 
-_HYPOTHESIS_MARKERS = frozenset(
-    {"hypothesis_id", "text", "confidence", "basis_refs", "flags"}
-)
+_HYPOTHESIS_MARKERS = frozenset({"hypothesis_id", "text", "confidence", "basis_refs", "flags"})
 """Keys distinctive to HYPOTHESIS payloads."""
 
 _CORRELATION_MARKERS = frozenset({"edge_id", "edge_refs", "edge_label", "banner"})
@@ -157,9 +153,7 @@ def _require_kind(
     if isinstance(data, Mapping):
         kind = data.get("kind")
         if kind is not None and kind != expected:
-            raise ValueError(
-                f"KIND_MISMATCH: expected kind {expected!r}, got {kind!r}."
-            )
+            raise ValueError(f"KIND_MISMATCH: expected kind {expected!r}, got {kind!r}.")
         clashing = sorted(set(data) & set(foreign_markers))
         if clashing:
             raise ValueError(
@@ -252,13 +246,11 @@ class FactualFinding(BaseModel):
             )
         if not self.evidence_ids:
             raise ValueError(
-                "FINDING_WITHOUT_GROUNDING: at least one AUTHORITATIVE "
-                "evidence id is required."
+                "FINDING_WITHOUT_GROUNDING: at least one AUTHORITATIVE evidence id is required."
             )
         verified = set(self.verified_ids)
         grounded = any(
-            eid in verified
-            and trust_class_for(_source_prefix(eid)) == "AUTHORITATIVE"
+            eid in verified and trust_class_for(_source_prefix(eid)) == "AUTHORITATIVE"
             for eid in self.evidence_ids
         )
         if not grounded:
@@ -327,9 +319,7 @@ class Correlation(BaseModel):
         if not self.situation_id.strip():
             raise ValueError("CORRELATION_WITHOUT_EDGES: situation_id blank.")
         if len(self.edge_refs) < 2:
-            raise ValueError(
-                "CORRELATION_WITHOUT_EDGES: at least two edge refs required."
-            )
+            raise ValueError("CORRELATION_WITHOUT_EDGES: at least two edge refs required.")
         if self.edge_label != CORRELATED_WITH:
             raise ValueError(
                 "CAUSAL_UPGRADE: edge labels allow exactly CORRELATED_WITH; "
@@ -338,8 +328,7 @@ class Correlation(BaseModel):
         check_no_causal_text(self.edge_label, where="correlation edge_label")
         if self.banner != NON_CAUSAL_BANNER:
             raise ValueError(
-                "CORRELATION_WITHOUT_BANNER: the E26 no-causality banner "
-                "must be carried verbatim."
+                "CORRELATION_WITHOUT_BANNER: the E26 no-causality banner must be carried verbatim."
             )
         return self
 
@@ -405,9 +394,7 @@ class Hypothesis(BaseModel):
             raise ValueError("HYPOTHESIS_WITHOUT_BASIS: text blank.")
         check_no_causal_text(self.text, where="hypothesis text")
         if not self.basis_refs:
-            raise ValueError(
-                "HYPOTHESIS_WITHOUT_BASIS: at least one basis ref required."
-            )
+            raise ValueError("HYPOTHESIS_WITHOUT_BASIS: at least one basis ref required.")
         return self
 
 
@@ -542,9 +529,7 @@ class InvestigationVerdict(BaseModel):
         if not self.situation_id.strip():
             raise ValueError("PROPOSAL_INVENTED: situation_id blank.")
         if len(self.fingerprint) != 64:
-            raise ValueError(
-                "FINGERPRINT_INVALID: fingerprint must be a sha256 hex."
-            )
+            raise ValueError("FINGERPRINT_INVALID: fingerprint must be a sha256 hex.")
         if self.proposal is None:
             if self.terminal_label != "UNRESOLVED":
                 raise ValueError(
@@ -624,9 +609,7 @@ def verdict_canonical_bytes(verdict: InvestigationVerdict) -> bytes:
         The canonical JSON bytes.
     """
     payload = verdict.model_dump(mode="json")
-    return json.dumps(payload, sort_keys=True, separators=(",", ":")).encode(
-        "utf-8"
-    )
+    return json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
 
 def verdict_handoff(verdict: InvestigationVerdict) -> dict[str, Any]:

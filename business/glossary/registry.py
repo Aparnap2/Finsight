@@ -78,8 +78,7 @@ _REVENUE: list[GlossaryEntry] = [
         term_id="glossary.revenue.net",
         term="Net Revenue",
         definition=(
-            "Total revenue from operations after deducting returns, "
-            "allowances, and discounts."
+            "Total revenue from operations after deducting returns, allowances, and discounts."
         ),
         category=GlossaryCategory.REVENUE,
         data_type="Money",
@@ -399,10 +398,7 @@ _EXPENSE: list[GlossaryEntry] = [
         classification="confidential",
         sox_relevant=True,
         aliases=["Factory Overhead", "Production Overhead"],
-        formula=(
-            "Indirect labor + Factory rent + Utilities + Maintenance + "
-            "Quality control costs"
-        ),
+        formula=("Indirect labor + Factory rent + Utilities + Maintenance + Quality control costs"),
         tags=["gaap", "cogs", "manufacturing", "cost_accounting"],
     ),
     _entry(
@@ -995,8 +991,7 @@ _BUDGETING: list[GlossaryEntry] = [
         term_id="glossary.budgeting.attainment_rate",
         term="Budget Attainment Rate",
         definition=(
-            "The percentage of the budgeted amount that was actually "
-            "achieved in a given period."
+            "The percentage of the budgeted amount that was actually achieved in a given period."
         ),
         category=GlossaryCategory.BUDGETING,
         data_type="Percentage",
@@ -1369,9 +1364,7 @@ _SAAS_METRICS: list[GlossaryEntry] = [
         source_system="Computed (subscription analytics)",
         classification="confidential",
         aliases=["NRR", "Net Dollar Retention", "NDR"],
-        formula=(
-            "(Starting MRR + Expansion − Contraction − Churn) / Starting MRR × 100"
-        ),
+        formula=("(Starting MRR + Expansion − Contraction − Churn) / Starting MRR × 100"),
         tags=["saas", "kpi", "board_report", "subscription"],
     ),
     _entry(
@@ -1387,9 +1380,7 @@ _SAAS_METRICS: list[GlossaryEntry] = [
         source_system="Computed (subscription analytics)",
         classification="confidential",
         aliases=["GRR", "Gross Dollar Retention", "Logo Retention"],
-        formula=(
-            "(Starting MRR − Contraction − Churn) / Starting MRR × 100"
-        ),
+        formula=("(Starting MRR − Contraction − Churn) / Starting MRR × 100"),
         tags=["saas", "kpi", "board_report", "subscription"],
     ),
     _entry(
@@ -1421,8 +1412,7 @@ _SAAS_METRICS: list[GlossaryEntry] = [
         classification="confidential",
         aliases=["Sales Efficiency", "Magic Number"],
         formula=(
-            "(Current Quarter Net New ARR − Prior Quarter Net New ARR) "
-            "/ Prior Quarter S&M Spend"
+            "(Current Quarter Net New ARR − Prior Quarter Net New ARR) / Prior Quarter S&M Spend"
         ),
         tags=["saas", "kpi", "efficiency", "sales"],
     ),

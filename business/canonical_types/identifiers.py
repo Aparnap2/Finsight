@@ -179,9 +179,7 @@ class LedgerAccount(BaseModel):
     def _validate_normal_balance(cls, v: str) -> str:
         normalized = v.strip().lower()
         if normalized not in ("debit", "credit"):
-            raise ValueError(
-                f"Normal balance must be 'debit' or 'credit', got '{v}'"
-            )
+            raise ValueError(f"Normal balance must be 'debit' or 'credit', got '{v}'")
         return normalized
 
     def __str__(self) -> str:

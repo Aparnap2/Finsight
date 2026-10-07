@@ -3,6 +3,7 @@
 The Context Pack is a structured, validated bundle sent to the LLM.
 Never send raw spreadsheet data.
 """
+
 from __future__ import annotations
 
 from typing import Any

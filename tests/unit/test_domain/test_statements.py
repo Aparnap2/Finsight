@@ -186,9 +186,7 @@ class TestStatementSection:
 
     def test_section_skips_none_items(self) -> None:
         """Items without amounts are skipped in the section total."""
-        section = StatementSection(
-            name="Assets", items=[_item("Cash", "100.00"), _item("Memo")]
-        )
+        section = StatementSection(name="Assets", items=[_item("Cash", "100.00"), _item("Memo")])
         assert section.total == _money("100.00")
 
     def test_name_required(self) -> None:
@@ -228,9 +226,7 @@ class TestBalanceSheet:
             as_of_date=date(2026, 6, 30),
             currency=CurrencyCode(code="USD"),
             assets=StatementSection(name="Assets", items=[_item("Cash", "1000.00")]),
-            liabilities=StatementSection(
-                name="Liabilities", items=[_item("AP", "400.00")]
-            ),
+            liabilities=StatementSection(name="Liabilities", items=[_item("AP", "400.00")]),
             equity=StatementSection(name="Equity", items=[_item("RE", "600.00")]),
         )
 
@@ -245,9 +241,7 @@ class TestBalanceSheet:
             as_of_date=date(2026, 6, 30),
             currency=CurrencyCode(code="USD"),
             assets=StatementSection(name="Assets", items=[_item("Cash", "1000.00")]),
-            liabilities=StatementSection(
-                name="Liabilities", items=[_item("AP", "500.00")]
-            ),
+            liabilities=StatementSection(name="Liabilities", items=[_item("AP", "500.00")]),
             equity=StatementSection(name="Equity", items=[_item("RE", "600.00")]),
         )
         assert bs.is_balanced is False
@@ -314,9 +308,7 @@ class TestIncomeStatement:
             currency=CurrencyCode(code="USD"),
             revenue=StatementSection(name="Revenue", items=[_item("Sales", "1000.00")]),
             cogs=StatementSection(name="COGS", items=[_item("COGS", "400.00")]),
-            operating_expenses=StatementSection(
-                name="OpEx", items=[_item("SG&A", "200.00")]
-            ),
+            operating_expenses=StatementSection(name="OpEx", items=[_item("SG&A", "200.00")]),
             other_income_expenses=StatementSection(
                 name="Other", items=[_item("Interest", "50.00")]
             ),
@@ -342,9 +334,7 @@ class TestIncomeStatement:
             currency=CurrencyCode(code="USD"),
             revenue=StatementSection(name="Revenue", items=[_item("Sales", "1000.00")]),
             cogs=StatementSection(name="COGS", items=[_item("COGS", "400.00")]),
-            operating_expenses=StatementSection(
-                name="OpEx", items=[_item("SG&A", "200.00")]
-            ),
+            operating_expenses=StatementSection(name="OpEx", items=[_item("SG&A", "200.00")]),
         )
         assert stmt.net_income == _money("400.00")
 

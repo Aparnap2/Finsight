@@ -161,8 +161,7 @@ TOTAL_HEADCOUNT = FormulaDefinition(
 NET_REVENUE = FormulaDefinition(
     formula_id="net_revenue",
     name="Net Revenue",
-    description="Total revenue from operations after deducting returns, "
-    "allowances, and discounts.",
+    description="Total revenue from operations after deducting returns, allowances, and discounts.",
     expression="GrossRevenue - Returns - Allowances - Discounts",
     depends_on=["gross_revenue", "returns", "allowances", "discounts"],
     data_type="Money",
@@ -178,8 +177,7 @@ REVENUE_GROWTH_RATE = FormulaDefinition(
     formula_id="revenue_growth_rate",
     name="Revenue Growth Rate",
     description="Period-over-period percentage change in net revenue.",
-    expression="((CurrentPeriodRevenue - PriorPeriodRevenue) / "
-    "PriorPeriodRevenue) * 100",
+    expression="((CurrentPeriodRevenue - PriorPeriodRevenue) / PriorPeriodRevenue) * 100",
     depends_on=["net_revenue"],
     data_type="Percentage",
     category=FormulaCategory.REVENUE,
@@ -411,8 +409,7 @@ COGS = FormulaDefinition(
 OPEX = FormulaDefinition(
     formula_id="opex",
     name="Operating Expenses (OPEX)",
-    description="Expenses incurred through normal business operations, "
-    "excluding COGS.",
+    description="Expenses incurred through normal business operations, excluding COGS.",
     expression="SG&A + R&D + Depreciation + Amortization",
     depends_on=["sg_and_a", "r_and_d", "depreciation_amortization"],
     data_type="Money",
@@ -540,8 +537,7 @@ EBIT = FormulaDefinition(
 NET_INCOME = FormulaDefinition(
     formula_id="net_income",
     name="Net Income",
-    description="The bottom line: total revenue minus all expenses, taxes, "
-    "and interest.",
+    description="The bottom line: total revenue minus all expenses, taxes, and interest.",
     expression="EBIT - Interest - Taxes",
     depends_on=["ebit", "interest_expense", "income_tax"],
     data_type="Money",
@@ -558,8 +554,7 @@ EBITDA = FormulaDefinition(
     name="EBITDA",
     description="Earnings before interest, taxes, depreciation, and amortization.",
     expression="NetIncome + Interest + Taxes + D&A",
-    depends_on=["net_income", "interest_expense", "income_tax",
-                "depreciation_amortization"],
+    depends_on=["net_income", "interest_expense", "income_tax", "depreciation_amortization"],
     data_type="Money",
     category=FormulaCategory.PROFITABILITY,
     owner=_FPA_OWNER,
@@ -625,8 +620,7 @@ CURRENT_LIABILITIES = FormulaDefinition(
     formula_id="current_liabilities",
     name="Current Liabilities",
     description="Obligations due within one year.",
-    expression="AccountsPayable + ShortTermDebt + AccruedLiabilities + "
-    "DeferredRevenue",
+    expression="AccountsPayable + ShortTermDebt + AccruedLiabilities + DeferredRevenue",
     depends_on=[],
     data_type="Money",
     category=FormulaCategory.BALANCE_SHEET,
@@ -685,8 +679,7 @@ INVENTORY = FormulaDefinition(
 CASH_AND_EQUIVALENTS = FormulaDefinition(
     formula_id="cash_and_equivalents",
     name="Cash & Cash Equivalents",
-    description="Liquid assets including cash, bank deposits, and "
-    "short-term investments.",
+    description="Liquid assets including cash, bank deposits, and short-term investments.",
     expression="Cash + BankBalances + MarketableSecurities (< 90 days)",
     depends_on=[],
     data_type="Money",
@@ -767,8 +760,7 @@ SHAREHOLDERS_EQUITY = FormulaDefinition(
 CURRENT_RATIO = FormulaDefinition(
     formula_id="current_ratio",
     name="Current Ratio",
-    description="Measure of ability to pay short-term obligations with "
-    "short-term assets.",
+    description="Measure of ability to pay short-term obligations with short-term assets.",
     expression="CurrentAssets / CurrentLiabilities",
     depends_on=["current_assets", "current_liabilities"],
     data_type="Ratio",
@@ -783,8 +775,7 @@ CURRENT_RATIO = FormulaDefinition(
 QUICK_RATIO = FormulaDefinition(
     formula_id="quick_ratio",
     name="Quick Ratio (Acid-Test)",
-    description="Measure of ability to pay short-term obligations with "
-    "most liquid assets.",
+    description="Measure of ability to pay short-term obligations with most liquid assets.",
     expression="(CurrentAssets - Inventory) / CurrentLiabilities",
     depends_on=["current_assets", "inventory", "current_liabilities"],
     data_type="Ratio",
@@ -865,8 +856,7 @@ CASH_CONVERSION_CYCLE = FormulaDefinition(
 NON_CASH_CHARGES = FormulaDefinition(
     formula_id="non_cash_charges",
     name="Non-Cash Charges",
-    description="Expenses recorded in the income statement that do not "
-    "involve cash outflows.",
+    description="Expenses recorded in the income statement that do not involve cash outflows.",
     expression="DepreciationAndAmortization + StockBasedCompensation + "
     "DeferredTaxes + ImpairmentCharges",
     depends_on=[],
@@ -974,8 +964,7 @@ BURN_RATE = FormulaDefinition(
 CASH_RUNWAY = FormulaDefinition(
     formula_id="cash_runway",
     name="Cash Runway",
-    description="Number of months before cash is exhausted at current "
-    "burn rate.",
+    description="Number of months before cash is exhausted at current burn rate.",
     expression="CurrentCashBalance / MonthlyBurnRate",
     depends_on=["cash_and_equivalents", "burn_rate"],
     data_type="Ratio",
@@ -1097,8 +1086,7 @@ FORECAST_ACCURACY_MAPE = FormulaDefinition(
 VARIANCE_AMOUNT = FormulaDefinition(
     formula_id="variance_amount",
     name="Variance Amount",
-    description="The absolute difference between actual results and the "
-    "budget or forecast.",
+    description="The absolute difference between actual results and the budget or forecast.",
     expression="Actual - Budget",
     depends_on=[],
     data_type="Money",

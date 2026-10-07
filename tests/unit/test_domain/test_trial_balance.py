@@ -44,9 +44,7 @@ class _TrialBalanceRow:
 
     def is_positive_on_one_side(self) -> bool:
         """DB constraint: not both debit and credit positive."""
-        return (self.debit >= 0 and self.credit >= 0) and not (
-            self.debit > 0 and self.credit > 0
-        )
+        return (self.debit >= 0 and self.credit >= 0) and not (self.debit > 0 and self.credit > 0)
 
 
 def _trial_balance(ledger: GeneralLedger) -> list[_TrialBalanceRow]:
@@ -183,9 +181,7 @@ class TestTrialBalanceBalancedInvariant:
         ledger = GeneralLedger(
             entity_id="US-CORP",
             fiscal_year=2026,
-            entries=[
-                _entry("JE-001", [_debit("1010", "100.00"), _credit("4010", "100.00")])
-            ],
+            entries=[_entry("JE-001", [_debit("1010", "100.00"), _credit("4010", "100.00")])],
         )
         assert ledger.is_balanced is True
 
@@ -294,9 +290,7 @@ class TestTrialBalanceRowConstraints:
         ledger = GeneralLedger(
             entity_id="US-CORP",
             fiscal_year=2026,
-            entries=[
-                _entry("JE-001", [_debit("1010", "100.00"), _credit("4010", "100.00")])
-            ],
+            entries=[_entry("JE-001", [_debit("1010", "100.00"), _credit("4010", "100.00")])],
         )
         for row in _trial_balance(ledger):
             assert row.debit >= 0
@@ -350,9 +344,7 @@ class TestTrialBalanceScoping:
         ledger_a = GeneralLedger(
             entity_id="US-CORP",
             fiscal_year=2026,
-            entries=[
-                _entry("JE-001", [_debit("1010", "500.00"), _credit("4010", "500.00")])
-            ],
+            entries=[_entry("JE-001", [_debit("1010", "500.00"), _credit("4010", "500.00")])],
         )
         ledger_b = GeneralLedger(entity_id="UK-SUB", fiscal_year=2026, entries=[])
         rows_a = _trial_balance(ledger_a)

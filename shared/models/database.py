@@ -18,6 +18,8 @@ from sqlalchemy.schema import FetchedValue
 
 def _utcnow() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
+
+
 class Base(DeclarativeBase):
     pass
 
@@ -203,12 +205,13 @@ class ReviewLog(Base):
 
 class ReviewDecision(Base):
     """Human or automated review decision on an assertion."""
+
     __tablename__ = "review_decisions"
     id = Column(String, primary_key=True)
     tenant_id = Column(String, nullable=False, index=True)
     period = Column(String(7), nullable=False)
     assertion_id = Column(String, nullable=False)
-    decision = Column(String, nullable=False)       # approved | rejected | escalated
+    decision = Column(String, nullable=False)  # approved | rejected | escalated
     reviewer = Column(String, nullable=False)
     confidence = Column(Numeric(5, 4))
     notes = Column(Text)
@@ -217,18 +220,19 @@ class ReviewDecision(Base):
 
 class ActionItemDB(Base):
     """Persisted action item with full gate-enforcement metadata."""
+
     __tablename__ = "action_items"
     id = Column(String, primary_key=True)
     tenant_id = Column(String, nullable=False, index=True)
     period = Column(String(7), nullable=False)
-    action = Column(String, nullable=False)          # verb: reduce, increase, …
-    domain = Column(String, nullable=False)          # cost, revenue, …
+    action = Column(String, nullable=False)  # verb: reduce, increase, …
+    domain = Column(String, nullable=False)  # cost, revenue, …
     target = Column(String, nullable=False)
     description = Column(Text)
     status = Column(String, default="proposed")
     owner = Column(String)
     impact_json = Column(JSON)
-    cited_assertion_ids = Column(JSON)               # list[str]
+    cited_assertion_ids = Column(JSON)  # list[str]
     blocked_reason = Column(Text)
     created_at = Column(DateTime, default=_utcnow)
     updated_at = Column(DateTime, default=_utcnow)
@@ -236,6 +240,7 @@ class ActionItemDB(Base):
 
 class CommentaryVersion(Base):
     """Versioned commentary draft for a period."""
+
     __tablename__ = "commentary_versions"
     id = Column(String, primary_key=True)
     tenant_id = Column(String, nullable=False, index=True)
@@ -249,6 +254,7 @@ class CommentaryVersion(Base):
 
 class AuditLog(Base):
     """Append-only audit trail for pipeline and user events."""
+
     __tablename__ = "audit_logs"
     id = Column(String, primary_key=True)
     tenant_id = Column(String, nullable=False, index=True)
@@ -261,6 +267,7 @@ class AuditLog(Base):
 
 class PipelineRun(Base):
     """Tracks each end-to-end pipeline execution."""
+
     __tablename__ = "pipeline_runs"
     id = Column(String, primary_key=True)
     tenant_id = Column(String, nullable=False, index=True)
@@ -274,23 +281,25 @@ class PipelineRun(Base):
 
 class AssertionDB(Base):
     """Persisted assertion from the assertion pipeline."""
+
     __tablename__ = "assertions_db"
     id = Column(String, primary_key=True)
     tenant_id = Column(String, nullable=False, index=True)
     period = Column(String(7), nullable=False)
     assertion_id = Column(String, nullable=False)
-    type = Column(String, nullable=False)            # numeric | comparative | causal | …
+    type = Column(String, nullable=False)  # numeric | comparative | causal | …
     text = Column(Text, nullable=False)
     value = Column(Numeric(15, 6))
-    support_level = Column(String)                   # verified | probable | weak | …
+    support_level = Column(String)  # verified | probable | weak | …
     confidence = Column(Numeric(5, 4))
-    evidence_ids_json = Column(JSON)                 # list[str]
+    evidence_ids_json = Column(JSON)  # list[str]
     metadata_json = Column(JSON)
     created_at = Column(DateTime, default=_utcnow)
 
 
 class ToolResultCache(Base):
     """Cache for external tool / API call results."""
+
     __tablename__ = "tool_result_cache"
     id = Column(String, primary_key=True)
     tenant_id = Column(String, nullable=False, index=True)
@@ -304,6 +313,7 @@ class ToolResultCache(Base):
 
 class DataQualitySnapshot(Base):
     """Snapshot of data quality metrics for a period."""
+
     __tablename__ = "data_quality_snapshots"
     id = Column(String, primary_key=True)
     tenant_id = Column(String, nullable=False, index=True)
@@ -315,19 +325,21 @@ class DataQualitySnapshot(Base):
 
 class PolicyDecisionLog(Base):
     """Log of autonomy / routing policy decisions."""
+
     __tablename__ = "policy_decision_logs"
     id = Column(String, primary_key=True)
     tenant_id = Column(String, nullable=False, index=True)
     period = Column(String(7), nullable=False)
-    autonomy_level = Column(String)                  # autonomous | semi_autonomous | …
-    routing_target = Column(String)                  # auto_approve | human_review | …
-    reasons_json = Column(JSON)                      # list[str]
+    autonomy_level = Column(String)  # autonomous | semi_autonomous | …
+    routing_target = Column(String)  # auto_approve | human_review | …
+    reasons_json = Column(JSON)  # list[str]
     confidence = Column(Numeric(5, 4))
     created_at = Column(DateTime, default=_utcnow)
 
 
 class BridgeAnalysisResult(Base):
     """Result of period-to-period bridge analysis for an account."""
+
     __tablename__ = "bridge_analysis_results"
     id = Column(String, primary_key=True)
     tenant_id = Column(String, nullable=False, index=True)
@@ -341,6 +353,7 @@ class BridgeAnalysisResult(Base):
 
 class VarianceSnapshot(Base):
     """Point-in-time snapshot of a variance for audit / comparison."""
+
     __tablename__ = "variance_snapshots"
     id = Column(String, primary_key=True)
     tenant_id = Column(String, nullable=False, index=True)
@@ -353,6 +366,7 @@ class VarianceSnapshot(Base):
 
 class RootCauseFindingDB(Base):
     """Persisted root-cause finding with structured evidence."""
+
     __tablename__ = "root_cause_findings_db"
     id = Column(String, primary_key=True)
     tenant_id = Column(String, nullable=False, index=True)

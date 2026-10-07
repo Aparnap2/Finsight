@@ -45,9 +45,7 @@ def _load_json(dataset_id: str) -> dict[str, Any]:
     for path in _DATASETS_DIR.rglob(f"{dataset_id}.json"):
         data: dict[str, Any] = json.loads(path.read_text())
         return data
-    raise FileNotFoundError(
-        f"Dataset '{dataset_id}' not found in {_DATASETS_DIR}"
-    )
+    raise FileNotFoundError(f"Dataset '{dataset_id}' not found in {_DATASETS_DIR}")
 
 
 def _apply_overrides(raw: dict[str, Any], overrides: dict[str, Any] | None) -> dict[str, Any]:

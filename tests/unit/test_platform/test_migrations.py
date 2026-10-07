@@ -49,7 +49,17 @@ def test_discover_migrations_sorts_by_version() -> None:
 
     assert len(migrations) == 11
     assert [migration.version for migration in migrations] == [
-        "000", "001", "002", "003", "004", "005", "006", "007", "008", "009", "010",
+        "000",
+        "001",
+        "002",
+        "003",
+        "004",
+        "005",
+        "006",
+        "007",
+        "008",
+        "009",
+        "010",
     ]
     # Each discovered migration is frozen and carries a non-empty checksum.
     for migration in migrations:

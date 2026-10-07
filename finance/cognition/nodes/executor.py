@@ -93,9 +93,7 @@ class ExecutorNode:
                     raw_variances = state.context.get("variances", [])
                     if raw_variances:
                         assessments = self._materiality.assess_batch(raw_variances)
-                        action.outputs["assessments"] = [
-                            a.model_dump() for a in assessments
-                        ]
+                        action.outputs["assessments"] = [a.model_dump() for a in assessments]
                         action_trace["assertion_count"] = len(assessments)
                         for a in assessments:
                             pct = abs(a.variance_pct)
@@ -117,9 +115,7 @@ class ExecutorNode:
                                     ),
                                 ),
                             )
-                        messages.append(
-                            f"Assessed {len(assessments)} variances for '{obj}'"
-                        )
+                        messages.append(f"Assessed {len(assessments)} variances for '{obj}'")
                     action.status = ActionStatus.SUCCESS
                     action_trace["status"] = "success"
 
@@ -131,9 +127,7 @@ class ExecutorNode:
                         ctx = self._formula_evaluator.evaluate(seed_inputs)
                         if not ctx.errors:
                             kpi_results = {
-                                k: float(v)
-                                for k, v in ctx.values.items()
-                                if k not in seed_inputs
+                                k: float(v) for k, v in ctx.values.items() if k not in seed_inputs
                             }
                             action.outputs["kpi_results"] = kpi_results
                             action_trace["assertion_count"] = len(kpi_results)
@@ -149,14 +143,10 @@ class ExecutorNode:
                                         source="deterministic",
                                     ),
                                 )
-                            messages.append(
-                                f"Evaluated {len(kpi_results)} KPIs for '{obj}'"
-                            )
+                            messages.append(f"Evaluated {len(kpi_results)} KPIs for '{obj}'")
                         else:
                             action.outputs["errors"] = [str(e) for e in ctx.errors]
-                            action_trace["error"] = "; ".join(
-                                str(e) for e in ctx.errors
-                            )
+                            action_trace["error"] = "; ".join(str(e) for e in ctx.errors)
                     action.status = ActionStatus.SUCCESS
                     action_trace["status"] = "success"
 
@@ -167,13 +157,9 @@ class ExecutorNode:
                     period_id = state.context.get("period_id", "")
                     if account_id and period_id:
                         items = self._evidence.collect(account_id, period_id)
-                        action.outputs["evidence_items"] = [
-                            e.model_dump() for e in items
-                        ]
+                        action.outputs["evidence_items"] = [e.model_dump() for e in items]
                         action_trace["evidence_count"] = len(items)
-                        messages.append(
-                            f"Collected {len(items)} evidence items for '{obj}'"
-                        )
+                        messages.append(f"Collected {len(items)} evidence items for '{obj}'")
                     action.status = ActionStatus.SUCCESS
                     action_trace["status"] = "success"
 
@@ -191,9 +177,7 @@ class ExecutorNode:
             # ── Always run validation suite ────────────────────────────
             validation_report = self._validation.run(**state.context)
             action.outputs["validation"] = validation_report.to_dict()
-            action_trace["validation_status"] = (
-                "passed" if validation_report.passed else "failed"
-            )
+            action_trace["validation_status"] = "passed" if validation_report.passed else "failed"
             if validation_report.total > 0 and not validation_report.passed:
                 for r in validation_report.results:
                     if not r.is_valid:
@@ -231,11 +215,7 @@ class ExecutorNode:
             plan_status = "completed"
 
         avg_confidence = (
-            round(
-                sum(a.confidence for a in assertions) / len(assertions), 4
-            )
-            if assertions
-            else 0.8
+            round(sum(a.confidence for a in assertions) / len(assertions), 4) if assertions else 0.8
         )
 
         return NodeResult(

@@ -51,13 +51,15 @@ class TestValidateDataset:
         assert result is dataset  # returns same instance
 
     def test_valid_variance_dataset(self) -> None:
-        df = pl.DataFrame({
-            "account_id": ["A100"],
-            "actual_amount": [1000.00],
-            "budget_amount": [900.00],
-            "variance_pct": [11.1],
-            "department": ["Sales"],
-        })
+        df = pl.DataFrame(
+            {
+                "account_id": ["A100"],
+                "actual_amount": [1000.00],
+                "budget_amount": [900.00],
+                "variance_pct": [11.1],
+                "department": ["Sales"],
+            }
+        )
         dataset = Dataset(data=df, source="test")
         result = validate_dataset(VarianceInputSchema, dataset)
         assert result is dataset

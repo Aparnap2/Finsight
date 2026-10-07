@@ -61,8 +61,7 @@ class CompanyConfiguration(BaseModel):
         """Enforce the single-company boundary (meridian only)."""
         if value != "meridian":
             raise ValueError(
-                "company_id must be 'meridian' (single-company boundary), "
-                f"got {value!r}."
+                f"company_id must be 'meridian' (single-company boundary), got {value!r}."
             )
         return value
 
@@ -71,9 +70,7 @@ class CompanyConfiguration(BaseModel):
     def _validate_base_currency(cls, value: str) -> str:
         """Base currency is immutable INR at Meridian creation."""
         if value != "INR":
-            raise ValueError(
-                f"base_currency is immutable INR, got {value!r}."
-            )
+            raise ValueError(f"base_currency is immutable INR, got {value!r}.")
         return value
 
 
@@ -122,9 +119,7 @@ class MeridianBusinessRules:
         """
         return True
 
-    def closed_period_never_modify(
-        self, period: str, closed_periods: Collection[str]
-    ) -> bool:
+    def closed_period_never_modify(self, period: str, closed_periods: Collection[str]) -> bool:
         """Return True when ``period`` is closed and must never mutate.
 
         Args:

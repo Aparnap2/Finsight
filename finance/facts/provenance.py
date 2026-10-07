@@ -57,10 +57,7 @@ class FactProvenance(BaseModel):
     def _validate_content_hash(cls, value: str) -> str:
         """Require a 64-character lowercase hex digest."""
         if _HASH_PATTERN.fullmatch(value) is None:
-            raise ValueError(
-                "content_hash must be a 64-char lowercase hex digest, "
-                f"got {value!r}."
-            )
+            raise ValueError(f"content_hash must be a 64-char lowercase hex digest, got {value!r}.")
         return value
 
     @field_validator("retrieved_at")
@@ -77,7 +74,6 @@ class FactProvenance(BaseModel):
         """Enforce the single-company boundary (meridian only)."""
         if value != "meridian":
             raise ValueError(
-                "company_id must be 'meridian' (single-company boundary), "
-                f"got {value!r}."
+                f"company_id must be 'meridian' (single-company boundary), got {value!r}."
             )
         return value

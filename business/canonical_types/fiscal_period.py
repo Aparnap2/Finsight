@@ -68,17 +68,11 @@ class FiscalPeriod(BaseModel):
         """Validate period range based on fiscal period type."""
         period_type = info.data.get("type", "month")
         if period_type == "month" and (v < 1 or v > 12):
-            raise ValueError(
-                f"Month period must be between 1 and 12, got {v}"
-            )
+            raise ValueError(f"Month period must be between 1 and 12, got {v}")
         if period_type == "quarter" and (v < 1 or v > 4):
-            raise ValueError(
-                f"Quarter period must be between 1 and 4, got {v}"
-            )
+            raise ValueError(f"Quarter period must be between 1 and 4, got {v}")
         if period_type == "year" and v != 1:
-            raise ValueError(
-                f"Year period must be 1, got {v}"
-            )
+            raise ValueError(f"Year period must be 1, got {v}")
         return v
 
     # ── String Representations ────────────────────────────────────────────
@@ -189,9 +183,7 @@ class FiscalPeriod(BaseModel):
         if not isinstance(other, FiscalPeriod):
             return NotImplemented
         if self.type != other.type:
-            raise TypeError(
-                f"Cannot subtract {other.type} period from {self.type} period"
-            )
+            raise TypeError(f"Cannot subtract {other.type} period from {self.type} period")
         if self.type == "month":
             return (self.year * 12 + self.period) - (other.year * 12 + other.period)
         if self.type == "quarter":

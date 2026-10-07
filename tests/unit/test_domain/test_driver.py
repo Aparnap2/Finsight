@@ -186,9 +186,7 @@ class TestDriverTree:
             children=[
                 DriverTree(
                     root_driver=_driver(id="DRV-002"),
-                    children=[
-                        DriverTree(root_driver=_driver(id="DRV-003"), weight=Decimal("0.3"))
-                    ],
+                    children=[DriverTree(root_driver=_driver(id="DRV-003"), weight=Decimal("0.3"))],
                 )
             ],
         )

@@ -79,10 +79,17 @@ def _create_gl_accounts(
         ("8002", "Legal & Accounting", "expense", "G&A", "North America"),
     ]
     for acct_num, name, acct_type, dept, region in templates:
-        accounts.append(GLAccount(
-            id=_id(), entity_id=entity_id, account_number=acct_num,
-            account_name=name, account_type=acct_type, department=dept, region=region,
-        ))
+        accounts.append(
+            GLAccount(
+                id=_id(),
+                entity_id=entity_id,
+                account_number=acct_num,
+                account_name=name,
+                account_type=acct_type,
+                department=dept,
+                region=region,
+            )
+        )
     return accounts
 
 
@@ -96,7 +103,7 @@ def _seed_period(
 ) -> None:
     # First pass: compute amounts, create Actual and BudgetLine records,
     # and collect trial-balance rows so we can balance them.
-    tb_rows = []          # (account, debit, credit)
+    tb_rows = []  # (account, debit, credit)
     total_debits = Decimal("0")
     total_credits = Decimal("0")
 
@@ -117,14 +124,26 @@ def _seed_period(
             actual = base * (1 + variance)
             budget = base
 
-        session.add(Actual(
-            id=_id(), entity_id=entity_id, period=period,
-            account_id=acc.id, department=acc.department, amount=Decimal(str(round(actual, 2))),
-        ))
-        session.add(BudgetLine(
-            id=_id(), entity_id=entity_id, period=period,
-            account_id=acc.id, department=acc.department, amount=Decimal(str(round(budget, 2))),
-        ))
+        session.add(
+            Actual(
+                id=_id(),
+                entity_id=entity_id,
+                period=period,
+                account_id=acc.id,
+                department=acc.department,
+                amount=Decimal(str(round(actual, 2))),
+            )
+        )
+        session.add(
+            BudgetLine(
+                id=_id(),
+                entity_id=entity_id,
+                period=period,
+                account_id=acc.id,
+                department=acc.department,
+                amount=Decimal(str(round(budget, 2))),
+            )
+        )
 
         if acc.account_type == "revenue":
             debit = Decimal("0")
@@ -153,11 +172,17 @@ def _seed_period(
                 break
 
     for acc, debit, credit in tb_rows:
-        session.add(TrialBalance(
-            id=_id(), entity_id=entity_id, period=period,
-            account_id=acc.id, debit=debit, credit=credit,
-            balance=debit - credit,
-        ))
+        session.add(
+            TrialBalance(
+                id=_id(),
+                entity_id=entity_id,
+                period=period,
+                account_id=acc.id,
+                debit=debit,
+                credit=credit,
+                balance=debit - credit,
+            )
+        )
 
 
 def _seed_headcount(
@@ -167,19 +192,28 @@ def _seed_headcount(
     departments: list[str],
 ) -> None:
     hc_data = {
-        "Sales": (45, 12000), "Marketing": (25, 9500), "Engineering": (120, 15000),
-        "G&A": (30, 8500), "Customer Success": (60, 8000),
+        "Sales": (45, 12000),
+        "Marketing": (25, 9500),
+        "Engineering": (120, 15000),
+        "G&A": (30, 8500),
+        "Customer Success": (60, 8000),
     }
     for dept, (count, avg_comp) in hc_data.items():
         for period in periods:
             hires = random.randint(0, 3) if dept == "Engineering" else random.randint(0, 1)
             departures = random.randint(0, 1)
-            session.add(HeadcountData(
-                id=_id(), entity_id=entity_id, period=period, department=dept,
-                headcount=count + hires - departures,
-                total_compensation=Decimal(str(count * avg_comp)),
-                new_hires=hires, departures=departures,
-            ))
+            session.add(
+                HeadcountData(
+                    id=_id(),
+                    entity_id=entity_id,
+                    period=period,
+                    department=dept,
+                    headcount=count + hires - departures,
+                    total_compensation=Decimal(str(count * avg_comp)),
+                    new_hires=hires,
+                    departures=departures,
+                )
+            )
 
 
 def _seed_vendors(
@@ -190,8 +224,11 @@ def _seed_vendors(
 ) -> None:
     acct_lookup = {str(acc.account_number): str(acc.id) for acc in accounts}
     vendors = [
-        ("AWS", "7000", 80000), ("Stripe", "7001", 15000), ("Slack", "7001", 8000),
-        ("Datadog", "7001", 12000), ("Google Cloud", "7000", 25000),
+        ("AWS", "7000", 80000),
+        ("Stripe", "7001", 15000),
+        ("Slack", "7001", 8000),
+        ("Datadog", "7001", 12000),
+        ("Google Cloud", "7000", 25000),
     ]
     for vendor_name, acct_num, base in vendors:
         acct_id = acct_lookup.get(acct_num)
@@ -203,12 +240,18 @@ def _seed_vendors(
                 if (period == "2026-06" and vendor_name == "AWS")
                 else base * random.uniform(0.9, 1.1)
             )
-            session.add(VendorInvoice(
-                id=_id(), entity_id=entity_id, period=period,
-                vendor_name=vendor_name, account_id=acct_id,
-                amount=Decimal(str(round(amt, 2))), category="SaaS",
-                invoice_date=date(2026, 6, 15),
-            ))
+            session.add(
+                VendorInvoice(
+                    id=_id(),
+                    entity_id=entity_id,
+                    period=period,
+                    vendor_name=vendor_name,
+                    account_id=acct_id,
+                    amount=Decimal(str(round(amt, 2))),
+                    category="SaaS",
+                    invoice_date=date(2026, 6, 15),
+                )
+            )
 
 
 def _seed_pipeline(
@@ -225,12 +268,19 @@ def _seed_pipeline(
     ]
     for deal_name, stage, amount, region, product in deals:
         for period in periods:
-            session.add(SalesPipeline(
-                id=_id(), entity_id=entity_id, period=period,
-                deal_name=deal_name, stage=stage,
-                expected_close_date=date(2026, 7, 31),
-                amount=Decimal(str(amount)), region=region, product=product,
-            ))
+            session.add(
+                SalesPipeline(
+                    id=_id(),
+                    entity_id=entity_id,
+                    period=period,
+                    deal_name=deal_name,
+                    stage=stage,
+                    expected_close_date=date(2026, 7, 31),
+                    amount=Decimal(str(amount)),
+                    region=region,
+                    product=product,
+                )
+            )
 
 
 # ---------------------------------------------------------------------------

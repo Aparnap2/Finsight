@@ -121,11 +121,7 @@ def evaluate_policy(
             f"High confidence ({avg_confidence:.0%}), no degraded modes, fact-only assertions"
         )
 
-    elif (
-        avg_confidence >= 0.6
-        and not has_critical_degraded
-        and not blocked_actions
-    ):
+    elif avg_confidence >= 0.6 and not has_critical_degraded and not blocked_actions:
         level = AutonomyLevel.ANALYST_IN_THE_LOOP
         routing_target = "review"
         reasons.append(f"Adequate confidence ({avg_confidence:.0%})")
@@ -134,10 +130,7 @@ def evaluate_policy(
         if has_causal_claims:
             reasons.append("Causal claims present — require analyst review")
 
-    elif (
-        avg_confidence >= 0.4
-        or (has_critical_degraded and avg_confidence >= 0.5)
-    ):
+    elif avg_confidence >= 0.4 or (has_critical_degraded and avg_confidence >= 0.5):
         level = AutonomyLevel.MANAGER_APPROVAL
         routing_target = "manager_review"
         reasons.append(f"Moderate confidence ({avg_confidence:.0%})")

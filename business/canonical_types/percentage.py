@@ -53,9 +53,7 @@ class Percentage(BaseModel):
     def from_percent(cls, percent_value: Decimal) -> Percentage:
         """Create from a percentage value in [0, 100] (e.g., 15.0 for 15%)."""
         if not isinstance(percent_value, Decimal):
-            raise TypeError(
-                f"Percentage value must be Decimal, got {type(percent_value).__name__}"
-            )
+            raise TypeError(f"Percentage value must be Decimal, got {type(percent_value).__name__}")
         if percent_value < 0 or percent_value > 100:
             raise ValueError(
                 f"Percentage must be in [0, 100] when using from_percent, got {percent_value}"
@@ -81,9 +79,7 @@ class Percentage(BaseModel):
             # → Percentage(0.125)  → "12.50%"
         """
         if denominator == 0:
-            raise ZeroDivisionError(
-                "Cannot compute percentage with zero denominator"
-            )
+            raise ZeroDivisionError("Cannot compute percentage with zero denominator")
         return cls(value=numerator / denominator)
 
     def format(self, decimals: int = 2) -> str:

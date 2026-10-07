@@ -90,9 +90,7 @@ class TestRunReasoningPipeline:
         assert not any(isinstance(item, EvidenceItem) for item in provider.received)
 
     def test_confidence_scores_are_decimal_in_unit_interval(self) -> None:
-        report = run_reasoning_pipeline(
-            _evidence(), ReasoningContext(), FakeCommentaryProvider()
-        )
+        report = run_reasoning_pipeline(_evidence(), ReasoningContext(), FakeCommentaryProvider())
         assert report.confidence
         for score in report.confidence.values():
             assert isinstance(score, Decimal)
@@ -100,28 +98,20 @@ class TestRunReasoningPipeline:
 
     def test_provenance_includes_every_evidence_id(self) -> None:
         evidence = _evidence()
-        report = run_reasoning_pipeline(
-            evidence, ReasoningContext(), FakeCommentaryProvider()
-        )
+        report = run_reasoning_pipeline(evidence, ReasoningContext(), FakeCommentaryProvider())
         assert len(report.evidence_ids) == len(evidence)
         provenance_ids = {entry.evidence_id for entry in report.provenance}
         assert set(report.evidence_ids) <= provenance_ids
 
     def test_provenance_trails_assertion_linkage(self) -> None:
-        report = run_reasoning_pipeline(
-            _evidence(), ReasoningContext(), FakeCommentaryProvider()
-        )
-        created = [
-            entry for entry in report.provenance if entry.step == "assertion_created"
-        ]
+        report = run_reasoning_pipeline(_evidence(), ReasoningContext(), FakeCommentaryProvider())
+        created = [entry for entry in report.provenance if entry.step == "assertion_created"]
         assert created
         for entry in created:
             assert entry.assertion_id in report.confidence
 
     def test_empty_evidence_still_produces_report(self) -> None:
-        report = run_reasoning_pipeline(
-            [], ReasoningContext(), FakeCommentaryProvider()
-        )
+        report = run_reasoning_pipeline([], ReasoningContext(), FakeCommentaryProvider())
         assert report.evidence_ids == []
         assert report.assertions == []
         assert report.commentary == "Fake commentary text"

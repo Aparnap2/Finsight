@@ -23,9 +23,7 @@ logger = logging.getLogger(__name__)
 def _require_record(name: str, value: object) -> PaymentRecord:
     """Narrow an argument to ``PaymentRecord``, rejecting anything else."""
     if not isinstance(value, PaymentRecord):
-        raise InvariantViolation(
-            f"{name} must be a PaymentRecord, got {type(value).__name__}."
-        )
+        raise InvariantViolation(f"{name} must be a PaymentRecord, got {type(value).__name__}.")
     return value
 
 
@@ -55,9 +53,7 @@ def classify(
     _require_record("observed", observed)
     duplicate_value: object = duplicate
     if not isinstance(duplicate_value, bool):
-        raise InvariantViolation(
-            f"duplicate must be a bool, got {type(duplicate_value).__name__}."
-        )
+        raise InvariantViolation(f"duplicate must be a bool, got {type(duplicate_value).__name__}.")
     if expected.currency != observed.currency:
         raise CurrencyMismatch(expected.currency, observed.currency, "classify")
     if duplicate_value:

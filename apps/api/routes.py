@@ -243,18 +243,28 @@ async def import_csv(
             department = row.get("department", "Unknown")
 
             if row.get("type", "actual") == "budget":
-                session.add(BudgetLine(
-                    id=str(uuid.uuid4())[:8], entity_id=tenant_id,
-                    period=period, account_id=account_id,
-                    department=department, amount=amount,
-                ))
+                session.add(
+                    BudgetLine(
+                        id=str(uuid.uuid4())[:8],
+                        entity_id=tenant_id,
+                        period=period,
+                        account_id=account_id,
+                        department=department,
+                        amount=amount,
+                    )
+                )
                 budget_count += 1
             else:
-                session.add(Actual(
-                    id=str(uuid.uuid4())[:8], entity_id=tenant_id,
-                    period=period, account_id=account_id,
-                    department=department, amount=amount,
-                ))
+                session.add(
+                    Actual(
+                        id=str(uuid.uuid4())[:8],
+                        entity_id=tenant_id,
+                        period=period,
+                        account_id=account_id,
+                        department=department,
+                        amount=amount,
+                    )
+                )
                 actuals_count += 1
         session.commit()
 
@@ -395,14 +405,18 @@ def _run_full_pipeline(period: str, tenant_id: str) -> dict[str, Any]:
 
     # Parse commentary into sections
     from agents.commentary.commentary_agent import _parse_sections_from_text
+
     sections = _parse_sections_from_text(commentary_text)
     if not sections:
         sections = []
         from shared.models.state import CommentarySection
-        sections.append(CommentarySection(
-            section_type="executive_summary",
-            content=commentary_text,
-        ))
+
+        sections.append(
+            CommentarySection(
+                section_type="executive_summary",
+                content=commentary_text,
+            )
+        )
 
     return {
         "state": state,
@@ -764,8 +778,7 @@ async def create_action_item(req: ActionCreateRequest) -> ActionItemResponse:
         raise HTTPException(
             status_code=400,
             detail=(
-                f"Invalid domain: {req.domain}. Must be one of: "
-                f"{[d.value for d in ActionDomain]}"
+                f"Invalid domain: {req.domain}. Must be one of: {[d.value for d in ActionDomain]}"
             ),
         ) from None
 

@@ -231,9 +231,7 @@ class SequentialReplayProvider:
 
         return ModelMetadata(provider="replay-trajectory", model=self._model)
 
-    def generate_structured[T: BaseModel](
-        self, prompt: Any, response_schema: type[T]
-    ) -> T:
+    def generate_structured[T: BaseModel](self, prompt: Any, response_schema: type[T]) -> T:
         """Return next recorded payload validated strictly against schema."""
         from shared.llm.provider import validate_structured_output
 

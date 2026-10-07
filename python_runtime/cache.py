@@ -91,9 +91,7 @@ class ComputeCache:
         self._data.move_to_end(key)
         return value
 
-    def set(
-        self, key: str, value: bytes, ttl_seconds: int | None = None
-    ) -> None:
+    def set(self, key: str, value: bytes, ttl_seconds: int | None = None) -> None:
         """Store a value with optional TTL override.
 
         If the cache is at capacity, the least-recently-used item is evicted.

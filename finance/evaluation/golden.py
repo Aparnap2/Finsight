@@ -112,8 +112,7 @@ class ReferenceAnalyticsEngine:
         kpis = [{"name": "Material Variance Count", "value": Decimal(material_count)}]
         report_sections = {
             "executive_summary": (
-                f"Analysed {len(accounts)} accounts; "
-                f"{material_count} material variances."
+                f"Analysed {len(accounts)} accounts; {material_count} material variances."
             )
         }
         return {
@@ -233,12 +232,8 @@ class GoldenRegressionHarness:
         if self.analytics is not None:
             actual = self.analytics.run(dataset)
             va = VarianceAccuracy.compute(out.variances, actual.get("variances", []))
-            ka = KPIAccuracy(tolerance=self.kpi_tolerance).compute(
-                out.kpis, actual.get("kpis", [])
-            )
-            rc = ReportCoverage.compute(
-                out.report_sections, actual.get("report_sections", {})
-            )
+            ka = KPIAccuracy(tolerance=self.kpi_tolerance).compute(out.kpis, actual.get("kpis", []))
+            rc = ReportCoverage.compute(out.report_sections, actual.get("report_sections", {}))
             metrics["variance_accuracy"] = va
             metrics["kpi_accuracy"] = ka
             metrics["report_coverage"] = rc
@@ -252,9 +247,7 @@ class GoldenRegressionHarness:
         # ── Forecast layer ───────────────────────────────────────────
         if self.forecast_model is not None and out.forecast is not None:
             failures.extend(
-                self._check_forecast(
-                    out.forecast, self.forecast_model.forecast(dataset), metrics
-                )
+                self._check_forecast(out.forecast, self.forecast_model.forecast(dataset), metrics)
             )
 
         # ── Anomaly layer ────────────────────────────────────────────
@@ -288,14 +281,11 @@ class GoldenRegressionHarness:
         )
         if self.fail_on_error and not report.passed:
             raise GoldenRegressionError(
-                f"Golden regression failed for '{dataset.metadata.id}': "
-                f"{report.detail}"
+                f"Golden regression failed for '{dataset.metadata.id}': {report.detail}"
             )
         return report
 
-    def run_all(
-        self, datasets: list[GoldenDataset]
-    ) -> list[GoldenRegressionReport]:
+    def run_all(self, datasets: list[GoldenDataset]) -> list[GoldenRegressionReport]:
         """Run every dataset and raise on the first failure if configured."""
         return [self.run(ds) for ds in datasets]
 
@@ -357,9 +347,7 @@ class GoldenRegressionHarness:
             failures.append(f"{layer}_precision_at_k={p_at_k:.3f} < 1.0")
         forbidden_hits = set(detected) & set(expected.forbidden_ids)
         if forbidden_hits:
-            failures.append(
-                f"{layer}: forbidden ids flagged: {sorted(forbidden_hits)}"
-            )
+            failures.append(f"{layer}: forbidden ids flagged: {sorted(forbidden_hits)}")
         return failures
 
 
