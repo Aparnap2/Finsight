@@ -83,7 +83,7 @@ def _deny_anonymous(request: Request) -> JSONResponse | str:
 def _set_tenant_context(session: Session, tenant_id: str) -> None:
     """Set the Postgres RLS tenant context; skip on other dialects."""
     try:
-        dialect = session.get_bind().dialect.name  # type: ignore[union-attr]
+        dialect = session.get_bind().dialect.name
     except Exception:  # noqa: BLE001 - unbound session: nothing to set
         return
     if dialect != "postgresql":
