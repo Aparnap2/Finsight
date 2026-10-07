@@ -97,6 +97,12 @@ class TestConcurrencyBoundary:
         )
         adapter = MockQuickBooksAdapter()
         seed = _Seed(engine)
+        # Serial schema setup: create all tables once before the threads
+        # race, so the concurrency under test is DML-only. Concurrent
+        # create_all DDL against one SQLite file is a test-harness race,
+        # not executor behavior.
+        warmup = _make_executor(adapter, engine)
+        assert warmup._store.seen(seed.tenant_id, "warmup-key") is False
         results: list[Any] = []
         errors: list[BaseException] = []
         barrier = threading.Barrier(2)
