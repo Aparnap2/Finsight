@@ -120,7 +120,11 @@ class TestLogSurface:
         from shared.privacy.sanitize import sanitize_for_log
 
         with pytest.raises(ValueError):
-            sanitize_for_log({"a": 1}, tenant_id="acme", unknown="whatever")
+            sanitize_for_log(
+                {"a": 1},
+                tenant_id="acme",
+                unknown="whatever",  # type: ignore[arg-type]
+            )
 
     def test_log_injection_neutralized(self) -> None:
         from shared.privacy.sanitize import sanitize_for_log
@@ -325,7 +329,7 @@ class TestCrossCutting:
             mod.sanitize_for_ui,
         ):
             try:
-                out = fn(hostile, tenant_id="acme")  # type: ignore[arg-type]
+                out = fn(hostile, tenant_id="acme")
             except ValueError:
                 continue
             assert "sk-live-abc123xyz" not in str(out)
