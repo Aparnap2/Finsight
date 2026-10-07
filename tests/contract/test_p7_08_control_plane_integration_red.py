@@ -542,6 +542,13 @@ class TestJStaticBoundary:
 
 class TestKIsolation:
     def test_k1_only_p7_08_paths_changed(self) -> None:
+        pytest.skip(
+            "P7-08 slice guard retired post-merge: it asserts the working "
+            "tree differs from 87fb8a8 only in P7-08 paths, which held "
+            "solely during that slice (and fails on shallow CI clones "
+            "where the base commit is absent). K2 below enforces the "
+            "surviving integration boundary."
+        )
         diff = subprocess.run(
             ["git", "diff", "--name-only", "87fb8a8", "HEAD"],
             check=True,
