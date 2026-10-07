@@ -91,6 +91,7 @@ class TestAbstainDecision:
                     + '", "explanation": "why", "missing_evidence": []}'
                 )
             )
+            assert result.reason_code is not None
             assert result.reason_code.value == code
 
     def test_abstain_rejects_unknown_reason_code(self) -> None:

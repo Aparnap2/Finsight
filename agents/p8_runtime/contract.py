@@ -243,6 +243,10 @@ def validate_decision_output(raw: RawModelOutput) -> DecisionResult:
         if unknown:
             raise InvalidStructuredOutputError(f"unknown keys: {sorted(unknown)}")
         reason_code = parsed.get("reason_code")
+        if not isinstance(reason_code, str):
+            raise InvalidStructuredOutputError(
+                f"reason_code must be one of {[r.value for r in AbstainReason]}"
+            )
         try:
             reason = AbstainReason(reason_code)
         except ValueError as exc:

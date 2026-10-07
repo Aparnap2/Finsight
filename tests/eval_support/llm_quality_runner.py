@@ -303,6 +303,8 @@ def run_variant(
             summary = decision.summary
             findings = list(decision.findings)
         else:
+            # validate_decision_output guarantees reason_code for abstain.
+            assert decision.reason_code is not None
             abstained = True
             abstain_reason = decision.reason_code.value
             refused = True
