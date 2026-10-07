@@ -9,7 +9,7 @@ legitimate-looking value.
 from datetime import UTC, datetime
 
 import pytest
-from sqlalchemy import Table, create_engine
+from sqlalchemy import Engine, Table, create_engine
 from sqlalchemy.pool import StaticPool
 
 from finance.exceptions.aggregate import ExceptionAggregate
@@ -21,7 +21,7 @@ from finance.reconciliation.models import ExceptionCode
 _AT = datetime(2026, 10, 3, 12, 0, 0, tzinfo=UTC)
 
 
-def _engine() -> object:
+def _engine() -> Engine:
     return create_engine(
         "sqlite://",
         connect_args={"check_same_thread": False},
