@@ -11,13 +11,19 @@ Pure unit tests, no I/O, deterministic.
 
 from __future__ import annotations
 
+import re
+from pathlib import Path
+
 from shared.privacy.inventory import (
+    INVENTORY,
     REQUIRED_SOURCE_IDS,
     SOURCE_REGISTRY,
     DataClassification,
     InventoryRow,
     completeness_gaps,
 )
+
+DOC_PATH = Path(__file__).resolve().parents[3] / "docs" / "privacy" / "DATA_CLASSIFICATION.md"
 
 
 class TestSourceRegistry:
@@ -74,3 +80,17 @@ class TestCompleteness:
             tenant_boundary="n/a: internal constant",
         )
         assert any("unknown source" in gap for gap in completeness_gaps((row,)))
+
+
+class TestDocumentSync:
+    """DATA_CLASSIFICATION.md is derived from INVENTORY, not a second truth."""
+
+    def test_every_source_has_a_section(self) -> None:
+        text = DOC_PATH.read_text(encoding="utf-8")
+        sections = set(re.findall(r"^## Source: (\S+)\s*$", text, flags=re.M))
+        assert sections == {e.source_id for e in SOURCE_REGISTRY}
+
+    def test_every_row_appears_in_document(self) -> None:
+        text = DOC_PATH.read_text(encoding="utf-8")
+        missing = [f"{r.source_id}/{r.field}" for r in INVENTORY if f"`{r.field}`" not in text]
+        assert missing == []
