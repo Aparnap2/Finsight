@@ -70,9 +70,7 @@ class RuntimeFactory:
 
     def _hmac_context(self, ctx: RuntimeContext) -> str:
         """HMAC binding every field of a context to the secret."""
-        payload = (
-            f"{ctx.situation_id}:{ctx.company_id}:{ctx.now.isoformat()}"
-        ).encode()
+        payload = (f"{ctx.situation_id}:{ctx.company_id}:{ctx.now.isoformat()}").encode()
         return hmac.new(self._secret.encode(), payload, hashlib.sha256).hexdigest()
 
     def create_context(

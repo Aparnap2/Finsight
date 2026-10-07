@@ -69,9 +69,7 @@ class EvidenceRecord:
         if not isinstance(self.digest, str) or not _SHA256_RE.match(self.digest):
             raise AuthorityError("digest must be 64-char lowercase hex sha256.")
         _require_non_blank(self.provenance, "provenance")
-        if isinstance(self.ttl_seconds, bool) or not isinstance(
-            self.ttl_seconds, int
-        ):
+        if isinstance(self.ttl_seconds, bool) or not isinstance(self.ttl_seconds, int):
             raise AuthorityError("ttl_seconds must be an int.")
         if self.ttl_seconds <= 0:
             raise AuthorityError("ttl_seconds must be positive.")
@@ -131,9 +129,7 @@ class EvidenceReference:
         if not isinstance(self.digest, str) or not _SHA256_RE.match(self.digest):
             raise AuthorityError("digest must be 64-char lowercase hex sha256.")
         _require_non_blank(self.provenance, "provenance")
-        if isinstance(self.ttl_seconds, bool) or not isinstance(
-            self.ttl_seconds, int
-        ):
+        if isinstance(self.ttl_seconds, bool) or not isinstance(self.ttl_seconds, int):
             raise AuthorityError("ttl_seconds must be an int.")
         if self.ttl_seconds <= 0:
             raise AuthorityError("ttl_seconds must be positive.")
@@ -291,9 +287,7 @@ class EvidenceRegistry:
         """Raise AuthorityError unless fact was issued by this registry."""
         expected = self._hmac_fact(fact)
         if fact._token != expected:
-            raise AuthorityError(
-                f"Fact {fact.evidence_id!r} not issued by deterministic accessor."
-            )
+            raise AuthorityError(f"Fact {fact.evidence_id!r} not issued by deterministic accessor.")
 
 
 __all__ = [

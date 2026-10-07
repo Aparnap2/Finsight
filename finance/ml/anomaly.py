@@ -116,9 +116,7 @@ class AnomalyDetectionModel:
 
         if self._sklearn_ensemble is None:
             self._metrics = {"algorithm": "zscore_fallback"}
-            logger.warning(
-                "scikit-learn unavailable — %s degraded to Z-score rule", self.model_id
-            )
+            logger.warning("scikit-learn unavailable — %s degraded to Z-score rule", self.model_id)
             return self
 
         isolation_forest_cls = self._sklearn_ensemble.IsolationForest
@@ -262,11 +260,7 @@ class AnomalyDetectionModel:
         """Select numeric feature columns (explicit list or all but the id)."""
         if feature_columns is not None:
             return [c for c in feature_columns if c in features.columns]
-        return [
-            c
-            for c in features.columns
-            if c != self._id_column and not self._is_date_like(c)
-        ]
+        return [c for c in features.columns if c != self._id_column and not self._is_date_like(c)]
 
     @staticmethod
     def _is_date_like(column: str) -> bool:

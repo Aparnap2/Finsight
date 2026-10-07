@@ -59,9 +59,7 @@ class ExpectedFact(BaseModel):
     def _validate_source(cls, value: str) -> str:
         """Pin the owning source to sheets."""
         if value != "sheets":
-            raise ValueError(
-                f"source must be 'sheets' for ExpectedFact, got {value!r}."
-            )
+            raise ValueError(f"source must be 'sheets' for ExpectedFact, got {value!r}.")
         return value
 
     @field_validator("expected_total", mode="before")

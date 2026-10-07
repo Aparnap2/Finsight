@@ -143,9 +143,14 @@ def create_action(
             created=False,
             errors=errors,
             action_item=ActionItem(
-                id="", action=action, domain=domain, target=target,
-                description=description, cited_assertion_ids=cited_assertion_ids,
-                status=ActionStatus.BLOCKED, blocked_reason=errors[0],
+                id="",
+                action=action,
+                domain=domain,
+                target=target,
+                description=description,
+                cited_assertion_ids=cited_assertion_ids,
+                status=ActionStatus.BLOCKED,
+                blocked_reason=errors[0],
             ),
         )
 
@@ -156,9 +161,14 @@ def create_action(
             created=False,
             errors=errors,
             action_item=ActionItem(
-                id="", action=action, domain=domain, target=target,
-                description=description, cited_assertion_ids=[],
-                status=ActionStatus.BLOCKED, blocked_reason=errors[0],
+                id="",
+                action=action,
+                domain=domain,
+                target=target,
+                description=description,
+                cited_assertion_ids=[],
+                status=ActionStatus.BLOCKED,
+                blocked_reason=errors[0],
             ),
         )
 
@@ -184,10 +194,17 @@ def create_action(
     return ActionResult(
         created=True,
         action_item=ActionItem(
-            id=action_id, action=action, domain=domain, target=target,
-            description=description, cited_assertion_ids=cited_assertion_ids,
-            owner=owner, owner_identified=owner_identified, status=status,
-            impact=impact, impact_quantified=impact_quantified,
+            id=action_id,
+            action=action,
+            domain=domain,
+            target=target,
+            description=description,
+            cited_assertion_ids=cited_assertion_ids,
+            owner=owner,
+            owner_identified=owner_identified,
+            status=status,
+            impact=impact,
+            impact_quantified=impact_quantified,
             policy_permitted=policy_permitted,
         ),
         warnings=warnings,
@@ -211,8 +228,11 @@ def create_action_from_assertion(assertion: "Assertion", owner: str | None = Non
         domain = ActionDomain.HEADCOUNT
 
     return create_action(
-        action=action, domain=domain, target=target,
+        action=action,
+        domain=domain,
+        target=target,
         description=assertion.text,
         cited_assertion_ids=[assertion.id],
-        owner=owner, policy_permitted=policy_permitted,
+        owner=owner,
+        policy_permitted=policy_permitted,
     )

@@ -65,8 +65,7 @@ def require_decimal(field_name: str, value: Any) -> Decimal:
     reject_non_decimal_money(value, field_name)
     if not isinstance(value, Decimal) or not value.is_finite():
         raise ValueError(
-            f"Field '{field_name}' must be a finite Decimal, "
-            f"got {type(value).__name__}."
+            f"Field '{field_name}' must be a finite Decimal, got {type(value).__name__}."
         )
     return value
 
@@ -84,10 +83,7 @@ def require_inr_currency(value: str) -> str:
         ValueError: If the code is anything but ``INR``.
     """
     if value != "INR":
-        raise ValueError(
-            f"currency must be 'INR' (no conversion, no coercion), "
-            f"got {value!r}."
-        )
+        raise ValueError(f"currency must be 'INR' (no conversion, no coercion), got {value!r}.")
     return value
 
 

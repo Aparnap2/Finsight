@@ -26,15 +26,17 @@ def compute_variances(
         bud_amt = Decimal(str(budget_map.get(acct_id, {}).get("amount", 0)))
         var_amt = act_amt - bud_amt
         var_pct = (var_amt / bud_amt) * Decimal("100") if bud_amt != Decimal("0") else Decimal("0")
-        variances.append(Variance(
-            account_id=acct_id,
-            account_name=a.get("account_name", acct_id),
-            department=a.get("department", "Unknown"),
-            actual_amount=act_amt,
-            budget_amount=bud_amt,
-            variance_amount=var_amt,
-            variance_pct=var_pct.quantize(Decimal("0.01")),
-        ))
+        variances.append(
+            Variance(
+                account_id=acct_id,
+                account_name=a.get("account_name", acct_id),
+                department=a.get("department", "Unknown"),
+                actual_amount=act_amt,
+                budget_amount=bud_amt,
+                variance_amount=var_amt,
+                variance_pct=var_pct.quantize(Decimal("0.01")),
+            )
+        )
     return variances
 
 
@@ -68,8 +70,7 @@ def apply_materiality(
         # OR semantics: any threshold crossed => material (matches
         # MaterialityEngine default combined_rule="any").
         v.is_material = (
-            abs(v.variance_amount) >= threshold_amount_d
-            or abs(v.variance_pct) >= threshold_pct_d
+            abs(v.variance_amount) >= threshold_amount_d or abs(v.variance_pct) >= threshold_pct_d
         )
     return variances
 

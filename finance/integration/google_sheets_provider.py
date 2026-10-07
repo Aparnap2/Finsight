@@ -49,10 +49,7 @@ class GoogleSheetsProvider:
     def read_range(self, spreadsheet_id: str, range_str: str) -> list[list[str]]:
         """Read cell values via ``GET`` to the Sheets API."""
         self._require_auth()
-        url = (
-            f"https://sheets.googleapis.com/v4/spreadsheets/"
-            f"{spreadsheet_id}/values/{range_str}"
-        )
+        url = f"https://sheets.googleapis.com/v4/spreadsheets/{spreadsheet_id}/values/{range_str}"
         resp = httpx.get(url)
         data: list[list[str]] = resp.json().get("values", [])
         return data
@@ -65,10 +62,7 @@ class GoogleSheetsProvider:
     ) -> None:
         """Write cell values via ``PUT`` to the Sheets API."""
         self._require_auth()
-        url = (
-            f"https://sheets.googleapis.com/v4/spreadsheets/"
-            f"{spreadsheet_id}/values/{range_str}"
-        )
+        url = f"https://sheets.googleapis.com/v4/spreadsheets/{spreadsheet_id}/values/{range_str}"
         httpx.put(url, json={"values": values})
 
     def validate(self, spreadsheet_id: str) -> dict[str, Any]:

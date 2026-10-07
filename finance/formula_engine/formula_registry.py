@@ -67,9 +67,7 @@ class FormulaRegistry:
         registered.
         """
         if formula.name in self._registry:
-            raise ValueError(
-                f"Formula '{formula.name}' already registered"
-            )
+            raise ValueError(f"Formula '{formula.name}' already registered")
         self._registry[formula.name] = formula
 
     def get(self, name: str) -> Formula:
@@ -99,15 +97,11 @@ class FormulaRegistry:
         formula = self.get(name)
         missing = [k for k in formula.inputs if k not in inputs]
         if missing:
-            raise KeyError(
-                f"Missing inputs for '{name}': {missing}"
-            )
+            raise KeyError(f"Missing inputs for '{name}': {missing}")
         kwargs = {k: inputs[k] for k in formula.inputs}
         return formula.fn(**kwargs)
 
-    def evaluate_all(
-        self, inputs: dict[str, Decimal]
-    ) -> dict[str, Decimal]:
+    def evaluate_all(self, inputs: dict[str, Decimal]) -> dict[str, Decimal]:
         """Evaluate every registered formula, chaining outputs as inputs.
 
         Formulas are evaluated in topological order so that dependencies
@@ -129,9 +123,7 @@ class FormulaRegistry:
             dep_map[name] = deps
 
         # ── Topological sort (Kahn's algorithm) ───────────────────────────
-        in_degree: dict[str, int] = {
-            name: len(deps) for name, deps in dep_map.items()
-        }
+        in_degree: dict[str, int] = {name: len(deps) for name, deps in dep_map.items()}
         reverse_deps: dict[str, list[str]] = defaultdict(list)
         for name, deps in dep_map.items():
             for dep in deps:
@@ -151,9 +143,7 @@ class FormulaRegistry:
                     queue.append(dependent)
 
         if len(order) != len(self._registry):
-            raise ValueError(
-                "Circular dependency detected in formula registry"
-            )
+            raise ValueError("Circular dependency detected in formula registry")
 
         # ── Evaluate in order ─────────────────────────────────────────────
         results: dict[str, Decimal] = dict(inputs)
@@ -163,7 +153,4 @@ class FormulaRegistry:
             results[formula.output_name] = formula.fn(**kwargs)
 
         # Return only formula outputs (strip seed inputs)
-        return {
-            f.output_name: results[f.output_name]
-            for f in self._registry.values()
-        }
+        return {f.output_name: results[f.output_name] for f in self._registry.values()}

@@ -275,11 +275,7 @@ class FormulaDependencyGraph:
             List of ``FormulaDefinition`` that directly reference
             ``formula_id`` in their ``depends_on``.
         """
-        return [
-            fdef
-            for fdef in self._formulas.values()
-            if formula_id in fdef.depends_on
-        ]
+        return [fdef for fdef in self._formulas.values() if formula_id in fdef.depends_on]
 
     def impact_analysis(self, formula_id: str) -> dict[str, Any]:
         """Run a full impact analysis for changing a formula.
@@ -313,12 +309,8 @@ class FormulaDependencyGraph:
         return {
             "changed": changed,
             "direct_dependents": direct,
-            "transitive_dependents": [
-                self._formulas[fid] for fid in sorted(transitive)
-            ],
-            "all_affected": [
-                self._formulas[fid] for fid in sorted(all_affected)
-            ],
+            "transitive_dependents": [self._formulas[fid] for fid in sorted(transitive)],
+            "all_affected": [self._formulas[fid] for fid in sorted(all_affected)],
         }
 
 
@@ -456,9 +448,7 @@ class FormulaRegistry:
         """
         q = query.lower()
         return [
-            f
-            for f in self._formulas.values()
-            if q in f.name.lower() or q in f.description.lower()
+            f for f in self._formulas.values() if q in f.name.lower() or q in f.description.lower()
         ]
 
     # ------------------------------------------------------------------
@@ -560,8 +550,7 @@ class FormulaRegistry:
             for dep_id in f.depends_on:
                 if dep_id not in scratch:
                     msg = (
-                        f"Formula '{f.formula_id}' depends on "
-                        f"'{dep_id}' which is not in the batch"
+                        f"Formula '{f.formula_id}' depends on '{dep_id}' which is not in the batch"
                     )
                     raise ValueError(msg)
             scratch[f.formula_id] = f

@@ -73,8 +73,7 @@ class VerificationReport(BaseModel):
         """Require a non-blank execution binding (unbound reports refuse)."""
         if not value.strip():
             raise ValueError(
-                "execution_id must be non-blank: the report must bind "
-                "to the execution it verifies."
+                "execution_id must be non-blank: the report must bind to the execution it verifies."
             )
         return value
 
@@ -83,9 +82,7 @@ class VerificationReport(BaseModel):
     def _validate_checked_at(cls, value: datetime) -> datetime:
         """Require timezone-aware timestamps for checked_at."""
         if value.tzinfo is None or value.utcoffset() is None:
-            raise ValueError(
-                "checked_at must be timezone-aware, got a naive datetime."
-            )
+            raise ValueError("checked_at must be timezone-aware, got a naive datetime.")
         return value
 
     def is_accepted(self, tolerance: Decimal) -> bool:
@@ -104,6 +101,5 @@ class VerificationReport(BaseModel):
             True only for ``VERIFIED`` with residual within tolerance.
         """
         return (
-            self.verdict is VerificationVerdict.VERIFIED
-            and abs(self.variance_after) <= tolerance
+            self.verdict is VerificationVerdict.VERIFIED and abs(self.variance_after) <= tolerance
         )

@@ -87,8 +87,8 @@ DEFAULT_LOW_ABS = Decimal("500000")
 
 DEFAULT_TIER_MAP: dict[SensitivityTier, list[str]] = {
     SensitivityTier.CRITICAL: ["4*"],  # Revenue accounts typically start with 4
-    SensitivityTier.HIGH: ["5*"],      # COGS accounts typically start with 5
-    SensitivityTier.MEDIUM: ["6*"],    # OpEx accounts typically start with 6
+    SensitivityTier.HIGH: ["5*"],  # COGS accounts typically start with 5
+    SensitivityTier.MEDIUM: ["6*"],  # OpEx accounts typically start with 6
     SensitivityTier.LOW: ["7*", "8*", "9*"],  # Non-material
 }
 
@@ -363,8 +363,8 @@ class MaterialityEngine:
         assessments = [self.assess(v) for v in variances]
         assessments.sort(
             key=lambda a: (
-                not a.is_material,         # material first
-                -abs(a.variance_abs),       # larger abs variance first
+                not a.is_material,  # material first
+                -abs(a.variance_abs),  # larger abs variance first
             ),
         )
         return assessments
@@ -406,9 +406,8 @@ class MaterialityEngine:
         # 2. Glob pattern match
         for tier in priority:
             for rule in self.config.tiers.get(tier, []):
-                if (
-                    rule.account_pattern is not None
-                    and fnmatch.fnmatch(account_code, rule.account_pattern)
+                if rule.account_pattern is not None and fnmatch.fnmatch(
+                    account_code, rule.account_pattern
                 ):
                     return tier
 
@@ -436,9 +435,8 @@ class MaterialityEngine:
 
         # 2. Pattern match
         for rule in rules:
-            if (
-                rule.account_pattern is not None
-                and fnmatch.fnmatch(account_code, rule.account_pattern)
+            if rule.account_pattern is not None and fnmatch.fnmatch(
+                account_code, rule.account_pattern
             ):
                 return rule
 

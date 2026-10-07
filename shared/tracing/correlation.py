@@ -175,11 +175,7 @@ def derive_correlation_id(
         raise ValueError("At least one correlation source must be provided.")
 
     # Consistency gate: s3 case must match exception_id when both present
-    if (
-        exception_id is not None
-        and s3_case is not None
-        and exception_id.strip() != s3_case
-    ):
+    if exception_id is not None and s3_case is not None and exception_id.strip() != s3_case:
         raise ValueError(
             f"Correlation mismatch: exception_id {exception_id!r} != S3 case {s3_case!r}."
         )

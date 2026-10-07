@@ -53,9 +53,7 @@ def _require_proposal_for_approval(
     return pinned.transition_to(SituationStatus.APPROVED)
 
 
-def _bound_report(
-    situation: FinancialSituation, legacy_total_after: object
-) -> VerificationReport:
+def _bound_report(situation: FinancialSituation, legacy_total_after: object) -> VerificationReport:
     """Build the D1-bound report for the golden post-execution state."""
     return VerificationReport(
         situation_id=situation.situation_id,
@@ -72,9 +70,7 @@ def _require_verified_total_for_close(
 ) -> FinancialSituation:
     """Delegate to the landed D1 gate: bound report required to close."""
     if verified_total is None:
-        raise ValueError(
-            f"Cannot close {situation.situation_id}: no verified total."
-        )
+        raise ValueError(f"Cannot close {situation.situation_id}: no verified total.")
     if not isinstance(verified_total, Decimal):
         raise ValueError("verified_total must be a Decimal (money is exact).")
     return situation.transition_to(
@@ -119,9 +115,7 @@ def test_rejected_is_terminal(target: SituationStatus) -> None:
 def test_execution_without_approval_rejected() -> None:
     """No execution without a proposal and its approval."""
     with pytest.raises(ValueError, match="EXECUTING"):
-        _fs231(SituationStatus.INVESTIGATING).transition_to(
-            SituationStatus.EXECUTING
-        )
+        _fs231(SituationStatus.INVESTIGATING).transition_to(SituationStatus.EXECUTING)
     with pytest.raises(ValueError, match="EXECUTING"):
         _fs231(SituationStatus.PROPOSED).transition_to(SituationStatus.EXECUTING)
 

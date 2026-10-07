@@ -24,9 +24,7 @@ from agents.investigation.request import InvestigationRequest
 from agents.verification.verifier import Verifier
 from finance.evidence.grounding import compute_content_hash
 
-_FIXTURE_DIR = (
-    Path(__file__).resolve().parents[2] / "fixtures" / "security" / "prompt_injection"
-)
+_FIXTURE_DIR = Path(__file__).resolve().parents[2] / "fixtures" / "security" / "prompt_injection"
 _SOURCES = (
     "gmail",
     "sheets",
@@ -150,21 +148,15 @@ class TestInjectionStaysData:
         # Assert: raw payload preserved verbatim as evidence DATA.
         assert ctx.evidence[0].content == injected
         # Assert: content hash equals sha256 of the preserved bytes.
-        assert ctx.evidence[0].content_hash == hashlib.sha256(
-            injected.encode()
-        ).hexdigest()
-        assert ctx.evidence[0].content_hash == compute_content_hash(
-            injected.encode()
-        )
+        assert ctx.evidence[0].content_hash == hashlib.sha256(injected.encode()).hexdigest()
+        assert ctx.evidence[0].content_hash == compute_content_hash(injected.encode())
         # Assert: untrusted-content fence present in rendered output.
         rendered = ctx.evidence[0].rendered()
         assert "TRUST: UNTRUSTED_CONTENT" in rendered
         assert injected in rendered
 
     @pytest.mark.parametrize("payload", _PAYLOADS, ids=_PAYLOAD_IDS)
-    def test_payload_never_alters_authorization(
-        self, payload: dict[str, Any]
-    ) -> None:
+    def test_payload_never_alters_authorization(self, payload: dict[str, Any]) -> None:
         """Injection across every source leaves tenant/actor/scope untouched."""
         # Arrange: concatenate all 7 source texts into one evidence item.
         combined = "\n".join(payload["sources"][s] for s in _SOURCES)
@@ -240,9 +232,7 @@ class TestToolResultInjection:
         ctx = build_context(_request(), _store("ev-injected-001", memo))
         # Assert: preserved verbatim with hash, fenced, tenant-bound.
         assert ctx.evidence[0].content == injected
-        assert ctx.evidence[0].content_hash == hashlib.sha256(
-            injected.encode()
-        ).hexdigest()
+        assert ctx.evidence[0].content_hash == hashlib.sha256(injected.encode()).hexdigest()
         assert "TRUST: UNTRUSTED_CONTENT" in ctx.evidence[0].rendered()
         assert ctx.evidence[0].tenant_id == _TENANT
 
@@ -250,9 +240,7 @@ class TestToolResultInjection:
         """Injection naming execute_sql/call_api adds no capability."""
         payload = next(p for p in _PAYLOADS if p["attack_id"] == "P5-05-07")
         request = _request()
-        build_context(
-            request, _store("ev-injected-001", payload["sources"]["tool_result"])
-        )
+        build_context(request, _store("ev-injected-001", payload["sources"]["tool_result"]))
         assert "execute_sql" not in request.capability_allowlist
         assert "call_api" not in request.capability_allowlist
 
@@ -271,9 +259,7 @@ class TestVerifierIgnoresInjection:
 
         plan = InvestigationPlan.model_validate(
             {
-                "hypothesis_text": (
-                    "Possible refund posting lag between processor and ledger."
-                ),
+                "hypothesis_text": ("Possible refund posting lag between processor and ledger."),
                 "capability_calls": [
                     {
                         "capability": "get_stripe_payment",
@@ -292,9 +278,7 @@ class TestVerifierIgnoresInjection:
     def test_injection_execute_wording_not_executed(self) -> None:
         """'Execute refund' wording in evidence never becomes a verdict."""
         payload = next(p for p in _PAYLOADS if p["attack_id"] == "P5-05-02")
-        ctx = build_context(
-            _request(), _store("ev-injected-001", payload["sources"]["gmail"])
-        )
+        ctx = build_context(_request(), _store("ev-injected-001", payload["sources"]["gmail"]))
         # The evidence content holds the attack text as DATA ...
         assert "execute a refund" in ctx.evidence[0].content.lower()
         # ... but no verdict/status/authorization object was produced.

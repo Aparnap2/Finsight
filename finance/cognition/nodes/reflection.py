@@ -47,16 +47,12 @@ class ReflectionNode:
         # ── Check missing evidence ────────────────────────────────────
         missing_evidence = [a for a in state.assertions if a.missing_evidence]
         if missing_evidence:
-            gaps.append(
-                f"{len(missing_evidence)} assertion(s) with missing evidence"
-            )
+            gaps.append(f"{len(missing_evidence)} assertion(s) with missing evidence")
 
         # ── Check contradictions ──────────────────────────────────────
         contradicted = [a for a in state.assertions if a.contradictions]
         if contradicted:
-            gaps.append(
-                f"{len(contradicted)} assertion(s) have contradictions"
-            )
+            gaps.append(f"{len(contradicted)} assertion(s) have contradictions")
 
         # ── Check evidence items on context ───────────────────────────
         evidence_items = ctx.get("evidence_items", [])
@@ -65,23 +61,17 @@ class ReflectionNode:
             gaps.append("No evidence items collected")
 
         # ── Check action verification results ─────────────────────────
-        action_verifications: list[dict[str, Any]] = ctx.get(
-            "action_verifications", []
-        )
+        action_verifications: list[dict[str, Any]] = ctx.get("action_verifications", [])
         for av in action_verifications:
             if not av.get("passed", True):
-                gaps.append(
-                    f"Action '{av.get('objective', 'unknown')}' "
-                    f"failed verification"
-                )
+                gaps.append(f"Action '{av.get('objective', 'unknown')}' failed verification")
 
         # ── Check action plan for missing KPI coverage ────────────────
         if state.action_plan is not None:
             from finance.cognition.state.action import ActionPlan
+
             plan: ActionPlan | None = (
-                state.action_plan
-                if isinstance(state.action_plan, ActionPlan)
-                else None
+                state.action_plan if isinstance(state.action_plan, ActionPlan) else None
             )
             if plan is not None:
                 objectives = [a.objective.lower() for a in plan.actions]

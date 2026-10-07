@@ -183,9 +183,7 @@ def test_stale_version_raises_and_preserves_winner(
 ) -> None:
     """Stale save raises; the winning row content and version are kept."""
     version_1 = repo.save(_situation())
-    version_2 = repo.save(
-        _situation(status=SituationStatus.TRIAGED), expected_version=version_1
-    )
+    version_2 = repo.save(_situation(status=SituationStatus.TRIAGED), expected_version=version_1)
     assert (version_1, version_2) == (1, 2)
     with pytest.raises(ConcurrencyError) as excinfo:
         repo.save(
@@ -223,10 +221,18 @@ def test_atomic_audit_batch_commits_together(
     version = repo.save(
         _situation(status=SituationStatus.TRIAGED),
         audit_events=[
-            _audit("EVT-001", at=AT_1, from_status=SituationStatus.TRIAGED,
-                   to_status=SituationStatus.TRIAGED),
-            _audit("EVT-002", at=AT_2, from_status=SituationStatus.TRIAGED,
-                   to_status=SituationStatus.TRIAGED),
+            _audit(
+                "EVT-001",
+                at=AT_1,
+                from_status=SituationStatus.TRIAGED,
+                to_status=SituationStatus.TRIAGED,
+            ),
+            _audit(
+                "EVT-002",
+                at=AT_2,
+                from_status=SituationStatus.TRIAGED,
+                to_status=SituationStatus.TRIAGED,
+            ),
         ],
     )
     assert version == 1
@@ -295,15 +301,9 @@ def test_identical_sequences_produce_identical_bytes(
     first, second = make_repo(), make_repo()
     _run(first)
     _run(second)
-    assert first.stored_payload("meridian", SID_1) == second.stored_payload(
-        "meridian", SID_1
-    )
-    assert first.stored_payload("meridian", SID_2) == second.stored_payload(
-        "meridian", SID_2
-    )
-    assert first.audit_trail("meridian", SID_1) == second.audit_trail(
-        "meridian", SID_1
-    )
+    assert first.stored_payload("meridian", SID_1) == second.stored_payload("meridian", SID_1)
+    assert first.stored_payload("meridian", SID_2) == second.stored_payload("meridian", SID_2)
+    assert first.audit_trail("meridian", SID_1) == second.audit_trail("meridian", SID_1)
 
 
 def test_canonical_payload_bytes_sorted_and_decimal_fixed() -> None:
@@ -344,8 +344,14 @@ def test_audit_at_round_trips_across_timezone(
     at_ist = datetime(2026, 9, 16, 15, 30, tzinfo=timezone(timedelta(hours=5, minutes=30)))
     repo.save(
         _situation(status=SituationStatus.TRIAGED),
-        audit_events=[_audit("EVT-TZ", at=at_ist, from_status=SituationStatus.TRIAGED,
-                             to_status=SituationStatus.TRIAGED)],
+        audit_events=[
+            _audit(
+                "EVT-TZ",
+                at=at_ist,
+                from_status=SituationStatus.TRIAGED,
+                to_status=SituationStatus.TRIAGED,
+            )
+        ],
     )
     trail = repo.audit_trail("meridian", SID_1)
     assert len(trail) == 1
@@ -391,10 +397,14 @@ def test_db_duplicate_audit_event_translates_to_valueerror(
     with pytest.raises(ValueError, match="already stored"):
         repo.save(
             _situation(),
-            audit_events=[_audit(
-                "EVT-DUP", version=2, from_status=SituationStatus.DETECTED,
-                to_status=SituationStatus.DETECTED,
-            )],
+            audit_events=[
+                _audit(
+                    "EVT-DUP",
+                    version=2,
+                    from_status=SituationStatus.DETECTED,
+                    to_status=SituationStatus.DETECTED,
+                )
+            ],
         )
 
 
@@ -442,9 +452,7 @@ def test_concurrent_handles_no_lost_update(tmp_path: Path) -> None:
     first.save(_situation())
     second.save(_situation(status=SituationStatus.TRIAGED))
     with pytest.raises(ConcurrencyError):
-        first.save(
-            _situation(status=SituationStatus.CORRELATED), expected_version=1
-        )
+        first.save(_situation(status=SituationStatus.CORRELATED), expected_version=1)
     loaded = first.get_for_company("meridian", SID_1)
     assert loaded is not None
     assert loaded.status is SituationStatus.TRIAGED
@@ -458,10 +466,14 @@ def test_duplicate_audit_leaves_stored_state_untouched(
     with pytest.raises(ValueError, match="already stored"):
         repo.save(
             _situation(),
-            audit_events=[_audit(
-                "EVT-DUP", version=2, from_status=SituationStatus.DETECTED,
-                to_status=SituationStatus.DETECTED,
-            )],
+            audit_events=[
+                _audit(
+                    "EVT-DUP",
+                    version=2,
+                    from_status=SituationStatus.DETECTED,
+                    to_status=SituationStatus.DETECTED,
+                )
+            ],
         )
     assert [e.event_id for e in repo.audit_trail("meridian", SID_1)] == ["EVT-DUP"]
     assert repo.save(_situation(), expected_version=1) == 1
@@ -517,11 +529,15 @@ def test_threaded_file_db_no_partial_writes(tmp_path: Path) -> None:
         for version in range(1, 6):
             repo.save(
                 _situation(sid),
-                audit_events=[_audit(
-                    f"EVT-F{offset}-{version}", situation_id=sid, version=version,
-                    from_status=SituationStatus.DETECTED,
-                    to_status=SituationStatus.DETECTED,
-                )],
+                audit_events=[
+                    _audit(
+                        f"EVT-F{offset}-{version}",
+                        situation_id=sid,
+                        version=version,
+                        from_status=SituationStatus.DETECTED,
+                        to_status=SituationStatus.DETECTED,
+                    )
+                ],
             )
 
     threads = [threading.Thread(target=_worker, args=(n,)) for n in range(4)]

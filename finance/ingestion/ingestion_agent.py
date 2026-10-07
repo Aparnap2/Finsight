@@ -39,9 +39,7 @@ def ingestion_node(state: PipelineState, engine: Engine | None = None) -> dict[s
     }
 
 
-def _fetch_actuals_from_db(
-    period: str, entity_id: str, engine: Engine
-) -> list[dict[str, Any]]:
+def _fetch_actuals_from_db(period: str, entity_id: str, engine: Engine) -> list[dict[str, Any]]:
     with Session(engine) as session:
         stmt = (
             select(Actual, GLAccount.account_name, GLAccount.department)
@@ -60,9 +58,7 @@ def _fetch_actuals_from_db(
         ]
 
 
-def _fetch_budget_from_db(
-    period: str, entity_id: str, engine: Engine
-) -> list[dict[str, Any]]:
+def _fetch_budget_from_db(period: str, entity_id: str, engine: Engine) -> list[dict[str, Any]]:
     with Session(engine) as session:
         stmt = (
             select(BudgetLine, GLAccount.account_name, GLAccount.department)
@@ -93,7 +89,5 @@ def _check_reconciliation(actuals: list[dict[str, Any]]) -> bool:
     return True
 
 
-def _detect_anomalies(
-    actuals: list[dict[str, Any]], budget: list[dict[str, Any]]
-) -> list[str]:
+def _detect_anomalies(actuals: list[dict[str, Any]], budget: list[dict[str, Any]]) -> list[str]:
     return []

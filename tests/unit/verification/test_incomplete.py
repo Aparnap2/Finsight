@@ -316,6 +316,7 @@ class TestIncompleteVsCorruptDistinction:
 
     def test_missing_and_corrupt_paths_stay_distinct(self) -> None:
         """Arrange both signals; Act each run; Assert INCOMPLETE versus FAILED."""
+
         # Arrange.
         def _missing(handoff: ExecutionHandoff) -> R1Observation:
             raise ReaderFailed(VERIFY_RESULT_MISSING, "RESULT key absent")
@@ -328,9 +329,7 @@ class TestIncompleteVsCorruptDistinction:
         # Act.
         with pytest.raises(VerificationRefused) as missing_exc:
             _run(_handoff(), missing_store, missing_log, read_result=_missing)
-        corrupt_report = _run(
-            _handoff(), corrupt_store, corrupt_log, read_result=_checksum_failed
-        )
+        corrupt_report = _run(_handoff(), corrupt_store, corrupt_log, read_result=_checksum_failed)
         # Assert: the two paths diverge exactly as specified.
         assert missing_exc.value.code == VERIFY_RESULT_MISSING
         assert missing_log.entries[0].outcome == "INCOMPLETE"
@@ -377,9 +376,7 @@ class TestRealIncompleteReads:
         store, log = ReplayStore(), AuditLog()
 
         class _EmptyExpected:
-            def read_expected(
-                self, case_key: str
-            ) -> tuple[Decimal | None, datetime | None]:
+            def read_expected(self, case_key: str) -> tuple[Decimal | None, datetime | None]:
                 assert case_key == SITUATION
                 return None, None
 
@@ -402,9 +399,7 @@ class TestRealIncompleteReads:
         store, log = ReplayStore(), AuditLog()
 
         class _EmptyPending:
-            def read_pending(
-                self, batch_key: str
-            ) -> tuple[Decimal | None, datetime | None]:
+            def read_pending(self, batch_key: str) -> tuple[Decimal | None, datetime | None]:
                 assert batch_key == BATCH
                 return None, None
 

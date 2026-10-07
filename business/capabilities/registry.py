@@ -622,9 +622,7 @@ def implemented_capabilities() -> list[str]:
     Returns:
         Sorted list of capability ids.
     """
-    return sorted(
-        cap.capability_id for cap in _MATURITY_REPORT.implemented()
-    )
+    return sorted(cap.capability_id for cap in _MATURITY_REPORT.implemented())
 
 
 def capabilities_by_status(status: CapabilityStatus) -> list[Capability]:

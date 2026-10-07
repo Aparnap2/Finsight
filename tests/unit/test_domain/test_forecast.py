@@ -158,7 +158,7 @@ class TestForecastLine:
                 account_id="acc-1000",
                 amount=Decimal("100.00"),
                 period_id="2026-08",
-                scenario="wildcard", 
+                scenario="wildcard",
             )
 
     def test_optimistic_scenario_constructs(self) -> None:

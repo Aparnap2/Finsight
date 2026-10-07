@@ -252,7 +252,7 @@ class CashFlowForecastModel:
             reason = "model not trained" if not self._trained else "lightgbm unavailable"
             return self._baseline_forecast(series, horizon, anchor, reason)
 
-        buffer = list(series[-max(self._lags):])
+        buffer = list(series[-max(self._lags) :])
         for _ in range(horizon):
             row = _lag_row(buffer, self._lags)
             prediction = float(self._model.predict([row])[0])
@@ -284,9 +284,7 @@ class CashFlowForecastModel:
         if self._shap is not None and self._model is not None:
             rows, _ = _lag_rows(series, self._lags)
             if not rows:
-                return CashFlowExplain(
-                    model_id=self.model_id, version=self.version, degraded=True
-                )
+                return CashFlowExplain(model_id=self.model_id, version=self.version, degraded=True)
             explainer = self._shap.TreeExplainer(self._model)
             shap_values = explainer.shap_values(rows)
             per_feature = [
@@ -431,9 +429,7 @@ class CashFlowForecastModel:
     def _anchor_date(self, features: pl.DataFrame) -> date:
         """Last observation date; falls back to today when unparseable."""
         last = (
-            features.select(pl.col("date")).to_series().to_list()[-1]
-            if features.height
-            else None
+            features.select(pl.col("date")).to_series().to_list()[-1] if features.height else None
         )
         if last is None:
             return date.today()
@@ -483,9 +479,7 @@ class CashFlowForecastModel:
         """Mean absolute percentage error (0.0 when no signal)."""
         if not actual:
             return 0.0
-        total = sum(
-            abs(a - p) / abs(a) for a, p in zip(actual, predicted, strict=False) if a != 0
-        )
+        total = sum(abs(a - p) / abs(a) for a, p in zip(actual, predicted, strict=False) if a != 0)
         return float(total) / len(actual)
 
     @staticmethod
@@ -493,7 +487,5 @@ class CashFlowForecastModel:
         """Root mean squared error."""
         if not actual:
             return 0.0
-        squared_errors = float(
-            sum((a - p) ** 2 for a, p in zip(actual, predicted, strict=False))
-        )
+        squared_errors = float(sum((a - p) ** 2 for a, p in zip(actual, predicted, strict=False)))
         return math.sqrt(squared_errors / len(actual))

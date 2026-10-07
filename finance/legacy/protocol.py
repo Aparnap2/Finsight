@@ -34,15 +34,15 @@ RECORD_TYPE_CODES: frozenset[str] = frozenset({"01", "02", "03", "99"})
 RESULT_CODES: frozenset[str] = frozenset({"AC", "RJ", "DU"})
 
 # Field column ranges (0-indexed slices)
-COL_VERSION = slice(0, 2)     # cols 1-2
-COL_BATCH_ID = slice(2, 16)   # cols 3-16  (14 chars)
+COL_VERSION = slice(0, 2)  # cols 1-2
+COL_BATCH_ID = slice(2, 16)  # cols 3-16  (14 chars)
 COL_SEQUENCE = slice(16, 24)  # cols 17-24 (8 chars)
-COL_RECORD = slice(24, 76)    # cols 25-76 (52 chars)
+COL_RECORD = slice(24, 76)  # cols 25-76 (52 chars)
 COL_CHECKSUM = slice(76, 80)  # cols 77-80 (4 chars)
 
 # Result field column ranges
-COL_RESULT_CODE = slice(24, 26)   # cols 25-26 (2 chars)
-COL_RESULT_DETAIL = slice(26, 76) # cols 27-76 (50 chars)
+COL_RESULT_CODE = slice(24, 26)  # cols 25-26 (2 chars)
+COL_RESULT_DETAIL = slice(26, 76)  # cols 27-76 (50 chars)
 
 
 # ---------------------------------------------------------------------------
@@ -306,8 +306,7 @@ class LegacyBatch(BaseModel):
         computed = sum((r.amount for r in self.records if r.record_type != "99"), Decimal("0"))
         if computed != self.header.control_total:
             raise LegacyControlTotalError(
-                f"Control total mismatch: computed {computed}, "
-                f"expected {self.header.control_total}"
+                f"Control total mismatch: computed {computed}, expected {self.header.control_total}"
             )
         return self
 
@@ -320,9 +319,7 @@ class LegacyBatch(BaseModel):
             if rec.sequence in seen:
                 raise ValueError(f"Duplicate sequence {rec.sequence} in batch")
             if rec.sequence <= prev:
-                raise ValueError(
-                    f"Non-monotonic sequence: {rec.sequence} after {prev}"
-                )
+                raise ValueError(f"Non-monotonic sequence: {rec.sequence} after {prev}")
             seen.add(rec.sequence)
             prev = rec.sequence
         return self
@@ -424,9 +421,7 @@ class LegacyRecordResult(BaseModel):
         body = line[:76]
         expected = _compute_checksum(body)
         if expected != checksum:
-            raise LegacyChecksumError(
-                f"Checksum mismatch: expected {expected!r}, got {checksum!r}"
-            )
+            raise LegacyChecksumError(f"Checksum mismatch: expected {expected!r}, got {checksum!r}")
 
         if not seq_str or not seq_str.isdigit():
             raise LegacyParseError(f"Invalid sequence: {seq_str!r}")
@@ -553,8 +548,7 @@ def validate_s3_key_tenant(key: str, company_id: str) -> None:
     prefix = key.split("/", 1)[0]
     if prefix != company_id:
         raise CompanyIsolationError(
-            f"Company {company_id!r} cannot access key {key!r}. "
-            f"Key belongs to company {prefix!r}."
+            f"Company {company_id!r} cannot access key {key!r}. Key belongs to company {prefix!r}."
         )
 
 

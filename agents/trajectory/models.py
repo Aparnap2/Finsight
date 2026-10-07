@@ -128,9 +128,7 @@ class Trajectory(BaseModel):
 
     @field_validator("steps")
     @classmethod
-    def _check_steps(
-        cls, value: tuple[TrajectoryStep, ...]
-    ) -> tuple[TrajectoryStep, ...]:
+    def _check_steps(cls, value: tuple[TrajectoryStep, ...]) -> tuple[TrajectoryStep, ...]:
         if len(value) == 0:
             raise ValueError("steps must be non-empty.")
         if value[0].kind != "INPUT":

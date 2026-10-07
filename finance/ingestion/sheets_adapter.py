@@ -3,6 +3,7 @@
 Reads financial data from Google Sheets (primary) or CSV files (fallback).
 The spreadsheet is a transport layer only — no business logic here.
 """
+
 from __future__ import annotations
 
 import csv
@@ -30,13 +31,11 @@ class SheetsAdapter:
     def authenticate(self) -> None:
         path = Path(self.credentials_path)
         if not path.exists():
-            raise FileNotFoundError(
-                f"Credentials file not found: {self.credentials_path}"
-            )
+            raise FileNotFoundError(f"Credentials file not found: {self.credentials_path}")
         self._authenticated = True
 
     # NOTE: `range` is a public keyword argument (tests call range=...); matching protocol.py.
-    def read_range(self, spreadsheet_id: str, range: str) -> list[list[str]]:  # noqa: A002
+    def read_range(self, spreadsheet_id: str, range: str) -> list[list[str]]:  # noqa: A002  # noqa: A002
         if not spreadsheet_id:
             raise ValueError("spreadsheet_id must not be empty")
         if not range:
@@ -49,7 +48,10 @@ class SheetsAdapter:
         return []
 
     def write_range(
-        self, spreadsheet_id: str, range: str, values: list[list[str]]  # noqa: A002
+        self,
+        spreadsheet_id: str,
+        range: str,  # noqa: A002
+        values: list[list[str]],
     ) -> None:
         if not values:
             raise ValueError("data must not be empty")

@@ -1,4 +1,5 @@
 """FiscalCalendar — period generation, lookup, and navigation."""
+
 from datetime import date, timedelta
 
 from finance.validation.models import FiscalPeriod, PeriodStatus, PeriodType

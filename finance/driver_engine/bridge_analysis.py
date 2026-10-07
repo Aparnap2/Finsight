@@ -38,6 +38,7 @@ class BridgeComponent(StrEnum):
 @dataclass
 class BridgeDecomposition:
     """A single decomposed component of a variance bridge."""
+
     component: BridgeComponent
     amount: Decimal
     percentage: Decimal  # % of total variance
@@ -57,6 +58,7 @@ class BridgeDecomposition:
 @dataclass
 class BridgeAnalysis:
     """Full bridge analysis result for one account."""
+
     account_id: str
     account_name: str
     total_variance: Decimal

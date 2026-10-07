@@ -2,6 +2,7 @@
 
 BoardReport exporters (Markdown, JSON) and ReportBuilder.
 """
+
 from __future__ import annotations
 
 import json
@@ -109,6 +110,7 @@ class TestBoardReportModel:
     def test_report_section_enum_values(self) -> None:
         """ReportSection enum has expected values."""
         from finance.domain.board_report import ReportSection
+
         assert ReportSection.EXECUTIVE_SUMMARY.value == "executive_summary"
         assert ReportSection.FINANCIAL_HIGHLIGHTS.value == "financial_highlights"
         assert ReportSection.KPI_SUMMARY.value == "kpi_summary"
@@ -120,6 +122,7 @@ class TestBoardReportModel:
     def test_report_draft_default(self) -> None:
         """BoardReport defaults to draft."""
         from finance.domain.board_report import BoardReport
+
         report = BoardReport(
             id="test",
             company_id="CF001",
@@ -140,6 +143,7 @@ class TestJSONExporter:
     def test_export_to_json(self) -> None:
         """Export a BoardReport to a JSON string."""
         from finance.reporting.json_exporter import JSONExporter
+
         report = _make_report()
         exporter = JSONExporter()
         json_str = exporter.export(report)
@@ -153,6 +157,7 @@ class TestJSONExporter:
     def test_export_includes_metadata(self) -> None:
         """JSON export includes generated_at as ISO string."""
         from finance.reporting.json_exporter import JSONExporter
+
         report = _make_report()
         exporter = JSONExporter()
         data = json.loads(exporter.export(report))
@@ -162,6 +167,7 @@ class TestJSONExporter:
     def test_export_with_indent(self) -> None:
         """JSONExporter supports indented output."""
         from finance.reporting.json_exporter import JSONExporter
+
         report = _make_report()
         exporter = JSONExporter(indent=2)
         json_str = exporter.export(report)
@@ -178,6 +184,7 @@ class TestMarkdownExporter:
     def test_export_includes_title(self) -> None:
         """Markdown output includes the report title as H1."""
         from finance.reporting.markdown_exporter import MarkdownExporter
+
         report = _make_report()
         exporter = MarkdownExporter()
         md = exporter.export(report)
@@ -186,6 +193,7 @@ class TestMarkdownExporter:
     def test_export_includes_metadata_block(self) -> None:
         """Markdown output includes metadata header."""
         from finance.reporting.markdown_exporter import MarkdownExporter
+
         report = _make_report()
         exporter = MarkdownExporter()
         md = exporter.export(report)
@@ -199,6 +207,7 @@ class TestMarkdownExporter:
     def test_export_includes_sections(self) -> None:
         """Each report section is rendered in order."""
         from finance.reporting.markdown_exporter import MarkdownExporter
+
         report = _make_report()
         exporter = MarkdownExporter()
         md = exporter.export(report)
@@ -212,6 +221,7 @@ class TestMarkdownExporter:
     def test_export_includes_kpi_summary_table(self) -> None:
         """KPI values rendered as a markdown table."""
         from finance.reporting.markdown_exporter import MarkdownExporter
+
         report = _make_report()
         exporter = MarkdownExporter()
         md = exporter.export(report)
@@ -222,6 +232,7 @@ class TestMarkdownExporter:
     def test_export_includes_variance_summary_table(self) -> None:
         """Material variances rendered as a markdown table."""
         from finance.reporting.markdown_exporter import MarkdownExporter
+
         report = _make_report()
         exporter = MarkdownExporter()
         md = exporter.export(report)
@@ -232,6 +243,7 @@ class TestMarkdownExporter:
     def test_export_includes_recommendations(self) -> None:
         """Recommendations rendered as list items."""
         from finance.reporting.markdown_exporter import MarkdownExporter
+
         report = _make_report()
         exporter = MarkdownExporter()
         md = exporter.export(report)
@@ -241,6 +253,7 @@ class TestMarkdownExporter:
     def test_export_includes_quality_score(self) -> None:
         """Data quality score is included when present."""
         from finance.reporting.markdown_exporter import MarkdownExporter
+
         report = _make_report()
         exporter = MarkdownExporter()
         md = exporter.export(report)
@@ -251,6 +264,7 @@ class TestMarkdownExporter:
         """Exporter handles empty sections gracefully."""
         from finance.domain.board_report import BoardReport
         from finance.reporting.markdown_exporter import MarkdownExporter
+
         report = BoardReport(
             id="empty",
             company_id="TST",
@@ -312,12 +326,12 @@ class TestReportBuilder:
         from finance.reporting.builder import ReportBuilder
 
         kpi = KPIValue(
-                kpi_id="k1",
-                kpi_name="Revenue",
-                value=Decimal("100"),
-                period_id="P1",
-                status="on_track",
-            )
+            kpi_id="k1",
+            kpi_name="Revenue",
+            value=Decimal("100"),
+            period_id="P1",
+            status="on_track",
+        )
 
         builder = ReportBuilder(company_id="C1", period_id="P1", title="R")
         builder.add_section(ReportSection.EXECUTIVE_SUMMARY, "S")
@@ -335,10 +349,18 @@ class TestReportBuilder:
         from finance.domain.variance import Variance
         from finance.reporting.builder import ReportBuilder
 
-        var = Variance(id="v1", account_id="4010", account_name="Rev", period_id="P1",
-                       actual_amount=Decimal("100"), budget_amount=Decimal("90"),
-                       variance_amount=Decimal("10"), variance_pct=Decimal("11.1"),
-                       direction="favorable", is_material=True)
+        var = Variance(
+            id="v1",
+            account_id="4010",
+            account_name="Rev",
+            period_id="P1",
+            actual_amount=Decimal("100"),
+            budget_amount=Decimal("90"),
+            variance_amount=Decimal("10"),
+            variance_pct=Decimal("11.1"),
+            direction="favorable",
+            is_material=True,
+        )
 
         builder = ReportBuilder(company_id="C1", period_id="P1", title="R")
         builder.add_section(ReportSection.EXECUTIVE_SUMMARY, "S")

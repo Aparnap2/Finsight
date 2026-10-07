@@ -79,22 +79,22 @@ class TestDomainEventBase:
     def test_event_id_required(self) -> None:
         """An event must carry a unique identifier."""
         with pytest.raises(ValidationError):
-            _invoice(event_id=None) 
+            _invoice(event_id=None)
 
     def test_event_type_required(self) -> None:
         """An event must name its type."""
         with pytest.raises(ValidationError):
-            _invoice(event_type=None) 
+            _invoice(event_type=None)
 
     def test_producer_required(self) -> None:
         """An event must name its producing component."""
         with pytest.raises(ValidationError):
-            _invoice(producer=None) 
+            _invoice(producer=None)
 
     def test_consumer_required(self) -> None:
         """An event must declare at least its consumers list."""
         with pytest.raises(ValidationError):
-            _invoice(consumer=None) 
+            _invoice(consumer=None)
 
     def test_frozen_event_is_immutable(self) -> None:
         """Invoice events are immutable once constructed."""
@@ -105,7 +105,7 @@ class TestDomainEventBase:
     def test_extra_fields_forbidden(self) -> None:
         """Unknown fields are rejected by the event model."""
         with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
-            _invoice(unexpected_field="boom") 
+            _invoice(unexpected_field="boom")
 
 
 # =============================================================================
@@ -173,22 +173,22 @@ class TestInvoiceConstruction:
     def test_missing_vendor_rejected(self) -> None:
         """An invoice must reference a vendor."""
         with pytest.raises(ValidationError):
-            _invoice(vendor_id=None) 
+            _invoice(vendor_id=None)
 
     def test_missing_invoice_number_rejected(self) -> None:
         """An invoice must carry a reference number."""
         with pytest.raises(ValidationError):
-            _invoice(invoice_number=None) 
+            _invoice(invoice_number=None)
 
     def test_missing_amount_rejected(self) -> None:
         """An invoice must carry an amount."""
         with pytest.raises(ValidationError):
-            _invoice(amount=None) 
+            _invoice(amount=None)
 
     def test_missing_date_rejected(self) -> None:
         """An invoice must carry an invoice date."""
         with pytest.raises(ValidationError):
-            _invoice(date=None) 
+            _invoice(date=None)
 
     def test_empty_vendor_representable(self) -> None:
         """An empty vendor identifier is representable at the event boundary.
@@ -229,9 +229,7 @@ class TestInvoiceSerialization:
 
     def test_currency_round_trip(self) -> None:
         """The currency survives a serialization round trip."""
-        rebuilt = InvoiceImported.model_validate_json(
-            _invoice(currency="EUR").model_dump_json()
-        )
+        rebuilt = InvoiceImported.model_validate_json(_invoice(currency="EUR").model_dump_json())
         assert rebuilt.currency == "EUR"
 
 
@@ -268,7 +266,7 @@ class TestInvoiceRejected:
     def test_rejection_reason_required(self) -> None:
         """A rejection must state a high-level reason."""
         with pytest.raises(ValidationError):
-            self._rejected(rejection_reason=None) 
+            self._rejected(rejection_reason=None)
 
     def test_validation_errors_default_empty(self) -> None:
         """The detailed error list defaults to empty when omitted."""

@@ -112,18 +112,14 @@ def query_vendor_spend(
         coverage_pct = round(vendors_found / total_vendors, 4)
 
         # ---- freshness: latest invoice_date ----
-        latest_date = (
-            session.execute(
-                select(func.max(VendorInvoice.invoice_date)).where(
-                    VendorInvoice.entity_id == tenant_id,
-                    VendorInvoice.period == period,
-                )
-            ).scalar()
-        )
+        latest_date = session.execute(
+            select(func.max(VendorInvoice.invoice_date)).where(
+                VendorInvoice.entity_id == tenant_id,
+                VendorInvoice.period == period,
+            )
+        ).scalar()
         freshness_seconds: int | None = (
-            int((_now() - latest_date).total_seconds())
-            if latest_date
-            else None
+            int((_now() - latest_date).total_seconds()) if latest_date else None
         )
 
     quality_score = compute_quality_score(coverage_pct, row_count, freshness_seconds)

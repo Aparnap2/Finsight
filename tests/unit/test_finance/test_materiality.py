@@ -198,9 +198,7 @@ class TestSingleAssessment:
         assert assessment.pct_exceeds is True  # 12% > 3%
         assert assessment.tier == SensitivityTier.CRITICAL
 
-    def test_assess_not_material(
-        self, engine: MaterialityEngine, small_variance: Variance
-    ) -> None:
+    def test_assess_not_material(self, engine: MaterialityEngine, small_variance: Variance) -> None:
         """2% on CRITICAL ($30K abs) → neither threshold exceeded → not material."""
         # Account 4010 is CRITICAL (pct=3%, abs=$50K)
         # 2% < 3% and $30K < $50K → not material
@@ -209,9 +207,7 @@ class TestSingleAssessment:
         assert assessment.pct_exceeds is False
         assert assessment.abs_exceeds is False
 
-    def test_assess_medium_tier(
-        self, engine: MaterialityEngine, medium_variance: Variance
-    ) -> None:
+    def test_assess_medium_tier(self, engine: MaterialityEngine, medium_variance: Variance) -> None:
         """8% variance on MEDIUM account → not material (<10% threshold)."""
         assessment = engine.assess(medium_variance)
         assert assessment.is_material is False
@@ -517,9 +513,7 @@ class TestCombinedRules:
 class TestAssessmentModel:
     """Verify MaterialityAssessment data integrity."""
 
-    def test_assessment_fields(
-        self, engine: MaterialityEngine, revenue_variance: Variance
-    ) -> None:
+    def test_assessment_fields(self, engine: MaterialityEngine, revenue_variance: Variance) -> None:
         """Assessment has all required fields populated correctly."""
         assessment = engine.assess(revenue_variance)
         assert assessment.variance_id == "4010"

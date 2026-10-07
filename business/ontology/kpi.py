@@ -97,9 +97,7 @@ class KPI(BaseModel):
     def _validate_data_type(cls, v: str) -> str:
         allowed = {"Money", "Percentage", "Ratio", "Count", "Days", "Score"}
         if v not in allowed:
-            raise ValueError(
-                f"KPI data_type must be one of {allowed}, got '{v}'"
-            )
+            raise ValueError(f"KPI data_type must be one of {allowed}, got '{v}'")
         return v
 
     @field_validator("classification")
@@ -107,9 +105,7 @@ class KPI(BaseModel):
     def _validate_classification(cls, v: str) -> str:
         allowed = {"public", "internal", "confidential", "restricted"}
         if v.lower() not in allowed:
-            raise ValueError(
-                f"KPI classification must be one of {allowed}, got '{v}'"
-            )
+            raise ValueError(f"KPI classification must be one of {allowed}, got '{v}'")
         return v.lower()
 
     def is_active(self, as_of: date | None = None) -> bool:
@@ -128,10 +124,7 @@ class KPI(BaseModel):
         )
 
     def __str__(self) -> str:
-        return (
-            f"KPI({self.kpi_id}, {self.name}, "
-            f"v{self.version}, {self.data_type})"
-        )
+        return f"KPI({self.kpi_id}, {self.name}, v{self.version}, {self.data_type})"
 
 
 class KPIValue(BaseModel):
@@ -170,9 +163,7 @@ class KPIValue(BaseModel):
     def _validate_status(cls, v: str) -> str:
         allowed = {"actual", "budget", "forecast", "target", "projected"}
         if v.lower() not in allowed:
-            raise ValueError(
-                f"KPI value status must be one of {allowed}, got '{v}'"
-            )
+            raise ValueError(f"KPI value status must be one of {allowed}, got '{v}'")
         return v.lower()
 
     @field_validator("trend")
@@ -180,9 +171,7 @@ class KPIValue(BaseModel):
     def _validate_trend(cls, v: str) -> str:
         allowed = {"improving", "declining", "stable", "volatile"}
         if v.lower() not in allowed:
-            raise ValueError(
-                f"KPI trend must be one of {allowed}, got '{v}'"
-            )
+            raise ValueError(f"KPI trend must be one of {allowed}, got '{v}'")
         return v.lower()
 
     def __str__(self) -> str:
@@ -193,7 +182,4 @@ class KPIValue(BaseModel):
             or self.value_integer
             or "N/A"
         )
-        return (
-            f"KPIValue({self.kpi_id}, {self.period}, "
-            f"{display_value}, {self.status})"
-        )
+        return f"KPIValue({self.kpi_id}, {self.period}, {display_value}, {self.status})"

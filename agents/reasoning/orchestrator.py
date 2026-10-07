@@ -62,11 +62,7 @@ def _to_commentary_draft(report: ReasoningReport) -> CommentaryDraft:
     """Convert a reasoning report into the commentary draft shape."""
     sections = _parse_sections(report.commentary)
     if not sections:
-        sections = [
-            CommentarySection(
-                section_type="executive_summary", content=report.commentary
-            )
-        ]
+        sections = [CommentarySection(section_type="executive_summary", content=report.commentary)]
     return CommentaryDraft(
         sections=sections,
         assertions_used=[assertion.id for assertion in report.assertions],
@@ -87,24 +83,16 @@ def _parse_sections(text: str) -> list[CommentarySection]:
     """
     matches = list(_HEADING_RE.finditer(text))
     if not matches:
-        return [
-            CommentarySection(
-                section_type="executive_summary", content=text.strip()
-            )
-        ]
+        return [CommentarySection(section_type="executive_summary", content=text.strip())]
 
     sections: list[CommentarySection] = []
     preamble = text[: matches[0].start()].strip()
     if preamble:
-        sections.append(
-            CommentarySection(section_type="executive_summary", content=preamble)
-        )
+        sections.append(CommentarySection(section_type="executive_summary", content=preamble))
     for index, match in enumerate(matches):
         heading = match.group(1).strip().lower().replace(" ", "_")
         end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
         content = text[match.end() : end].strip()
         if content:
-            sections.append(
-                CommentarySection(section_type=heading, content=content)
-            )
+            sections.append(CommentarySection(section_type=heading, content=content))
     return sections

@@ -51,9 +51,7 @@ def _validate_comparative(assertion: Assertion, evidence_count: int) -> Assertio
         errors.append("Comparative assertion requires a ranked value or delta")
 
     if evidence_count < 2:
-        errors.append(
-            "Comparative assertion must be provable from at least 2 ranked facts"
-        )
+        errors.append("Comparative assertion must be provable from at least 2 ranked facts")
 
     if not assertion.evidence_ids:
         errors.append("Comparative assertion must cite evidence")
@@ -136,9 +134,7 @@ def _validate_action(assertion: Assertion) -> AssertionValidationResult:
         errors.append("Action assertion must have descriptive text")
 
     if assertion.support_level == SupportLevel.INSUFFICIENT:
-        warnings.append(
-            "Action based on insufficient support level — consider increasing scrutiny"
-        )
+        warnings.append("Action based on insufficient support level — consider increasing scrutiny")
 
     adjusted = SupportLevel.VERIFIED if not errors else SupportLevel.INSUFFICIENT
     return AssertionValidationResult(

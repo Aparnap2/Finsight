@@ -184,9 +184,7 @@ def test_scenario_03_outside_tolerance_opens_case() -> None:
     provider = _provider("500000", "3750", "0", "0", "0", "s03")
     books = _books("496351", "s03")
     legacy = _legacy("496351", "0", "s03")
-    verdict = detect(
-        expected=expected, provider=provider, books=books, legacy=legacy
-    )
+    verdict = detect(expected=expected, provider=provider, books=books, legacy=legacy)
     assert verdict.verdict is DetectionOutcome.EXCEPTION
     assert verdict.actionable_variance == Decimal("101")
     assert verdict.classification in CASE_CREATING_CLASSIFICATIONS
@@ -210,9 +208,7 @@ def test_scenario_04_fee_mismatch() -> None:
     provider = _provider("200000", "7500", "0", "0", "0", "s04")
     books = _books("193000", "s04", booked_fee="7000")
     legacy = _legacy("193000", "0", "s04")
-    verdict = detect(
-        expected=expected, provider=provider, books=books, legacy=legacy
-    )
+    verdict = detect(expected=expected, provider=provider, books=books, legacy=legacy)
     assert verdict.verdict is DetectionOutcome.EXCEPTION
     assert verdict.classification is DetectionClassification.FEE_MISMATCH
     assert verdict.actionable_variance == Decimal("500")
@@ -235,9 +231,7 @@ def test_scenario_05_refund_lag() -> None:
     provider = _provider("500000", "3750", "2500", "0", "0", "s05")
     books = _books("496250", "s05")
     legacy = _legacy("496250", "0", "s05")
-    verdict = detect(
-        expected=expected, provider=provider, books=books, legacy=legacy
-    )
+    verdict = detect(expected=expected, provider=provider, books=books, legacy=legacy)
     assert verdict.verdict is DetectionOutcome.EXCEPTION
     assert verdict.classification is DetectionClassification.PARTIAL_REFUND_LAG
     assert verdict.actionable_variance == Decimal("2500")
@@ -249,15 +243,11 @@ def test_scenario_06_duplicate_needs_fingerprint() -> None:
     provider = _provider("500000", "3750", "0", "0", "0", "s06")
     dup_books = _books("498750", "s06", duplicate_key="idem-xyz")
     legacy = _legacy("498750", "0", "s06")
-    verdict = detect(
-        expected=expected, provider=provider, books=dup_books, legacy=legacy
-    )
+    verdict = detect(expected=expected, provider=provider, books=dup_books, legacy=legacy)
     assert verdict.classification is DetectionClassification.DUPLICATE_LEDGER_ENTRY
     assert verdict.actionable_variance == Decimal("2500")
     plain_books = _books("498750", "s06-plain")
-    plain = detect(
-        expected=expected, provider=provider, books=plain_books, legacy=legacy
-    )
+    plain = detect(expected=expected, provider=provider, books=plain_books, legacy=legacy)
     assert plain.classification is not DetectionClassification.DUPLICATE_LEDGER_ENTRY
 
 
@@ -267,14 +257,10 @@ def test_scenario_07_legacy_posting_missing() -> None:
     provider = _provider("500000", "3750", "0", "0", "0", "s07")
     books = _books("486250", "s07")
     legacy = _legacy("486250", "10000", "s07", "INVALID_ACCOUNT_CODE")
-    verdict = detect(
-        expected=expected, provider=provider, books=books, legacy=legacy
-    )
+    verdict = detect(expected=expected, provider=provider, books=books, legacy=legacy)
     assert verdict.classification is DetectionClassification.LEGACY_POSTING_MISSING
     assert abs(verdict.actionable_variance) == Decimal("10000")
-    missing = detect(
-        expected=expected, provider=provider, books=books, legacy=None
-    )
+    missing = detect(expected=expected, provider=provider, books=books, legacy=None)
     assert missing.classification is DetectionClassification.LEGACY_POSTING_MISSING
 
 
@@ -285,9 +271,7 @@ def test_scenario_08_fs231_golden() -> None:
     assert provider.net == Decimal("972500")
     books = _books("982500", "s08")
     legacy = _legacy("982500", "10000", "s08", "INVALID_ACCOUNT_CODE")
-    verdict = detect(
-        expected=expected, provider=provider, books=books, legacy=legacy
-    )
+    verdict = detect(expected=expected, provider=provider, books=books, legacy=legacy)
     assert verdict.verdict is DetectionOutcome.EXCEPTION
     assert verdict.actionable_variance == Decimal("10000")
     assert verdict.expected_books_gap == Decimal("17500")
@@ -300,9 +284,7 @@ def test_scenario_09_forbidden_variance_guard() -> None:
     provider = _provider("1000000", "7500", "2500", "10000", "7500", "s09")
     books = _books("982500", "s09")
     legacy = _legacy("982500", "10000", "s09", "INVALID_ACCOUNT_CODE")
-    verdict = detect(
-        expected=expected, provider=provider, books=books, legacy=legacy
-    )
+    verdict = detect(expected=expected, provider=provider, books=books, legacy=legacy)
     assert verdict.actionable_variance == Decimal("10000")
     assert verdict.actionable_variance != Decimal("27500")
     assert verdict.actionable_variance != Decimal("17500")
@@ -328,12 +310,8 @@ def test_scenario_10_idempotent_redelivery() -> None:
     provider = _provider("500000", "3750", "2500", "0", "0", "s10")
     books = _books("496250", "s10")
     legacy = _legacy("496250", "0", "s10")
-    first = detect(
-        expected=expected, provider=provider, books=books, legacy=legacy
-    )
-    second = detect(
-        expected=expected, provider=provider, books=books, legacy=legacy
-    )
+    first = detect(expected=expected, provider=provider, books=books, legacy=legacy)
+    second = detect(expected=expected, provider=provider, books=books, legacy=legacy)
     assert first.fingerprint == second.fingerprint
     assert first == second
     one = creation_rules(
@@ -379,9 +357,7 @@ def test_scenario_11_conflicting_same_id_facts() -> None:
         provenance=_prov("conflict-b", "C-QUICKBOOKS"),
     )
     legacy = _legacy("12000", "0", "s11")
-    verdict = detect(
-        expected=expected, provider=provider, books=books, legacy=legacy
-    )
+    verdict = detect(expected=expected, provider=provider, books=books, legacy=legacy)
     assert verdict.verdict is DetectionOutcome.CONFLICTING_AUTHORITIES
     assert verdict.classification is DetectionClassification.CONFLICTING_AUTHORITIES
     situation = creation_rules(
@@ -494,9 +470,7 @@ def test_scenario_15_partial_data_stays_unknown() -> None:
 
 def test_scenario_16_conflict_routes_to_human_review() -> None:
     """Scenario 16: conflicts escalate; auto-resolve stays forbidden."""
-    decision = decide_escalation(
-        variance=Decimal("2000"), legacy_involved=True
-    )
+    decision = decide_escalation(variance=Decimal("2000"), legacy_involved=True)
     assert decision.requires_approval is True
     assert decision.route == "HUMAN_REVIEW"
     expected = ExpectedFact(
@@ -541,10 +515,7 @@ class TestCatalogWiring:
 
     def test_p1_codes_map(self) -> None:
         """All three frozen P1 codes map onto catalog labels."""
-        assert (
-            map_p1_code(ExceptionCode.FEE_MISMATCH)
-            is DetectionClassification.FEE_MISMATCH
-        )
+        assert map_p1_code(ExceptionCode.FEE_MISMATCH) is DetectionClassification.FEE_MISMATCH
         assert (
             map_p1_code(ExceptionCode.PARTIAL_REFUND_ACCOUNTING_LAG)
             is DetectionClassification.PARTIAL_REFUND_LAG
@@ -557,10 +528,7 @@ class TestCatalogWiring:
     def test_spec_codes_from_ontology(self) -> None:
         """Spec I-codes resolve through FinancialOntology, never literals."""
         assert spec_code_for(DetectionClassification.FEE_MISMATCH) == "I-FEE-DRIFT"
-        assert (
-            spec_code_for(DetectionClassification.LEGACY_POSTING_MISSING)
-            == "I-LEGACY-REJECT"
-        )
+        assert spec_code_for(DetectionClassification.LEGACY_POSTING_MISSING) == "I-LEGACY-REJECT"
 
     def test_situation_id_allocator(self) -> None:
         """Allocator shapes FS-YYYY-MMDD-NNNNN with caller-supplied date.

@@ -108,7 +108,6 @@ class TestAValidInputRepresented:
 class TestAInvalidReasoningRejected:
     def test_a2_failed_reasoning_is_invalid_input(self) -> None:
         from agents.brief import brief  # type: ignore[import-not-found]
-
         from agents.reasoning.resolution import ReasoningFailure, ReasoningResult
 
         bad = ReasoningResult(
@@ -135,7 +134,6 @@ class TestAInvalidReasoningRejected:
 
     def test_a_blank_situation_rejected(self) -> None:
         from agents.brief import brief  # type: ignore[import-not-found]
-
         from agents.reasoning.resolution import ReasoningResult
 
         reg = _registry()
@@ -163,7 +161,6 @@ class TestAInvalidReasoningRejected:
 
     def test_a_naive_now_rejected(self) -> None:
         from agents.brief import brief  # type: ignore[import-not-found]
-
         from agents.reasoning.resolution import ReasoningResult
 
         reg = _registry()
@@ -191,7 +188,6 @@ class TestAInvalidReasoningRejected:
 
     def test_a_wrong_company_rejected(self) -> None:
         from agents.brief import brief  # type: ignore[import-not-found]
-
         from agents.reasoning.resolution import ReasoningResult
 
         reg = _registry()
@@ -389,7 +385,6 @@ class TestCHumanReadability:
 class TestDUncertaintyPreservation:
     def test_d_contradictory_remains_visible(self) -> None:
         from agents.brief import brief  # type: ignore[import-not-found]
-
         from agents.discovery.engine import discover
         from agents.reasoning.resolution import reason
 
@@ -436,7 +431,6 @@ class TestDUncertaintyPreservation:
 
     def test_d_stale_is_typed_failure_not_prose(self) -> None:
         from agents.brief import brief  # type: ignore[import-not-found]
-
         from agents.discovery.engine import discover
         from agents.reasoning.resolution import reason
 
@@ -483,7 +477,6 @@ class TestDUncertaintyPreservation:
 
     def test_d_unresolved_questions_propagated(self) -> None:
         from agents.brief import brief  # type: ignore[import-not-found]
-
         from agents.discovery.engine import discover
         from agents.reasoning.resolution import reason
 
@@ -714,7 +707,6 @@ class TestGNoSecondAuthority:
 class TestHFailureBehavior:
     def test_h_invalid_reasoning_produces_typed_failure(self) -> None:
         from agents.brief import brief  # type: ignore[import-not-found]
-
         from agents.reasoning.resolution import ReasoningFailure, ReasoningResult
 
         bad = ReasoningResult(
@@ -744,7 +736,6 @@ class TestHFailureBehavior:
 
     def test_h_typed_failure_codes_only(self) -> None:
         from agents.brief import brief  # type: ignore[import-not-found]
-
         from agents.reasoning.resolution import ReasoningFailure, ReasoningResult
 
         allowed = {
@@ -774,7 +765,6 @@ class TestHFailureBehavior:
 
     def test_h_no_plausible_prose_on_failure(self) -> None:
         from agents.brief import brief  # type: ignore[import-not-found]
-
         from agents.reasoning.resolution import ReasoningFailure, ReasoningResult
 
         bad = ReasoningResult(

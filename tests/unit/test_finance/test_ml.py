@@ -105,9 +105,7 @@ class TestAnomalyDetection:
         )
         model = AnomalyDetectionModel().train(train, feature_columns=["amount"])
         assert not model.available
-        result = model.predict(
-            pl.DataFrame({"entity_id": ["e9"], "amount": [Decimal("500")]})
-        )
+        result = model.predict(pl.DataFrame({"entity_id": ["e9"], "amount": [Decimal("500")]}))
         assert result.degraded is True
         assert result.scores
         assert result.scores[0].is_anomaly is True

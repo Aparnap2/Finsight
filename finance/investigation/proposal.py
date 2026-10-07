@@ -65,19 +65,13 @@ def _require_decimal_money(value: object, *, where: str) -> Decimal:
             AMOUNT_PRECISION beyond 2 decimal places.
     """
     if isinstance(value, bool | float):
-        raise ValueError(
-            f"AMOUNT_MUST_BE_DECIMAL: {where} must be Decimal, never float."
-        )
+        raise ValueError(f"AMOUNT_MUST_BE_DECIMAL: {where} must be Decimal, never float.")
     if not isinstance(value, Decimal):
         raise ValueError(f"AMOUNT_MUST_BE_DECIMAL: {where} must be Decimal.")
     if not value.is_finite():
-        raise ValueError(
-            f"AMOUNT_MUST_BE_DECIMAL: {where} must be finite, got {value!r}."
-        )
+        raise ValueError(f"AMOUNT_MUST_BE_DECIMAL: {where} must be finite, got {value!r}.")
     if value.as_tuple().exponent < -2:
-        raise ValueError(
-            f"AMOUNT_PRECISION: {where} allows at most 2 decimal places."
-        )
+        raise ValueError(f"AMOUNT_PRECISION: {where} allows at most 2 decimal places.")
     return value
 
 
@@ -148,13 +142,9 @@ class AmountTransform(BaseModel):
     def _validate_transform(self) -> AmountTransform:
         """Require a named rule, legs, arithmetic, and Decimal result."""
         _require_nonblank(self.rule_id, where="rule_id", code="AMOUNT_MISMATCH")
-        _require_nonblank(
-            self.arithmetic, where="arithmetic", code="AMOUNT_MISMATCH"
-        )
+        _require_nonblank(self.arithmetic, where="arithmetic", code="AMOUNT_MISMATCH")
         if not self.legs or any(not leg.strip() for leg in self.legs):
-            raise ValueError(
-                "AMOUNT_MISMATCH: transform legs must name at least one leg."
-            )
+            raise ValueError("AMOUNT_MISMATCH: transform legs must name at least one leg.")
         _require_decimal_money(self.result, where="transform result")
         return self
 
@@ -228,10 +218,7 @@ class ResolutionProposal(BaseModel):
         if isinstance(data, Mapping):
             kind = data.get("kind")
             if kind is not None and kind != "RESOLUTION_PROPOSAL":
-                raise ValueError(
-                    f"KIND_MISMATCH: expected 'RESOLUTION_PROPOSAL', "
-                    f"got {kind!r}."
-                )
+                raise ValueError(f"KIND_MISMATCH: expected 'RESOLUTION_PROPOSAL', got {kind!r}.")
             for key in FORBIDDEN_PROPOSAL_FIELDS:
                 if key in data:
                     raise ValueError(
@@ -247,24 +234,15 @@ class ResolutionProposal(BaseModel):
                     )
             for value in data.values():
                 if isinstance(value, str) and value in LIFECYCLE_OUTPUT_LABELS:
-                    raise ValueError(
-                        "LIFECYCLE_WRITE_REFUSED: proposals never yield "
-                        f"{value}."
-                    )
+                    raise ValueError(f"LIFECYCLE_WRITE_REFUSED: proposals never yield {value}.")
         return data
 
     @model_validator(mode="after")
     def _validate_proposal(self) -> ResolutionProposal:
         """Require evidence, hypothesis, policy, and domain amounts."""
-        _require_nonblank(
-            self.proposal_id, where="proposal_id", code="PROPOSAL_UNGROUNDED"
-        )
-        _require_nonblank(
-            self.situation_id, where="situation_id", code="PROPOSAL_UNGROUNDED"
-        )
-        _require_nonblank(
-            self.action, where="action", code="PROPOSAL_UNGROUNDED"
-        )
+        _require_nonblank(self.proposal_id, where="proposal_id", code="PROPOSAL_UNGROUNDED")
+        _require_nonblank(self.situation_id, where="situation_id", code="PROPOSAL_UNGROUNDED")
+        _require_nonblank(self.action, where="action", code="PROPOSAL_UNGROUNDED")
         _require_decimal_money(self.amount, where="proposal amount")
         if not self.evidence_refs:
             raise ValueError(
@@ -345,9 +323,7 @@ def quarantine_llm_shaped(
     )
 
 
-def satisfies_d3_gate(
-    evidence_refs: tuple[str, ...], hypothesis_count: int
-) -> None:
+def satisfies_d3_gate(evidence_refs: tuple[str, ...], hypothesis_count: int) -> None:
     """Enforce the frozen D3 proposal gate by delegation, not copying.
 
     Calls the P6-02 predicate directly so the proposal path satisfies
@@ -369,9 +345,7 @@ def satisfies_d3_gate(
     )
 
 
-def bind_proposal_amount(
-    proposal: ResolutionProposal, discrepancy: Decimal
-) -> ResolutionProposal:
+def bind_proposal_amount(proposal: ResolutionProposal, discrepancy: Decimal) -> ResolutionProposal:
     """Bind a proposal amount to the cited domain discrepancy (V24).
 
     The amount must equal the discrepancy unless a named deterministic
@@ -420,9 +394,7 @@ def proposal_canonical_bytes(proposal: ResolutionProposal) -> bytes:
         The canonical JSON bytes.
     """
     payload = proposal.model_dump(mode="json")
-    return json.dumps(payload, sort_keys=True, separators=(",", ":")).encode(
-        "utf-8"
-    )
+    return json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
 
 def proposal_hash(proposal: ResolutionProposal) -> str:
@@ -526,8 +498,7 @@ def assemble_verdict(
                 )
     if package is not None and not package.complete:
         missing = ", ".join(
-            f"{leg.source_system}:{leg.key}:{leg.reason}"
-            for leg in package.missing
+            f"{leg.source_system}:{leg.key}:{leg.reason}" for leg in package.missing
         )
         if proposal is not None:
             raise ValueError(
@@ -563,9 +534,7 @@ def assemble_verdict(
                 "PROPOSAL_UNGROUNDED: hypothesis_ref "
                 f"{proposal.hypothesis_ref!r} cites no validated hypothesis."
             )
-        covered = {
-            evidence_id for finding in findings for evidence_id in finding.evidence_ids
-        }
+        covered = {evidence_id for finding in findings for evidence_id in finding.evidence_ids}
         for ref in proposal.evidence_refs:
             if ref not in covered:
                 raise ValueError(
@@ -577,22 +546,15 @@ def assemble_verdict(
     if proposal is None and not final_reasons:
         if package is not None and not package.complete:
             missing = ", ".join(
-                f"{leg.source_system}:{leg.key}:{leg.reason}"
-                for leg in package.missing
+                f"{leg.source_system}:{leg.key}:{leg.reason}" for leg in package.missing
             )
-            final_reasons = (
-                f"package {package.package_id} INCOMPLETE; held for {missing}",
-            )
+            final_reasons = (f"package {package.package_id} INCOMPLETE; held for {missing}",)
         elif conflict_present:
             final_reasons = (
-                "conflicting AUTHORITATIVE evidence preserved; no silent "
-                "winner picked",
+                "conflicting AUTHORITATIVE evidence preserved; no silent winner picked",
             )
         else:
-            final_reasons = (
-                "no hypothesis supports a proposal; ends UNRESOLVED "
-                "escalation-ready",
-            )
+            final_reasons = ("no hypothesis supports a proposal; ends UNRESOLVED escalation-ready",)
     fingerprint = new_fingerprint(
         situation_id,
         format(discrepancy, "f"),

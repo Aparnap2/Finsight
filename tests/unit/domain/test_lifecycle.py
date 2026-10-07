@@ -40,6 +40,7 @@ def _close_report(
         checked_at=datetime(2026, 9, 16, 11, 55, tzinfo=UTC),
     )
 
+
 FULL_CHAIN = [
     SituationStatus.DETECTED,
     SituationStatus.TRIAGED,
@@ -158,25 +159,18 @@ def test_escalation_and_return_paths() -> None:
     evidenced = escalated.model_copy(
         update={"evidence_ids": ("EV-231-batch",), "hypothesis_count": 1}
     )
-    assert (
-        evidenced.transition_to(SituationStatus.PROPOSED).status
-        is SituationStatus.PROPOSED
-    )
+    assert evidenced.transition_to(SituationStatus.PROPOSED).status is SituationStatus.PROPOSED
 
 
 def test_verifying_may_reinvestigate() -> None:
     """VERIFYING -> INVESTIGATING reopens work after a FAILED verdict."""
-    reopened = _fs231(status=SituationStatus.VERIFYING).transition_to(
-        SituationStatus.INVESTIGATING
-    )
+    reopened = _fs231(status=SituationStatus.VERIFYING).transition_to(SituationStatus.INVESTIGATING)
     assert reopened.status is SituationStatus.INVESTIGATING
 
 
 def test_proposed_may_reject() -> None:
     """PROPOSED -> REJECTED is the terminal refusal path for a version."""
-    refused = _fs231(status=SituationStatus.PROPOSED).transition_to(
-        SituationStatus.REJECTED
-    )
+    refused = _fs231(status=SituationStatus.PROPOSED).transition_to(SituationStatus.REJECTED)
     assert refused.status is SituationStatus.REJECTED
 
 
@@ -191,9 +185,7 @@ def test_proposed_may_reject() -> None:
         SituationStatus.CLOSED,
     ],
 )
-def test_terminal_states_immutable(
-    terminal: SituationStatus, target: SituationStatus
-) -> None:
+def test_terminal_states_immutable(terminal: SituationStatus, target: SituationStatus) -> None:
     """Terminal states accept no exit, including self-transitions."""
     with pytest.raises(ValueError, match="not allowed"):
         _fs231(status=terminal).transition_to(target)
@@ -227,9 +219,7 @@ def test_banned_pairs_absent_from_allowed_table() -> None:
         (SituationStatus.ESCALATED, SituationStatus.CLOSED),
     ],
 )
-def test_backward_moves_rejected(
-    source: SituationStatus, target: SituationStatus
-) -> None:
+def test_backward_moves_rejected(source: SituationStatus, target: SituationStatus) -> None:
     """Only ESCALATED -> INVESTIGATING and VERIFYING -> INVESTIGATING go back."""
     with pytest.raises(ValueError, match="not allowed"):
         _fs231(status=source).transition_to(target)
@@ -238,16 +228,12 @@ def test_backward_moves_rejected(
 def test_close_without_verified_total_raises() -> None:
     """The close invariant requires verified_total to be set."""
     with pytest.raises(ValueError, match="verified_total"):
-        lifecycle.require_verified_total_for_close(
-            _fs231(status=SituationStatus.VERIFYING)
-        )
+        lifecycle.require_verified_total_for_close(_fs231(status=SituationStatus.VERIFYING))
 
 
 def test_close_with_verified_total_passes() -> None:
     """The close invariant passes once verification evidence is recorded."""
-    situation = _fs231(status=SituationStatus.VERIFYING).record_verification(
-        Decimal("10000")
-    )
+    situation = _fs231(status=SituationStatus.VERIFYING).record_verification(Decimal("10000"))
     lifecycle.require_verified_total_for_close(situation)
 
 
@@ -268,9 +254,7 @@ def test_approve_with_proposal_ref_passes() -> None:
 def test_reject_without_reason_raises() -> None:
     """Rejection must carry a reason for the audit trail."""
     with pytest.raises(ValueError, match="rejection_reason"):
-        lifecycle.require_rejection_reason_for_reject(
-            _fs231(status=SituationStatus.PROPOSED)
-        )
+        lifecycle.require_rejection_reason_for_reject(_fs231(status=SituationStatus.PROPOSED))
 
 
 def test_record_verification_requires_verifying_state() -> None:
@@ -323,9 +307,7 @@ def test_close_without_at_or_report_raises() -> None:
             SituationStatus.CLOSED, verification=_close_report()
         )
     with pytest.raises(ValueError, match="VerificationReport"):
-        _fs231(status=SituationStatus.VERIFYING).transition_to(
-            SituationStatus.CLOSED, at=CLOSE_AT
-        )
+        _fs231(status=SituationStatus.VERIFYING).transition_to(SituationStatus.CLOSED, at=CLOSE_AT)
 
 
 def test_closed_at_rejects_naive() -> None:

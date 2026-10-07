@@ -23,17 +23,20 @@ import logging
 import os
 from collections.abc import Generator
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
 import pytest
 import sqlalchemy
+from alembic.config import Config
 from sqlalchemy import create_engine, text
 from sqlalchemy.pool import NullPool
 
 from agents.p8_runtime import contract as p8_01
 from agents.p8_runtime import durability
 from agents.p8_runtime import execution as p8_02
+from alembic import command
 from finance.p8_durability.postgres_store import PostgresDurableRunStore
 
 logger = logging.getLogger(__name__)
@@ -87,12 +90,31 @@ def _db_reachable(engine: sqlalchemy.Engine) -> bool:
 
 @pytest.fixture(scope="module")
 def engine() -> Generator[sqlalchemy.Engine, None, None]:
-    """Fresh-session engine; skips the module when Postgres is down."""
+    """Fresh-session engine; skips the module when Postgres is down.
+
+    Applies ``alembic upgrade head`` first so the alembic version table
+    owns the DDL: this module shares one database with the tenant
+    migration tests, whose own ``upgrade head`` would otherwise re-issue
+    ``CREATE TABLE p8_run_states`` over the tables
+    ``PostgresDurableRunStore`` created via ``create_all``
+    (``DuplicateTable``). Alembic is idempotent and version-tracked, so
+    whichever module runs first stamps head and the other becomes a
+    no-op; the store's ``create_all`` remains a pure ensure-exists.
+    """
     eng = create_engine(DSN, isolation_level="AUTOCOMMIT", poolclass=NullPool)
     if not _db_reachable(eng):
         pytest.skip("integration database not reachable")
+    _apply_alembic_head()
     yield eng
     eng.dispose()
+
+
+def _apply_alembic_head() -> None:
+    """Bring the shared database to alembic head (idempotent, version-tracked)."""
+    repo_root = Path(__file__).resolve().parents[2]
+    cfg = Config(str(repo_root / "alembic.ini"))
+    cfg.set_main_option("sqlalchemy.url", DSN)
+    command.upgrade(cfg, "head")
 
 
 def _identity(tag: str) -> p8_01.RunIdentity:

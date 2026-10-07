@@ -11,6 +11,7 @@ Test design follows project conventions:
 - ``httpx_mock`` for LLM HTTP-level mocking
 - Descriptive test names explaining scenario + expected outcome
 """
+
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -238,9 +239,7 @@ class TestFinanceAnalysisWorkflow:
 
     # ── Tests ─────────────────────────────────────────────────────────────
 
-    def test_workflow_creates_report(
-        self, workflow: Any, mock_sheets_adapter: MagicMock
-    ) -> None:
+    def test_workflow_creates_report(self, workflow: Any, mock_sheets_adapter: MagicMock) -> None:
         """Full pipeline returns a ``WorkflowResult`` with a valid ``BoardReport``."""
         from finance.workflows import WorkflowResult
 
@@ -293,9 +292,7 @@ class TestFinanceAnalysisWorkflow:
         """
         from finance.workflows import WorkflowResult
 
-        mock_llm_client.generate.side_effect = RuntimeError(
-            "All providers exhausted"
-        )
+        mock_llm_client.generate.side_effect = RuntimeError("All providers exhausted")
 
         result = workflow.run(
             company_id="CF001",
@@ -304,15 +301,13 @@ class TestFinanceAnalysisWorkflow:
         )
 
         assert isinstance(result, WorkflowResult)
-        assert result.success is True, (
-            "Workflow should degrade gracefully, not fail entirely"
-        )
+        assert result.success is True, "Workflow should degrade gracefully, not fail entirely"
         assert result.report is not None
         # Fallback commentary should be deterministic (key-based message)
-        assert any(
-            "4010" in result.report.sections.get(s, "")
-            for s in result.report.sections
-        ) or result.report.material_variances is not None
+        assert (
+            any("4010" in result.report.sections.get(s, "") for s in result.report.sections)
+            or result.report.material_variances is not None
+        )
 
     def test_workflow_respects_materiality(
         self,
@@ -350,9 +345,7 @@ class TestFinanceAnalysisWorkflow:
         assert len(result.report.material_variances) == 1
         var_ids = {v.account_id for v in result.report.material_variances}
         assert "4010" in var_ids
-        assert "6010" not in var_ids, (
-            "Non-material variance leaked into the report"
-        )
+        assert "6010" not in var_ids, "Non-material variance leaked into the report"
 
     def test_workflow_pipeline_state(self, workflow: Any) -> None:
         """Workflow tracks pipeline state through each phase.
@@ -396,14 +389,12 @@ class TestFinanceAnalysisWorkflow:
             assert step_result.status in ("success", "failure", "skipped"), (
                 f"Step '{step_name}' has invalid status: {step_result.status}"
             )
-            assert step_result.duration_ms >= 0, (
-                f"Step '{step_name}' has negative duration"
-            )
+            assert step_result.duration_ms >= 0, f"Step '{step_name}' has negative duration"
 
         # All steps should have succeeded in the happy path
-        assert all(
-            sr.status == "success" for sr in result.steps.values()
-        ), "Not all steps succeeded in happy-path pipeline"
+        assert all(sr.status == "success" for sr in result.steps.values()), (
+            "Not all steps succeeded in happy-path pipeline"
+        )
 
     def test_workflow_custom_steps(self) -> None:
         """Workflow supports custom step hooks injected at construction.
@@ -496,6 +487,7 @@ class TestWorkflowStep:
     def successful_fn(self) -> Callable[..., Any]:
         def fn(**kwargs: Any) -> dict[str, Any]:
             return {"processed": True, "data": kwargs.get("data")}
+
         return fn
 
     @pytest.fixture
@@ -503,6 +495,7 @@ class TestWorkflowStep:
         def fn(**kwargs: Any) -> dict[str, Any]:
             msg = kwargs.get("msg", "Step execution failed")
             raise RuntimeError(msg)
+
         return fn
 
     # ── Tests ─────────────────────────────────────────────────────────────
@@ -551,9 +544,7 @@ class TestWorkflowStep:
         result = step.execute(data="test")
 
         assert result.status == "success"
-        assert fn.call_count == 2, (
-            f"Expected 2 calls (1 failure + 1 retry), got {fn.call_count}"
-        )
+        assert fn.call_count == 2, f"Expected 2 calls (1 failure + 1 retry), got {fn.call_count}"
 
     def test_step_retry_exhaustion(self) -> None:
         """``WorkflowStep`` returns failure after exhausting all retries."""
@@ -620,9 +611,7 @@ class TestWorkflowStep:
         result = step.execute()
 
         assert result.status == "success"
-        assert result.duration_ms >= 10, (
-            f"Expected at least 10ms, got {result.duration_ms}"
-        )
+        assert result.duration_ms >= 10, f"Expected at least 10ms, got {result.duration_ms}"
 
     def test_step_result_defaults(self) -> None:
         """``StepResult`` provides sensible defaults for optional fields."""
@@ -675,6 +664,4 @@ class TestWorkflowStep:
             skip_condition=broken_condition,
         )
         result = step.execute()
-        assert result.status == "success", (
-            "Step should execute when skip_condition raises an error"
-        )
+        assert result.status == "success", "Step should execute when skip_condition raises an error"

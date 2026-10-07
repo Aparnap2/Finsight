@@ -68,12 +68,8 @@ class CommentaryRenderInput:
         entity_name: str = "",
     ) -> "CommentaryRenderInput":
         """Build from a flat list of assertions, partitioned by support level."""
-        verified = [
-            a for a in assertions if a.support_level == SupportLevel.VERIFIED
-        ]
-        probable = [
-            a for a in assertions if a.support_level == SupportLevel.PROBABLE
-        ]
+        verified = [a for a in assertions if a.support_level == SupportLevel.VERIFIED]
+        probable = [a for a in assertions if a.support_level == SupportLevel.PROBABLE]
         weak = [
             a
             for a in assertions
@@ -94,19 +90,11 @@ def build_render_prompt(render_input: CommentaryRenderInput) -> str:
 
     The prompt strictly constrains the LLM to rendering only.
     """
-    sections = "\n".join(
-        f"- {s.replace('_', ' ').title()}" for s in render_input.required_sections
-    )
+    sections = "\n".join(f"- {s.replace('_', ' ').title()}" for s in render_input.required_sections)
 
-    verified = _format_assertions(
-        render_input.verified_assertions, "VERIFIED FACTS"
-    )
-    probable = _format_assertions(
-        render_input.probable_assertions, "PROBABLE CAUSES"
-    )
-    weak = _format_assertions(
-        render_input.weak_assertions, "HYPOTHESES / UNCERTAIN"
-    )
+    verified = _format_assertions(render_input.verified_assertions, "VERIFIED FACTS")
+    probable = _format_assertions(render_input.probable_assertions, "PROBABLE CAUSES")
+    weak = _format_assertions(render_input.weak_assertions, "HYPOTHESES / UNCERTAIN")
     degraded = _format_degraded_modes(render_input.degraded_modes)
 
     entity_display = render_input.entity_name or "the company"
@@ -162,9 +150,7 @@ def _format_assertions(assertions: list[Assertion], header: str) -> str:
     lines = [f"## {header}"]
     for a in assertions:
         conf = f"confidence={a.confidence:.2f}" if a.confidence else ""
-        support = (
-            f"support={a.support_level.value}" if a.support_level else ""
-        )
+        support = f"support={a.support_level.value}" if a.support_level else ""
         meta = f" [{conf}, {support}]" if conf or support else ""
         lines.append(f"- [{a.type.value}] {a.text}{meta}")
     return "\n".join(lines)
@@ -175,9 +161,7 @@ def _format_degraded_modes(modes: list[str]) -> str:
         return "## DEGRADED MODES\n(none)"
     lines = ["## DEGRADED MODES"]
     for m in modes:
-        lines.append(
-            f"- {m.replace('_', ' ').title()}: Data quality is reduced for this item."
-        )
+        lines.append(f"- {m.replace('_', ' ').title()}: Data quality is reduced for this item.")
     return "\n".join(lines)
 
 
@@ -208,9 +192,7 @@ def render_commentary(
 def _fallback_render(render_input: CommentaryRenderInput) -> str:
     """Non-LLM fallback that produces structured commentary from assertions only."""
     lines = []
-    lines.append(
-        f"# Financial Commentary — {render_input.entity_name or 'Company'}"
-    )
+    lines.append(f"# Financial Commentary — {render_input.entity_name or 'Company'}")
     lines.append(f"Period: {render_input.period}")
     lines.append("")
 
@@ -220,17 +202,13 @@ def _fallback_render(render_input: CommentaryRenderInput) -> str:
         v = render_input.verified_assertions[0]
         lines.append(f"- {v.text}")
         n_material = sum(
-            1
-            for a in render_input.verified_assertions
-            if a.type == AssertionType.NUMERIC
+            1 for a in render_input.verified_assertions if a.type == AssertionType.NUMERIC
         )
         if n_material > 1:
             lines.append(f"- {n_material} material variances identified.")
     if render_input.probable_assertions:
         p = render_input.probable_assertions[0]
-        lines.append(
-            f"- {p.text} (probable cause, confidence: {p.confidence:.0%})"
-        )
+        lines.append(f"- {p.text} (probable cause, confidence: {p.confidence:.0%})")
     if render_input.weak_assertions:
         lines.append(
             f"- {len(render_input.weak_assertions)} hypotheses require further investigation."
@@ -252,9 +230,7 @@ def _fallback_render(render_input: CommentaryRenderInput) -> str:
         lines.append("## Root Causes")
         for a in render_input.probable_assertions:
             if a.type == AssertionType.CAUSAL:
-                lines.append(
-                    f"- {a.text} (confidence: {a.confidence:.0%})"
-                )
+                lines.append(f"- {a.text} (confidence: {a.confidence:.0%})")
         lines.append("")
 
     # Hypotheses
@@ -328,11 +304,7 @@ def generate_commentary(
 
     sections = _parse_sections_from_text(text)
     if not sections:
-        sections = [
-            CommentarySection(
-                section_type="executive_summary", content=text
-            )
-        ]
+        sections = [CommentarySection(section_type="executive_summary", content=text)]
 
     return CommentaryDraft(
         sections=sections,
@@ -354,17 +326,11 @@ def _parse_sections_from_text(text: str) -> list[CommentarySection]:
         section_type = heading.strip().lower().replace(" ", "_")
         content = content.strip()
         if content:
-            sections.append(
-                CommentarySection(
-                    section_type=section_type, content=content
-                )
-            )
+            sections.append(CommentarySection(section_type=section_type, content=content))
     return sections
 
 
-def commentary_node(
-    state: PipelineState, llm_client: LLMClient | None = None
-) -> dict[str, Any]:
+def commentary_node(state: PipelineState, llm_client: LLMClient | None = None) -> dict[str, Any]:
     """LangGraph node: produce commentary from pipeline state.
 
     This node bridges the pipeline state to the new assertion-based
@@ -401,11 +367,7 @@ def commentary_node(
 
     sections = _parse_sections_from_text(text)
     if not sections:
-        sections = [
-            CommentarySection(
-                section_type="executive_summary", content=text
-            )
-        ]
+        sections = [CommentarySection(section_type="executive_summary", content=text)]
 
     draft = CommentaryDraft(
         sections=sections,

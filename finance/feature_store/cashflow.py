@@ -102,8 +102,7 @@ def build_cashflow_features(df: pl.DataFrame) -> pl.DataFrame:
     )
     outflow = (
         df.filter(
-            pl.col("account_id").str.starts_with("5")
-            | pl.col("account_id").str.starts_with("6")
+            pl.col("account_id").str.starts_with("5") | pl.col("account_id").str.starts_with("6")
         )
         .group_by(["entity_id", "period"])
         .agg(pl.col("amount").abs().sum().alias("cashflow_outflow_amount"))

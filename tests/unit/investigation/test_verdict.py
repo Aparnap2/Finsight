@@ -51,10 +51,7 @@ from finance.investigation.verdict import (
 SITUATION = "FS-2026-0916-00231"
 OTHER_SITUATION = "FS-2026-0916-00999"
 VARIANCE = Decimal("10000")
-POLICY = (
-    "legacy correction always needs human approval plus valid "
-    "account code plus balanced batch"
-)
+POLICY = "legacy correction always needs human approval plus valid account code plus balanced batch"
 
 EV_RAZORPAY = "razorpay:stl-231:aaa111"
 EV_QUICKBOOKS = "quickbooks:acc-231:bbb222"
@@ -226,9 +223,7 @@ def test_r1_fs231_full_walk() -> None:
     assert set(handoff) == {"findings", "correlations", "hypotheses", "proposal"}
     assert_no_preauthorized(handoff)
     with pytest.raises(ValueError, match="PROMOTION_REFUSED"):
-        refuse_promotion(
-            from_kind="HYPOTHESIS", to_kind="FACTUAL_FINDING", item_id="HYP-V15"
-        )
+        refuse_promotion(from_kind="HYPOTHESIS", to_kind="FACTUAL_FINDING", item_id="HYP-V15")
     with pytest.raises(ValueError, match="HYPOTHESIS_AS_FACT"):
         refuse_hypothesis_as_fact("HYP-V15")
 
@@ -356,14 +351,8 @@ def test_r5_kind_tags_survive_round_trip() -> None:
     finding_json = finding.model_dump_json()
     hypothesis_json = hypothesis.model_dump_json()
     assert FactualFinding.model_validate_json(finding_json).model_dump_json()
-    assert (
-        finding_json
-        == FactualFinding.model_validate_json(finding_json).model_dump_json()
-    )
-    assert (
-        hypothesis_json
-        == Hypothesis.model_validate_json(hypothesis_json).model_dump_json()
-    )
+    assert finding_json == FactualFinding.model_validate_json(finding_json).model_dump_json()
+    assert hypothesis_json == Hypothesis.model_validate_json(hypothesis_json).model_dump_json()
     assert Hypothesis.model_validate_json(hypothesis_json).confidence == "MEDIUM"
     swapped = json.loads(finding_json)
     swapped["kind"] = "HYPOTHESIS"
@@ -389,9 +378,7 @@ def test_r6_proposal_without_evidence_refused() -> None:
             policy_pointer=POLICY,
         )
     with pytest.raises(ValueError, match="D3 evidence gate"):
-        require_evidence_for_proposal(
-            SimpleNamespace(evidence_ids=(), hypothesis_count=1)
-        )
+        require_evidence_for_proposal(SimpleNamespace(evidence_ids=(), hypothesis_count=1))
     with pytest.raises(ValueError, match="D3 evidence gate"):
         require_evidence_for_proposal(
             SimpleNamespace(evidence_ids=(EV_RAZORPAY,), hypothesis_count=0)
@@ -710,9 +697,7 @@ def test_module_hygiene_no_side_effects() -> None:
 
 def test_cross_case_finding_refused() -> None:
     """Assembled findings must carry the target situation id (review)."""
-    foreign = make_finding_v11().model_copy(
-        update={"situation_id": OTHER_SITUATION}
-    )
+    foreign = make_finding_v11().model_copy(update={"situation_id": OTHER_SITUATION})
     with pytest.raises(ValueError, match="CROSS_CASE_REFUSED"):
         assemble_verdict(
             situation_id=SITUATION,
@@ -728,9 +713,7 @@ def test_cross_case_finding_refused() -> None:
 
 def test_cross_case_proposal_refused() -> None:
     """An assembled proposal bound elsewhere cannot complete a verdict."""
-    proposal = make_proposal_v16().model_copy(
-        update={"situation_id": OTHER_SITUATION}
-    )
+    proposal = make_proposal_v16().model_copy(update={"situation_id": OTHER_SITUATION})
     with pytest.raises(ValueError, match="CROSS_CASE_REFUSED"):
         assemble_verdict(
             situation_id=SITUATION,

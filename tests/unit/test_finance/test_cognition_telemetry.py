@@ -13,9 +13,7 @@ class TestReasoningTelemetry:
         with tempfile.TemporaryDirectory() as tmp:
             telemetry = ReasoningTelemetry(output_dir=tmp)
             state = ReasoningState(query="test query")
-            state.record_step(
-                node_name="planner", result={"plan": ["a"]}, confidence=0.5
-            )
+            state.record_step(node_name="planner", result={"plan": ["a"]}, confidence=0.5)
             state.overall_confidence = 0.85
             state.loop_decision = "finalize"
             path = telemetry.capture(run_id="test_run_001", state=state)
@@ -77,18 +75,20 @@ class TestReasoningTelemetry:
             a.latency_ms = 42.5
             a.retry_count = 0
             state.action_plan = plan
-            state.context["action_traces"] = [{
-                "action_id": a.id,
-                "objective": a.objective,
-                "tool": a.tool,
-                "status": "success",
-                "latency_ms": 42.5,
-                "retries": 0,
-                "assertion_count": 2,
-                "evidence_count": 0,
-                "validation_status": "unchecked",
-                "error": "",
-            }]
+            state.context["action_traces"] = [
+                {
+                    "action_id": a.id,
+                    "objective": a.objective,
+                    "tool": a.tool,
+                    "status": "success",
+                    "latency_ms": 42.5,
+                    "retries": 0,
+                    "assertion_count": 2,
+                    "evidence_count": 0,
+                    "validation_status": "unchecked",
+                    "error": "",
+                }
+            ]
             path = telemetry.capture(run_id="test_traces", state=state)
             data = json.loads(path.read_text())
             assert "action_traces" in data

@@ -29,9 +29,7 @@ logger = logging.getLogger(__name__)
 def _require_record(name: str, value: object) -> PaymentRecord:
     """Narrow an argument to ``PaymentRecord``, rejecting anything else."""
     if not isinstance(value, PaymentRecord):
-        raise InvariantViolation(
-            f"{name} must be a PaymentRecord, got {type(value).__name__}."
-        )
+        raise InvariantViolation(f"{name} must be a PaymentRecord, got {type(value).__name__}.")
     return value
 
 
@@ -39,8 +37,7 @@ def _require_tolerance(value: object) -> ReconciliationTolerance:
     """Narrow an argument to ``ReconciliationTolerance``."""
     if not isinstance(value, ReconciliationTolerance):
         raise ToleranceError(
-            "tolerance must be a ReconciliationTolerance, "
-            f"got {type(value).__name__}."
+            f"tolerance must be a ReconciliationTolerance, got {type(value).__name__}."
         )
     return value
 
@@ -125,8 +122,7 @@ def find_match(
         if candidate.currency == target.currency
         and (
             window_value is None
-            or abs((candidate.occurred_at - target.occurred_at).total_seconds())
-            <= window_value
+            or abs((candidate.occurred_at - target.occurred_at).total_seconds()) <= window_value
         )
     ]
     base = abs(target.net)

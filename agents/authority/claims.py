@@ -108,9 +108,7 @@ def _parse_ref(
     # Any caller-supplied metadata must match the authoritative record.
     for field_name in ("source_id", "digest", "provenance", "ttl_seconds"):
         if field_name in raw and raw[field_name] != getattr(rec, field_name):
-            raise AuthorityError(
-                f"Evidence {evidence_id!r} metadata mismatch on {field_name!r}."
-            )
+            raise AuthorityError(f"Evidence {evidence_id!r} metadata mismatch on {field_name!r}.")
     if "captured_at" in raw:
         supplied = _parse_time(raw["captured_at"], "captured_at")
         if supplied != rec.captured_at:
@@ -133,14 +131,10 @@ def _parse_refs(
     """Parse a non-empty evidence ref sequence via the registry."""
     if not isinstance(raw, (list, tuple)) or len(raw) == 0:
         raise AuthorityError("evidence_refs must be a non-empty sequence.")
-    return tuple(
-        _parse_ref(item, now=now, registry=registry) for item in raw
-    )
+    return tuple(_parse_ref(item, now=now, registry=registry) for item in raw)
 
 
-def _check_refs_fresh(
-    refs: tuple[EvidenceReference, ...], moment: datetime, owner: str
-) -> None:
+def _check_refs_fresh(refs: tuple[EvidenceReference, ...], moment: datetime, owner: str) -> None:
     """Raise AuthorityError when refs are empty, unissued, or stale at moment."""
     if len(refs) == 0:
         raise AuthorityError(f"{owner} requires at least one evidence ref.")
@@ -190,9 +184,7 @@ class AgentClaim:
     def __post_init__(self) -> None:
         """Validate text, confidence, timestamp, and ref issuance + freshness."""
         _require_non_blank(self.text, "text")
-        if isinstance(self.confidence, bool) or not isinstance(
-            self.confidence, (int, float)
-        ):
+        if isinstance(self.confidence, bool) or not isinstance(self.confidence, (int, float)):
             raise AuthorityError("confidence must be a number.")
         if not 0.0 <= float(self.confidence) < 1.0:
             raise AuthorityError("confidence must lie in [0, 1); 1.0 is unsupported.")
@@ -244,9 +236,7 @@ class AgentProposal:
         """Validate advisory intent, text fields, timestamp, and freshness."""
         _require_non_blank(self.proposal_type, "proposal_type")
         if self.proposal_type not in _ADVISORY_PROPOSAL_TYPES:
-            raise AuthorityError(
-                f"Proposal type {self.proposal_type!r} is not an advisory intent."
-            )
+            raise AuthorityError(f"Proposal type {self.proposal_type!r} is not an advisory intent.")
         # Capability verbs must never appear as business intent.
         if self.proposal_type in {c.value for c in AgentCapability}:
             raise AuthorityError(
@@ -291,9 +281,7 @@ class AuthorityBoundary:
     """Advisory capabilities that succeed (read-only, non-authoritative)."""
 
     # Back-compat alias — tests historically reference ALLOWED_ACTIONS.
-    ALLOWED_ACTIONS: frozenset[str] = frozenset(
-        {c.value for c in ALLOWED_CAPABILITIES}
-    )
+    ALLOWED_ACTIONS: frozenset[str] = frozenset({c.value for c in ALLOWED_CAPABILITIES})
 
     DENIED_ACTIONS: frozenset[str] = frozenset(
         {
@@ -344,9 +332,7 @@ class AmbiguityOutcome:
     detail: str
 
 
-def correlate_evidence(
-    refs: Sequence[EvidenceReference], *, now: datetime
-) -> str:
+def correlate_evidence(refs: Sequence[EvidenceReference], *, now: datetime) -> str:
     """Summarise correlated pointers as an advisory, uncertain statement."""
     if len(refs) == 0:
         raise AuthorityError("correlate_evidence requires at least one ref.")
@@ -393,9 +379,7 @@ def explain_proposal(proposal: AgentProposal) -> str:
     )
 
 
-def require_tool_result(
-    *, tool_name: str, result: object, available: Mapping[str, bool]
-) -> object:
+def require_tool_result(*, tool_name: str, result: object, available: Mapping[str, bool]) -> object:
     """Return the tool result, or raise when the tool is unavailable."""
     _require_non_blank(tool_name, "tool_name")
     if available.get(tool_name) is not True or result is None:
@@ -446,9 +430,7 @@ def validate_claim_dict(
     # Enforce freshness at creation time via registry as well.
     for ref in refs:
         registry.validate_reference(ref, created_at)
-    return AgentClaim(
-        text=text, confidence=confidence, evidence_refs=refs, created_at=created_at
-    )
+    return AgentClaim(text=text, confidence=confidence, evidence_refs=refs, created_at=created_at)
 
 
 def validate_proposal_dict(
@@ -468,9 +450,7 @@ def validate_proposal_dict(
         raise AuthorityError("Proposal payload must be a mapping.")
     for smuggled in _SMUGGLED_PROPOSAL_KEYS:
         if smuggled in data:
-            raise AuthorityError(
-                f"Proposal payload smuggles authoritative key {smuggled!r}."
-            )
+            raise AuthorityError(f"Proposal payload smuggles authoritative key {smuggled!r}.")
     for key in ("proposal_type", "uncertainty", "rationale", "created_at", "evidence_refs"):
         if key not in data:
             # Back-compat: older tests used ``action`` as proposal_type.

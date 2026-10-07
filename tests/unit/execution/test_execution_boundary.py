@@ -11,9 +11,10 @@ RED gap coverage for Commit 4:
 from __future__ import annotations
 
 import threading
+from pathlib import Path
 from typing import Any
 
-from sqlalchemy import create_engine
+from sqlalchemy import Table, create_engine
 
 from finance.accounting.errors import AccountingError
 from finance.accounting.mock import MockQuickBooksAdapter
@@ -34,7 +35,7 @@ class _Seed:
         from tests.unit.execution.test_executor import _TENANT
 
         self.tenant_id = tenant_id or _TENANT
-        self.repo = ExceptionRepository(engine)  # type: ignore[arg-type]
+        self.repo = ExceptionRepository(engine)
         self.approved, self.proposal, self.approval = _approve(
             engine, self.repo, exc_id, approval_key=f"{exc_id}-approval", tenant_id=self.tenant_id
         )
@@ -88,7 +89,7 @@ class TestSequentialReplay:
 
 
 class TestConcurrencyBoundary:
-    def test_concurrent_duplicate_returns_typed_outcome(self, tmp_path) -> None:
+    def test_concurrent_duplicate_returns_typed_outcome(self, tmp_path: Path) -> None:
         db = tmp_path / "persist_boundary_c.db"
         engine = create_engine(
             f"sqlite:///{db}",
@@ -96,6 +97,12 @@ class TestConcurrencyBoundary:
         )
         adapter = MockQuickBooksAdapter()
         seed = _Seed(engine)
+        # Serial schema setup: create all tables once before the threads
+        # race, so the concurrency under test is DML-only. Concurrent
+        # create_all DDL against one SQLite file is a test-harness race,
+        # not executor behavior.
+        warmup = _make_executor(adapter, engine)
+        assert warmup._store.seen(seed.tenant_id, "warmup-key") is False
         results: list[Any] = []
         errors: list[BaseException] = []
         barrier = threading.Barrier(2)
@@ -123,6 +130,7 @@ class TestConcurrencyBoundary:
         assert results[0].execution_id == results[1].execution_id
         # exactly one terminal authoritative outcome for the same exe
         final = ExceptionRepository(engine).get(seed.approved.exception_id)
+        assert final is not None
         assert final.state is ExceptionState.CLOSED
 
     def test_persistence_error_maps_to_typed_result(self) -> None:
@@ -130,7 +138,9 @@ class TestConcurrencyBoundary:
         adapter = MockQuickBooksAdapter()
         seed = _Seed(engine)
 
-        ExceptionRow.__table__.drop(engine)  # type: ignore[arg-type]
+        table = ExceptionRow.__table__
+        assert isinstance(table, Table)
+        table.drop(engine)
         result: Any = None
         raised: BaseException | None = None
         try:
@@ -161,6 +171,7 @@ class TestConcurrencyBoundary:
         creates = [c for c in getattr(adapter, "calls", []) if c.op == "create_correcting_entry"]
         assert creates == []
         row = ExceptionRepository(engine).get(seed.approved.exception_id)
+        assert row is not None
         assert row.state is not ExceptionState.CLOSED
 
 

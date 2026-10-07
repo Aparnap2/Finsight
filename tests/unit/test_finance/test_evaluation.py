@@ -1,4 +1,5 @@
 """Tests for Phase 4 — Evaluation (golden datasets, metrics, runner, regression)."""
+
 from __future__ import annotations
 
 from decimal import Decimal
@@ -106,7 +107,10 @@ class TestGoldenDataset:
 
     def test_metadata_category_tags(self) -> None:
         meta = DatasetMetadata(
-            id="a", name="A", category="data_quality", subcategory="missing",
+            id="a",
+            name="A",
+            category="data_quality",
+            subcategory="missing",
             difficulty="advanced",
         )
         assert meta.category == "data_quality"
@@ -224,12 +228,20 @@ class TestUnsupportedClaimRate:
     def test_all_supported(self) -> None:
         assertions = [
             Assertion(
-                id="a1", type=AssertionType.NUMERIC, text="r1",
-                support_level=SupportLevel.VERIFIED, confidence=0.9, evidence_ids=["e1"],
+                id="a1",
+                type=AssertionType.NUMERIC,
+                text="r1",
+                support_level=SupportLevel.VERIFIED,
+                confidence=0.9,
+                evidence_ids=["e1"],
             ),
             Assertion(
-                id="a2", type=AssertionType.NUMERIC, text="r2",
-                support_level=SupportLevel.PROBABLE, confidence=0.8, evidence_ids=["e2"],
+                id="a2",
+                type=AssertionType.NUMERIC,
+                text="r2",
+                support_level=SupportLevel.PROBABLE,
+                confidence=0.8,
+                evidence_ids=["e2"],
             ),
         ]
         score = UnsupportedClaimRate.compute(assertions)
@@ -238,12 +250,18 @@ class TestUnsupportedClaimRate:
     def test_none_supported(self) -> None:
         assertions = [
             Assertion(
-                id="a1", type=AssertionType.NUMERIC, text="r1",
-                support_level=SupportLevel.INSUFFICIENT, confidence=0.1,
+                id="a1",
+                type=AssertionType.NUMERIC,
+                text="r1",
+                support_level=SupportLevel.INSUFFICIENT,
+                confidence=0.1,
             ),
             Assertion(
-                id="a2", type=AssertionType.NUMERIC, text="r2",
-                support_level=SupportLevel.WEAK, confidence=0.3,
+                id="a2",
+                type=AssertionType.NUMERIC,
+                text="r2",
+                support_level=SupportLevel.WEAK,
+                confidence=0.3,
             ),
         ]
         score = UnsupportedClaimRate.compute(assertions)
@@ -252,12 +270,19 @@ class TestUnsupportedClaimRate:
     def test_mixed(self) -> None:
         assertions = [
             Assertion(
-                id="a1", type=AssertionType.NUMERIC, text="r1",
-                support_level=SupportLevel.VERIFIED, confidence=0.9, evidence_ids=["e1"],
+                id="a1",
+                type=AssertionType.NUMERIC,
+                text="r1",
+                support_level=SupportLevel.VERIFIED,
+                confidence=0.9,
+                evidence_ids=["e1"],
             ),
             Assertion(
-                id="a2", type=AssertionType.NUMERIC, text="r2",
-                support_level=SupportLevel.INSUFFICIENT, confidence=0.1,
+                id="a2",
+                type=AssertionType.NUMERIC,
+                text="r2",
+                support_level=SupportLevel.INSUFFICIENT,
+                confidence=0.1,
             ),
         ]
         score = UnsupportedClaimRate.compute(assertions)
@@ -275,8 +300,12 @@ class TestEvidenceCoverage:
     def test_perfect(self) -> None:
         assertions = [
             Assertion(
-                id="a1", type=AssertionType.NUMERIC, text="r1",
-                support_level=SupportLevel.VERIFIED, confidence=0.9, evidence_ids=["e1"],
+                id="a1",
+                type=AssertionType.NUMERIC,
+                text="r1",
+                support_level=SupportLevel.VERIFIED,
+                confidence=0.9,
+                evidence_ids=["e1"],
             ),
         ]
         score = EvidenceCoverage().compute(assertions)
@@ -285,8 +314,11 @@ class TestEvidenceCoverage:
     def test_exceeds_target(self) -> None:
         assertions = [
             Assertion(
-                id="a1", type=AssertionType.NUMERIC, text="r1",
-                support_level=SupportLevel.VERIFIED, confidence=0.9,
+                id="a1",
+                type=AssertionType.NUMERIC,
+                text="r1",
+                support_level=SupportLevel.VERIFIED,
+                confidence=0.9,
                 evidence_ids=["e1", "e2", "e3"],
             ),
         ]
@@ -296,8 +328,12 @@ class TestEvidenceCoverage:
     def test_below_target(self) -> None:
         assertions = [
             Assertion(
-                id="a1", type=AssertionType.NUMERIC, text="r1",
-                support_level=SupportLevel.VERIFIED, confidence=0.9, evidence_ids=[],
+                id="a1",
+                type=AssertionType.NUMERIC,
+                text="r1",
+                support_level=SupportLevel.VERIFIED,
+                confidence=0.9,
+                evidence_ids=[],
             ),
         ]
         score = EvidenceCoverage().compute(assertions)
@@ -306,13 +342,19 @@ class TestEvidenceCoverage:
     def test_custom_target(self) -> None:
         assertions = [
             Assertion(
-                id="a1", type=AssertionType.NUMERIC, text="r1",
-                support_level=SupportLevel.VERIFIED, confidence=0.9,
+                id="a1",
+                type=AssertionType.NUMERIC,
+                text="r1",
+                support_level=SupportLevel.VERIFIED,
+                confidence=0.9,
                 evidence_ids=["e1", "e2"],
             ),
             Assertion(
-                id="a2", type=AssertionType.NUMERIC, text="r2",
-                support_level=SupportLevel.VERIFIED, confidence=0.9,
+                id="a2",
+                type=AssertionType.NUMERIC,
+                text="r2",
+                support_level=SupportLevel.VERIFIED,
+                confidence=0.9,
                 evidence_ids=["e1", "e2"],
             ),
         ]
@@ -331,13 +373,19 @@ class TestPolicyCompliance:
     def test_all_compliant(self) -> None:
         assertions = [
             Assertion(
-                id="a1", type=AssertionType.NUMERIC, text="r1",
-                support_level=SupportLevel.VERIFIED, confidence=0.9,
+                id="a1",
+                type=AssertionType.NUMERIC,
+                text="r1",
+                support_level=SupportLevel.VERIFIED,
+                confidence=0.9,
                 max_allowed_action="route_for_review",
             ),
             Assertion(
-                id="a2", type=AssertionType.NUMERIC, text="r2",
-                support_level=SupportLevel.VERIFIED, confidence=0.9,
+                id="a2",
+                type=AssertionType.NUMERIC,
+                text="r2",
+                support_level=SupportLevel.VERIFIED,
+                confidence=0.9,
                 max_allowed_action="notify",
             ),
         ]
@@ -347,13 +395,19 @@ class TestPolicyCompliance:
     def test_mixed(self) -> None:
         assertions = [
             Assertion(
-                id="a1", type=AssertionType.NUMERIC, text="r1",
-                support_level=SupportLevel.VERIFIED, confidence=0.9,
+                id="a1",
+                type=AssertionType.NUMERIC,
+                text="r1",
+                support_level=SupportLevel.VERIFIED,
+                confidence=0.9,
                 max_allowed_action="route_for_review",
             ),
             Assertion(
-                id="a2", type=AssertionType.NUMERIC, text="r2",
-                support_level=SupportLevel.VERIFIED, confidence=0.9,
+                id="a2",
+                type=AssertionType.NUMERIC,
+                text="r2",
+                support_level=SupportLevel.VERIFIED,
+                confidence=0.9,
                 max_allowed_action="block",
             ),
         ]
@@ -615,12 +669,17 @@ class TestEvaluationRunner:
         assert reports[0].dataset_id == "d"
 
     def test_run_with_actions(self) -> None:
-        plan = ActionPlan(actions=[
-            Action(
-                objective="compute_variance", status=ActionStatus.SUCCESS,
-                latency_ms=500, retry_count=0, tool="ve",
-            ),
-        ])
+        plan = ActionPlan(
+            actions=[
+                Action(
+                    objective="compute_variance",
+                    status=ActionStatus.SUCCESS,
+                    latency_ms=500,
+                    retry_count=0,
+                    tool="ve",
+                ),
+            ]
+        )
         ds = GoldenDataset(
             metadata=DatasetMetadata(id="act_test", name="Action Test", category="test"),
             input=DatasetInput(query="test"),
@@ -645,9 +704,11 @@ class TestEvaluationRunner:
 class TestComparator:
     def test_identical_reports(self) -> None:
         r = EvaluationReport(
-            dataset_id="d1", overall_score=0.9,
+            dataset_id="d1",
+            overall_score=0.9,
             runtime_metrics={"planning_accuracy": 1.0},
-            business_metrics={"variance_accuracy": 1.0}, passed=True,
+            business_metrics={"variance_accuracy": 1.0},
+            passed=True,
         )
         c = Comparator(
             runtime_thresholds={"planning_accuracy": Threshold(warn=0.0, break_=0.0)},
@@ -659,14 +720,18 @@ class TestComparator:
 
     def test_regression_detected(self) -> None:
         base = EvaluationReport(
-            dataset_id="d1", overall_score=0.9,
+            dataset_id="d1",
+            overall_score=0.9,
             runtime_metrics={"planning_accuracy": 1.0},
-            business_metrics={"variance_accuracy": 1.0}, passed=True,
+            business_metrics={"variance_accuracy": 1.0},
+            passed=True,
         )
         curr = EvaluationReport(
-            dataset_id="d1", overall_score=0.5,
+            dataset_id="d1",
+            overall_score=0.5,
             runtime_metrics={"planning_accuracy": 0.5},
-            business_metrics={"variance_accuracy": 1.0}, passed=True,
+            business_metrics={"variance_accuracy": 1.0},
+            passed=True,
         )
         c = Comparator(
             runtime_thresholds={"planning_accuracy": Threshold(warn=0.0, break_=0.3)},
@@ -677,12 +742,18 @@ class TestComparator:
 
     def test_new_failures(self) -> None:
         base = EvaluationReport(
-            dataset_id="d1", overall_score=1.0,
-            runtime_metrics={}, business_metrics={}, passed=True,
+            dataset_id="d1",
+            overall_score=1.0,
+            runtime_metrics={},
+            business_metrics={},
+            passed=True,
         )
         curr = EvaluationReport(
-            dataset_id="d2", overall_score=0.8,
-            runtime_metrics={}, business_metrics={}, passed=True,
+            dataset_id="d2",
+            overall_score=0.8,
+            runtime_metrics={},
+            business_metrics={},
+            passed=True,
         )
         c = Comparator()
         report = c.compare(baseline=[base], current=[base, curr])
@@ -690,16 +761,25 @@ class TestComparator:
 
     def test_resolved_failures(self) -> None:
         base = EvaluationReport(
-            dataset_id="d1", overall_score=0.8,
-            runtime_metrics={}, business_metrics={}, passed=True,
+            dataset_id="d1",
+            overall_score=0.8,
+            runtime_metrics={},
+            business_metrics={},
+            passed=True,
         )
         base2 = EvaluationReport(
-            dataset_id="d2", overall_score=0.8,
-            runtime_metrics={}, business_metrics={}, passed=True,
+            dataset_id="d2",
+            overall_score=0.8,
+            runtime_metrics={},
+            business_metrics={},
+            passed=True,
         )
         curr = EvaluationReport(
-            dataset_id="d1", overall_score=0.8,
-            runtime_metrics={}, business_metrics={}, passed=True,
+            dataset_id="d1",
+            overall_score=0.8,
+            runtime_metrics={},
+            business_metrics={},
+            passed=True,
         )
         c = Comparator()
         report = c.compare(baseline=[base, base2], current=[curr])
@@ -707,14 +787,18 @@ class TestComparator:
 
     def test_delta_computation(self) -> None:
         base = EvaluationReport(
-            dataset_id="d1", overall_score=1.0,
+            dataset_id="d1",
+            overall_score=1.0,
             runtime_metrics={"planning_accuracy": 1.0},
-            business_metrics={}, passed=True,
+            business_metrics={},
+            passed=True,
         )
         curr = EvaluationReport(
-            dataset_id="d1", overall_score=1.0,
+            dataset_id="d1",
+            overall_score=1.0,
             runtime_metrics={"planning_accuracy": 0.8},
-            business_metrics={}, passed=True,
+            business_metrics={},
+            passed=True,
         )
         c = Comparator()
         report = c.compare(baseline=[base], current=[curr])
@@ -729,8 +813,11 @@ class TestRegressionRunner:
         runner = RegressionRunner(baseline_dir=str(tmp_path / "baseline"))
         reports = [
             EvaluationReport(
-                dataset_id="d1", overall_score=1.0,
-                runtime_metrics={}, business_metrics={}, passed=True,
+                dataset_id="d1",
+                overall_score=1.0,
+                runtime_metrics={},
+                business_metrics={},
+                passed=True,
             )
         ]
         result = runner.run_and_compare(reports)
@@ -740,13 +827,19 @@ class TestRegressionRunner:
     def test_compare_against_baseline(self, tmp_path: Path) -> None:
         runner = RegressionRunner(baseline_dir=str(tmp_path / "baseline2"))
         r1 = EvaluationReport(
-            dataset_id="d1", overall_score=1.0,
-            runtime_metrics={"planning": 1.0}, business_metrics={}, passed=True,
+            dataset_id="d1",
+            overall_score=1.0,
+            runtime_metrics={"planning": 1.0},
+            business_metrics={},
+            passed=True,
         )
         runner.run_and_compare([r1])
         r2 = EvaluationReport(
-            dataset_id="d1", overall_score=0.9,
-            runtime_metrics={"planning": 0.9}, business_metrics={}, passed=True,
+            dataset_id="d1",
+            overall_score=0.9,
+            runtime_metrics={"planning": 0.9},
+            business_metrics={},
+            passed=True,
         )
         result = runner.run_and_compare([r2])
         assert result is not None
@@ -756,8 +849,11 @@ class TestRegressionRunner:
         runner = RegressionRunner(baseline_dir=str(tmp_path / "baseline3"))
         reports = [
             EvaluationReport(
-                dataset_id="d1", overall_score=0.95,
-                runtime_metrics={}, business_metrics={}, passed=True,
+                dataset_id="d1",
+                overall_score=0.95,
+                runtime_metrics={},
+                business_metrics={},
+                passed=True,
             )
         ]
         runner.save_baseline(reports)

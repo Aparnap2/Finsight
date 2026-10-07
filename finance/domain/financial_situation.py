@@ -162,9 +162,7 @@ class FinancialSituation(BaseModel):
     def _validate_situation_id(cls, value: str) -> str:
         """Require the ``FS-YYYY-MMDD-NNNNN`` id shape."""
         if _SITUATION_ID_PATTERN.fullmatch(value) is None:
-            raise ValueError(
-                f"situation_id must match FS-YYYY-MMDD-NNNNN, got {value!r}."
-            )
+            raise ValueError(f"situation_id must match FS-YYYY-MMDD-NNNNN, got {value!r}.")
         return value
 
     @field_validator("company_id")
@@ -173,8 +171,7 @@ class FinancialSituation(BaseModel):
         """Enforce the single-company boundary (meridian only)."""
         if value != "meridian":
             raise ValueError(
-                f"company_id must be 'meridian' (single-company boundary), "
-                f"got {value!r}."
+                f"company_id must be 'meridian' (single-company boundary), got {value!r}."
             )
         return value
 
@@ -182,12 +179,8 @@ class FinancialSituation(BaseModel):
     @classmethod
     def _validate_closed_at(cls, value: datetime | None) -> datetime | None:
         """Require timezone-aware timestamps for closed_at when set."""
-        if value is not None and (
-            value.tzinfo is None or value.utcoffset() is None
-        ):
-            raise ValueError(
-                "closed_at must be timezone-aware when set, got a naive datetime."
-            )
+        if value is not None and (value.tzinfo is None or value.utcoffset() is None):
+            raise ValueError("closed_at must be timezone-aware when set, got a naive datetime.")
         return value
 
     def variance(self) -> Decimal:

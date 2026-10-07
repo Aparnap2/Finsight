@@ -22,9 +22,7 @@ class TestZeroBudgetDivisionByZero:
     def test_zero_budget_set_exists(self, edge_cases: list[ExampleSet]) -> None:
         """The zero_budget_variance edge case should be present."""
         ids = {ex.example_id for ex in edge_cases}
-        assert "zero_budget_variance" in ids, (
-            "zero_budget_variance edge case not found"
-        )
+        assert "zero_budget_variance" in ids, "zero_budget_variance edge case not found"
 
     def test_zero_budget_variance_amount(self, edge_cases: list[ExampleSet]) -> None:
         """With zero budget, variance should equal actual."""
@@ -32,20 +30,15 @@ class TestZeroBudgetDivisionByZero:
             if ex.example_id != "zero_budget_variance":
                 continue
             for row in ex.data:
-                budget: Decimal | None = row.get("budget_amount")  
-                actual: Decimal | None = row.get("actual_amount")  
-                variance: Decimal | None = row.get("variance_amount")  
-                assert budget == Decimal("0.00"), (
-                    f"Expected zero budget, got {budget}"
-                )
+                budget: Decimal | None = row.get("budget_amount")
+                actual: Decimal | None = row.get("actual_amount")
+                variance: Decimal | None = row.get("variance_amount")
+                assert budget == Decimal("0.00"), f"Expected zero budget, got {budget}"
                 assert variance == actual, (
-                    f"With budget=0, variance should equal actual "
-                    f"({actual}), got {variance}"
+                    f"With budget=0, variance should equal actual ({actual}), got {variance}"
                 )
 
-    def test_zero_budget_variance_pct_is_none(
-        self, edge_cases: list[ExampleSet]
-    ) -> None:
+    def test_zero_budget_variance_pct_is_none(self, edge_cases: list[ExampleSet]) -> None:
         """Variance % should be None (undefined) when budget is zero."""
         for ex in edge_cases:
             if ex.example_id != "zero_budget_variance":
@@ -53,8 +46,7 @@ class TestZeroBudgetDivisionByZero:
             for i, row in enumerate(ex.data):
                 pct = row.get("variance_pct")
                 assert pct is None, (
-                    f"Row {i}: variance_pct should be None when budget is "
-                    f"zero, got {pct!r}"
+                    f"Row {i}: variance_pct should be None when budget is zero, got {pct!r}"
                 )
 
     @staticmethod
@@ -73,26 +65,20 @@ class TestZeroBudgetDivisionByZero:
         """The safe wrapper should compute correctly for non-zero budget."""
         result = self.safe_variance_pct(Decimal("55000.00"), Decimal("50000.00"))
         assert result is not None
-        assert result == Decimal("10.00"), (
-            f"Expected 10.00% variance, got {result}"
-        )
+        assert result == Decimal("10.00"), f"Expected 10.00% variance, got {result}"
 
 
 class TestNegativeAmounts:
     """Tests for negative amounts in financial data."""
 
-    def test_negative_invoice_amounts_present(
-        self, negative_amount_invoices: ExampleSet
-    ) -> None:
+    def test_negative_invoice_amounts_present(self, negative_amount_invoices: ExampleSet) -> None:
         """At least 2 invoices should have negative amounts."""
         negative_count = 0
         for row in negative_amount_invoices.data:
-            amount: Decimal | None = row.get("amount")  
+            amount: Decimal | None = row.get("amount")
             if amount is not None and amount < Decimal("0.00"):
                 negative_count += 1
-        assert negative_count >= 2, (
-            f"Expected at least 2 negative amounts, found {negative_count}"
-        )
+        assert negative_count >= 2, f"Expected at least 2 negative amounts, found {negative_count}"
 
     def test_negative_budget_set_exists(self, edge_cases: list[ExampleSet]) -> None:
         """negative_budget edge case should be present."""
@@ -135,9 +121,7 @@ class TestNegativeAmounts:
                 )
 
     @staticmethod
-    def _compute_variance(
-        actual: Decimal, budget: Decimal
-    ) -> tuple[Decimal, Decimal | None]:
+    def _compute_variance(actual: Decimal, budget: Decimal) -> tuple[Decimal, Decimal | None]:
         if budget == Decimal("0.00"):
             return actual - budget, None
         var = actual - budget
@@ -151,9 +135,7 @@ class TestCrossCurrency:
     def test_cross_currency_set_exists(self, edge_cases: list[ExampleSet]) -> None:
         """cross_currency_invoices edge case should be present."""
         ids = {ex.example_id for ex in edge_cases}
-        assert "cross_currency_invoices" in ids, (
-            "cross_currency_invoices edge case not found"
-        )
+        assert "cross_currency_invoices" in ids, "cross_currency_invoices edge case not found"
 
     def test_multiple_currencies_present(self, edge_cases: list[ExampleSet]) -> None:
         """The cross-currency set should contain at least 2 currencies."""
@@ -165,26 +147,20 @@ class TestCrossCurrency:
                 curr = row.get("currency")
                 if curr is not None:
                     currencies.add(str(curr))
-            assert len(currencies) >= 2, (
-                f"Expected at least 2 currencies, found {currencies}"
-            )
+            assert len(currencies) >= 2, f"Expected at least 2 currencies, found {currencies}"
 
     def test_non_usd_amounts_present(self, edge_cases: list[ExampleSet]) -> None:
         """At least one row should have a non-USD currency."""
         for ex in edge_cases:
             if ex.example_id != "cross_currency_invoices":
                 continue
-            has_non_usd = any(
-                str(row.get("currency", "")) != "USD" for row in ex.data
-            )
+            has_non_usd = any(str(row.get("currency", "")) != "USD" for row in ex.data)
             assert has_non_usd, "Expected at least one non-USD currency row"
 
     @staticmethod
     def requires_fx_rate(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Identify rows that need FX conversion (non-USD amounts)."""
-        return [
-            r for r in rows if str(r.get("currency", "")) != "USD"
-        ]
+        return [r for r in rows if str(r.get("currency", "")) != "USD"]
 
     def test_fx_required_rows_identified(self, edge_cases: list[ExampleSet]) -> None:
         """Non-USD rows should be correctly flagged as needing FX."""
@@ -192,9 +168,7 @@ class TestCrossCurrency:
             if ex.example_id != "cross_currency_invoices":
                 continue
             needs_fx = self.requires_fx_rate(ex.data)
-            assert len(needs_fx) >= 2, (
-                f"Expected at least 2 rows needing FX, got {len(needs_fx)}"
-            )
+            assert len(needs_fx) >= 2, f"Expected at least 2 rows needing FX, got {len(needs_fx)}"
 
 
 class TestFutureDatedInvoices:
@@ -203,9 +177,7 @@ class TestFutureDatedInvoices:
     def test_future_dated_set_exists(self, edge_cases: list[ExampleSet]) -> None:
         """future_dated_invoices edge case should be present."""
         ids = {ex.example_id for ex in edge_cases}
-        assert "future_dated_invoices" in ids, (
-            "future_dated_invoices edge case not found"
-        )
+        assert "future_dated_invoices" in ids, "future_dated_invoices edge case not found"
 
     @staticmethod
     def is_future_dated(invoice_date: str, period: str) -> bool:
@@ -230,9 +202,7 @@ class TestFutureDatedInvoices:
                     f"future-dated relative to period {period}"
                 )
 
-    def test_normal_invoice_not_future_dated(
-        self, good_invoices: ExampleSet
-    ) -> None:
+    def test_normal_invoice_not_future_dated(self, good_invoices: ExampleSet) -> None:
         """Good invoices should not be flagged as future-dated."""
         flagged = 0
         for row in good_invoices.data:
@@ -241,9 +211,7 @@ class TestFutureDatedInvoices:
             period = inv_date[:7]
             if self.is_future_dated(inv_date, period):
                 flagged += 1
-        assert flagged == 0, (
-            f"Found {flagged} future-dated invoices in good data"
-        )
+        assert flagged == 0, f"Found {flagged} future-dated invoices in good data"
 
 
 class TestMissingOptionalFields:
@@ -252,22 +220,16 @@ class TestMissingOptionalFields:
     def test_missing_department_set_exists(self, edge_cases: list[ExampleSet]) -> None:
         """missing_department_codes edge case should be present."""
         ids = {ex.example_id for ex in edge_cases}
-        assert "missing_department_codes" in ids, (
-            "missing_department_codes edge case not found"
-        )
+        assert "missing_department_codes" in ids, "missing_department_codes edge case not found"
 
-    def test_missing_vendor_detected(
-        self, missing_vendor_invoices: ExampleSet
-    ) -> None:
+    def test_missing_vendor_detected(self, missing_vendor_invoices: ExampleSet) -> None:
         """Rows with missing vendors should be identifiable."""
         missing_count = 0
         for row in missing_vendor_invoices.data:
             vendor = row.get("vendor_name")
             if vendor is None or vendor == "":
                 missing_count += 1
-        assert missing_count == 2, (
-            f"Expected 2 missing vendors, found {missing_count}"
-        )
+        assert missing_count == 2, f"Expected 2 missing vendors, found {missing_count}"
 
     @staticmethod
     def has_department(row: dict[str, Any]) -> bool:
@@ -284,9 +246,7 @@ class TestMissingOptionalFields:
             empty_row = ex.data[1]
             unassigned_row = ex.data[2]
 
-            assert not self.has_department(none_row), (
-                "None department should be flagged as absent"
-            )
+            assert not self.has_department(none_row), "None department should be flagged as absent"
             assert not self.has_department(empty_row), (
                 "Empty department should be flagged as absent"
             )
@@ -298,14 +258,10 @@ class TestMissingOptionalFields:
 class TestDormantPeriod:
     """Tests for periods with budget but zero actuals."""
 
-    def test_period_with_no_actuals_exists(
-        self, edge_cases: list[ExampleSet]
-    ) -> None:
+    def test_period_with_no_actuals_exists(self, edge_cases: list[ExampleSet]) -> None:
         """period_with_no_actuals edge case should be present."""
         ids = {ex.example_id for ex in edge_cases}
-        assert "period_with_no_actuals" in ids, (
-            "period_with_no_actuals edge case not found"
-        )
+        assert "period_with_no_actuals" in ids, "period_with_no_actuals edge case not found"
 
     def test_all_actuals_are_zero(self, edge_cases: list[ExampleSet]) -> None:
         """All rows in the dormant period should have zero actuals."""
@@ -313,7 +269,7 @@ class TestDormantPeriod:
             if ex.example_id != "period_with_no_actuals":
                 continue
             for i, row in enumerate(ex.data):
-                actual: Decimal | None = row.get("actual_amount")  
+                actual: Decimal | None = row.get("actual_amount")
                 assert actual == Decimal("0.00"), (
                     f"Row {i}: expected actual_amount of 0, got {actual}"
                 )
@@ -324,12 +280,8 @@ class TestDormantPeriod:
             if ex.example_id != "period_with_no_actuals":
                 continue
             periods = {row.get("period") for row in ex.data}
-            assert len(periods) == 1, (
-                f"Dormant period rows span multiple periods: {periods}"
-            )
-            assert "2026-06" in periods, (
-                f"Expected period 2026-06, got {periods}"
-            )
+            assert len(periods) == 1, f"Dormant period rows span multiple periods: {periods}"
+            assert "2026-06" in periods, f"Expected period 2026-06, got {periods}"
 
 
 class TestMultiPeriodBudgetRevisions:
@@ -355,13 +307,11 @@ class TestMultiPeriodBudgetRevisions:
                     str(row.get("account_id", "")),
                 )
                 ver = row.get("budget_version")
-                ver_int = int(ver) if isinstance(ver, Decimal) else int(str(ver))  
+                ver_int = int(ver) if isinstance(ver, Decimal) else int(str(ver))
                 key_to_versions.setdefault(key, []).append(ver_int)
 
             has_multi = any(len(v) > 1 for v in key_to_versions.values())
-            assert has_multi, (
-                "Expected at least one account/period with multiple budget versions"
-            )
+            assert has_multi, "Expected at least one account/period with multiple budget versions"
 
     def test_revision_amounts_differ(self, edge_cases: list[ExampleSet]) -> None:
         """Different versions of the same budget line should have different amounts."""
@@ -375,14 +325,12 @@ class TestMultiPeriodBudgetRevisions:
                     str(row.get("period", "")),
                     str(row.get("account_id", "")),
                 )
-                amount: Decimal | None = row.get("amount")  
+                amount: Decimal | None = row.get("amount")
                 if amount is not None:
                     key_to_amounts.setdefault(key, set()).add(amount)
 
             differing = any(len(v) > 1 for v in key_to_amounts.values())
-            assert differing, (
-                "Expected different amounts across budget versions"
-            )
+            assert differing, "Expected different amounts across budget versions"
 
 
 class TestExampleLibrary:
@@ -395,9 +343,7 @@ class TestExampleLibrary:
     def test_lookup_by_domain(self, example_library: Any) -> None:
         """Domain filtering should return the correct sets."""
         invoice_sets = example_library.by_domain("invoices")
-        assert len(invoice_sets) >= 4, (
-            f"Expected at least 4 invoice sets, got {len(invoice_sets)}"
-        )
+        assert len(invoice_sets) >= 4, f"Expected at least 4 invoice sets, got {len(invoice_sets)}"
         variance_sets = example_library.by_domain("variance")
         assert len(variance_sets) >= 3, (
             f"Expected at least 3 variance sets, got {len(variance_sets)}"
@@ -410,18 +356,14 @@ class TestExampleLibrary:
             f"Expected at least 1 edge-case set, got {len(edge_case_sets)}"
         )
         valid_sets = example_library.by_tag("valid")
-        assert len(valid_sets) >= 1, (
-            f"Expected at least 1 valid set, got {len(valid_sets)}"
-        )
+        assert len(valid_sets) >= 1, f"Expected at least 1 valid set, got {len(valid_sets)}"
 
     def test_get_edge_cases(self, example_library: Any) -> None:
         """Library should return edge cases from both CSV and programmatic sources."""
         edge_cases_list = example_library.get_edge_cases()
         assert len(edge_cases_list) > 0, "No edge cases registered"
         ids = {ex.example_id for ex in edge_cases_list}
-        assert "zero_budget_variance" in ids, (
-            "Programmatic edge case not found in library"
-        )
+        assert "zero_budget_variance" in ids, "Programmatic edge case not found in library"
 
     def test_round_trip_csv(self) -> None:
         """An ExampleSet should survive a CSV round-trip."""
@@ -450,6 +392,4 @@ class TestExampleLibrary:
         reader = csv.DictReader(io.StringIO(csv_str))
         rows = list(reader)
         assert len(rows) == 2, f"Expected 2 rows, got {len(rows)}"
-        assert rows[0]["a"] == "1.00", (
-            f"Round-trip value changed: {rows[0]['a']}"
-        )
+        assert rows[0]["a"] == "1.00", f"Round-trip value changed: {rows[0]['a']}"

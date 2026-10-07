@@ -967,11 +967,21 @@ class TestAuditSpine:
             read_expectation=_gapped,
         )
         with pytest.raises(VerificationRefused):
-            _run(_handoff(execution_id="exec-unknown-003", outcome="UNKNOWN",
-                          unknown_flag=True, result_key=None, result_sha256=None,
-                          accepted_total=None, rejected_total=None,
-                          accepted_count=0, rejected_count=0),
-                 store, log)
+            _run(
+                _handoff(
+                    execution_id="exec-unknown-003",
+                    outcome="UNKNOWN",
+                    unknown_flag=True,
+                    result_key=None,
+                    result_sha256=None,
+                    accepted_total=None,
+                    rejected_total=None,
+                    accepted_count=0,
+                    rejected_count=0,
+                ),
+                store,
+                log,
+            )
         # Act.
         entries = log.entries
         # Assert.
@@ -1118,15 +1128,11 @@ class TestRealCorruptResult:
         def _real_r2_corrupt(handoff: ExecutionHandoff) -> R2Observation:
             assert handoff.result_key is not None
             fresh = read_result_bytes(bucket, handoff.result_key, observed_at=T_NOW)
-            derive_accepted_total(
-                fresh.data, batch_id="LEGACY-20260916-0043", observed_at=T_NOW
-            )
+            derive_accepted_total(fresh.data, batch_id="LEGACY-20260916-0043", observed_at=T_NOW)
             raise AssertionError("unreachable: corrupt bytes must raise")
 
         # Act.
-        report = _run(
-            handoff, store, log, read_result=_real_r1, read_legacy=_real_r2_corrupt
-        )
+        report = _run(handoff, store, log, read_result=_real_r1, read_legacy=_real_r2_corrupt)
         # Assert.
         assert report.verdict is VerificationVerdict.FAILED
         assert report.is_accepted(Decimal("100")) is False

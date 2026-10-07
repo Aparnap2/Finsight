@@ -12,13 +12,15 @@ from apps.api.main import app
 
 @pytest.fixture
 def sample_csv(tmp_path: Path) -> str:
-    df = pl.DataFrame({
-        "account_id": ["A100", "A101"],
-        "period": ["2026-Q1", "2026-Q1"],
-        "amount": [1000.0, 2500.0],
-        "department": ["Sales", "Engineering"],
-        "currency": ["USD", "USD"],
-    })
+    df = pl.DataFrame(
+        {
+            "account_id": ["A100", "A101"],
+            "period": ["2026-Q1", "2026-Q1"],
+            "amount": [1000.0, 2500.0],
+            "department": ["Sales", "Engineering"],
+            "currency": ["USD", "USD"],
+        }
+    )
     path = tmp_path / "test.csv"
     df.write_csv(path)
     return str(path)
@@ -35,8 +37,7 @@ async def test_submit_and_poll_job(sample_csv: str) -> None:
                 "source_uri": sample_csv,
                 "params": {
                     "query": (
-                        "SELECT account_id, SUM(amount) as total "
-                        "FROM data GROUP BY account_id"
+                        "SELECT account_id, SUM(amount) as total FROM data GROUP BY account_id"
                     ),
                 },
             },

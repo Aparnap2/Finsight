@@ -61,9 +61,7 @@ def _compact(full_batch_id: str) -> str:
     return "LEG" + full_batch_id[len("LEGACY-") + 2 :]
 
 
-def _result_line(
-    batch_id: str, sequence: int, code: str, detail: str, version: str = "01"
-) -> str:
+def _result_line(batch_id: str, sequence: int, code: str, detail: str, version: str = "01") -> str:
     """Build one 80-char RESULT line with a valid trailing checksum."""
     body = version + _compact(batch_id) + str(sequence).zfill(8) + code
     body += detail.ljust(50)[:50]
@@ -332,15 +330,13 @@ def test_r3_asof_passthrough_including_stale() -> None:
 
 def test_residual_zero_for_fs231() -> None:
     """FS-231 golden: 1000000 - 992500 - 7500 is exactly zero."""
-    assert (
-        compute_residual(Decimal("1000000.00"), Decimal("992500.00"), Decimal("7500.00"))
-        == Decimal("0.00")
-    )
+    assert compute_residual(
+        Decimal("1000000.00"), Decimal("992500.00"), Decimal("7500.00")
+    ) == Decimal("0.00")
 
 
 def test_residual_nonzero_arithmetic() -> None:
     """Non-zero residuals stay exact with no tolerance folded in."""
-    assert (
-        compute_residual(Decimal("1000000.00"), Decimal("990000.00"), Decimal("7500.00"))
-        == Decimal("2500.00")
-    )
+    assert compute_residual(
+        Decimal("1000000.00"), Decimal("990000.00"), Decimal("7500.00")
+    ) == Decimal("2500.00")

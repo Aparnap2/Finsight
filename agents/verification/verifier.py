@@ -89,6 +89,7 @@ except ImportError:  # pragma: no cover
     def sanitize_output(x):  # type: ignore[no-redef]
         return x
 
+
 DEFAULT_MAX_REPLANS: Final[int] = 2
 """Conservative bounded re-plan budget (spec: N defaults conservatively)."""
 

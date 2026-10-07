@@ -9,13 +9,15 @@ import pytest
 @pytest.fixture
 def sample_dataframe() -> pl.DataFrame:
     """Standard 5-row financial DataFrame for all pipeline tests."""
-    return pl.DataFrame({
-        "account_id": ["A100", "A101", "A102", "A103", "A104"],
-        "period": ["2026-Q1"] * 5,
-        "amount": [1000.0, 2500.0, 0.0, 500.0, 7500.0],
-        "department": ["Sales", "Engineering", "Sales", "Marketing", "Engineering"],
-        "currency": ["USD", "USD", "EUR", "USD", "USD"],
-    })
+    return pl.DataFrame(
+        {
+            "account_id": ["A100", "A101", "A102", "A103", "A104"],
+            "period": ["2026-Q1"] * 5,
+            "amount": [1000.0, 2500.0, 0.0, 500.0, 7500.0],
+            "department": ["Sales", "Engineering", "Sales", "Marketing", "Engineering"],
+            "currency": ["USD", "USD", "EUR", "USD", "USD"],
+        }
+    )
 
 
 @pytest.fixture

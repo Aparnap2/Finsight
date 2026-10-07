@@ -47,9 +47,21 @@ def test_discover_migrations_sorts_by_version() -> None:
     """Discovery returns every ``NNN_*.sql`` file in version order."""
     migrations = discover_migrations(MIGRATIONS_DIR)
 
-    assert len(migrations) == 11
+    assert len(migrations) == 13
     assert [migration.version for migration in migrations] == [
-        "000", "001", "002", "003", "004", "005", "006", "007", "008", "009", "010",
+        "000",
+        "001",
+        "002",
+        "003",
+        "004",
+        "005",
+        "006",
+        "007",
+        "008",
+        "009",
+        "010",
+        "011",
+        "012",
     ]
     # Each discovered migration is frozen and carries a non-empty checksum.
     for migration in migrations:

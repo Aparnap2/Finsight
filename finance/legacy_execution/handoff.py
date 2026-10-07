@@ -70,9 +70,7 @@ class ExecutionHandoff(BaseModel):
 
     @field_validator("accepted_total", "rejected_total")
     @classmethod
-    def _check_optional_totals_two_dp(
-        cls, value: Decimal | None
-    ) -> Decimal | None:
+    def _check_optional_totals_two_dp(cls, value: Decimal | None) -> Decimal | None:
         """Require exact 2-dp Decimal totals whenever results are present."""
         if value is None:
             return None
@@ -134,8 +132,7 @@ def build_handoff(
         ValueError: On id seam skew or receipt/artifact digest mismatch.
     """
     if not (
-        record.execution_id == outcome.execution_id == receipt.execution_id
-        == artifact.execution_id
+        record.execution_id == outcome.execution_id == receipt.execution_id == artifact.execution_id
     ):
         raise ValueError("Handoff execution seam skew; refuse, change nothing.")
     if not (
@@ -163,9 +160,7 @@ def build_handoff(
         accepted_total=None if unknown else outcome.accepted_total,
         rejected_total=None if unknown else outcome.rejected_total,
         per_record=tuple(
-            PerRecordEntry(
-                sequence=entry.sequence, code=entry.code, detail=entry.detail
-            )
+            PerRecordEntry(sequence=entry.sequence, code=entry.code, detail=entry.detail)
             for entry in outcome.per_record
         ),
         result_key=outcome.result_key,

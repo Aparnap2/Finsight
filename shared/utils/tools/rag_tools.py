@@ -92,14 +92,16 @@ def query_factual(
         data = []
         for a in actuals:
             b = budget_map.get(a.account_id)
-            data.append({
-                "account_id": a.account_id,
-                "account_name": a.department or "",
-                "actual_amount": float(a.amount),
-                "budget_amount": float(b.amount) if b else 0.0,
-                "department": a.department or "",
-                "period": period,
-            })
+            data.append(
+                {
+                    "account_id": a.account_id,
+                    "account_name": a.department or "",
+                    "actual_amount": float(a.amount),
+                    "budget_amount": float(b.amount) if b else 0.0,
+                    "department": a.department or "",
+                    "period": period,
+                }
+            )
 
         row_count = len(data)
         coverage_pct = round(min(1.0, row_count / 20.0), 4) if row_count > 0 else 0.0
@@ -189,12 +191,14 @@ def query_precedent(
                 .all()
             )
             for d in drafts:
-                prior_commentaries.append({
-                    "period": prior_period,
-                    "content": d.content_json,
-                    "version": d.version,
-                    "status": str(d.status) if d.status else None,
-                })
+                prior_commentaries.append(
+                    {
+                        "period": prior_period,
+                        "content": d.content_json,
+                        "version": d.version,
+                        "status": str(d.status) if d.status else None,
+                    }
+                )
 
         row_count = len(prior_commentaries)
         coverage_pct = round(min(1.0, row_count / prior_periods), 4) if row_count > 0 else 0.0
@@ -258,10 +262,12 @@ def query_policy(
     query_fingerprint = compute_query_fingerprint("query_policy", query_text=query_text)
 
     return ToolResult(
-        data=[{
-            "query": query_text,
-            "note": "Policy ingestion not yet implemented — returns empty",
-        }],
+        data=[
+            {
+                "query": query_text,
+                "note": "Policy ingestion not yet implemented — returns empty",
+            }
+        ],
         row_count=0,
         coverage_pct=0.0,
         quality_score=0.0,

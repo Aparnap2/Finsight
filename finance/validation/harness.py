@@ -86,9 +86,7 @@ class ValidationReport(BaseModel):
             "passed_count": self.passed_count,
             "failed_count": self.failed_count,
             "results": [r.model_dump() for r in self.results],
-            "failures": [
-                r.model_dump() for r in self.results if not r.is_valid
-            ],
+            "failures": [r.model_dump() for r in self.results if not r.is_valid],
         }
 
 

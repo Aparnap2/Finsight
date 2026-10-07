@@ -165,9 +165,7 @@ class DuplicateDetectionModel:
 
         if self._sklearn_ensemble is None:
             self._metrics = {"algorithm": "hybrid_rules"}
-            logger.warning(
-                "scikit-learn unavailable — %s degraded to rules-only", self.model_id
-            )
+            logger.warning("scikit-learn unavailable — %s degraded to rules-only", self.model_id)
             return self
 
         sim_vectors = self._pair_sim_vectors(self._reference, cap=MAX_PAIRS)
@@ -267,9 +265,7 @@ class DuplicateDetectionModel:
         return ModelMetadata(
             model_id=self.model_id,
             version=self.version,
-            algorithm="hybrid_rules_plus_iforest"
-            if self._iforest is not None
-            else "hybrid_rules",
+            algorithm="hybrid_rules_plus_iforest" if self._iforest is not None else "hybrid_rules",
             training_end=self._training_end,
             training_rows=self._training_rows,
             feature_count=len(self._pair_sim_features),
@@ -312,9 +308,7 @@ class DuplicateDetectionModel:
             return Decimal("0")
         return Decimal(str(value))
 
-    def _pair_sim_vectors(
-        self, records: list[dict[str, Any]], *, cap: int
-    ) -> list[list[float]]:
+    def _pair_sim_vectors(self, records: list[dict[str, Any]], *, cap: int) -> list[list[float]]:
         """Pairwise similarity feature vectors for the ML outlier layer."""
         vectors: list[list[float]] = []
         count = 0
@@ -375,11 +369,7 @@ class DuplicateDetectionModel:
         is_duplicate = False
 
         # Rule 1 — exact match on all text fields + invoice number + amount.
-        if (
-            text_sim == 1.0
-            and invoice_sim == 1.0
-            and amounts_match
-        ):
+        if text_sim == 1.0 and invoice_sim == 1.0 and amounts_match:
             matched_on = ["exact_text", "invoice_number", "amount_proximity"]
             confidence = 0.99
             similarity = 1.0
@@ -391,11 +381,7 @@ class DuplicateDetectionModel:
             similarity = _clamp01((text_sim + amount_sim) / 2.0)
             is_duplicate = True
         # Rule 3 — fuzzy text similarity with amount proximity.
-        elif (
-            text_sim >= self._similarity_threshold
-            and amounts_match
-            and max(text_sims) > 0.0
-        ):
+        elif text_sim >= self._similarity_threshold and amounts_match and max(text_sims) > 0.0:
             matched_on = ["fuzzy_text", "amount_proximity"]
             confidence = round(_clamp01(text_sim), 4)
             similarity = _clamp01((text_sim + amount_sim) / 2.0)

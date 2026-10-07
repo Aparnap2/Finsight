@@ -269,9 +269,7 @@ def run_dedup_owner() -> str:
     return "p8-03"
 
 
-def workflow_key(
-    workflow_id: str, situation_id: str, tenant: str = _DEFAULT_TENANT
-) -> str:
+def workflow_key(workflow_id: str, situation_id: str, tenant: str = _DEFAULT_TENANT) -> str:
     """Derive the workflow key with tenant plus situation scope baked in."""
     return tenant + ":" + situation_id + ":" + workflow_id
 
@@ -320,9 +318,7 @@ def scheduler_widens_scope() -> bool:
 def deterministic_projection(workflow_id: str) -> str:
     """Project schedule inputs plus durable records to a stable string."""
     entry = _ensure_workflow(workflow_id)
-    joined = ";".join(
-        child.run_id + ":" + child.input_fingerprint for child in entry.child_runs
-    )
+    joined = ";".join(child.run_id + ":" + child.input_fingerprint for child in entry.child_runs)
     digest = hashlib.sha256((entry.scope + "|" + joined).encode("utf-8")).hexdigest()
     return "projection:" + entry.scope + ":" + workflow_id + ":" + digest
 
@@ -347,17 +343,13 @@ def schedule_next(workflow_id: str, adapter: Any | None = None) -> ScheduledRun:
     return _schedule_intent(workflow_id)
 
 
-def schedule_next_via_helper(
-    workflow_id: str, adapter: Any | None = None
-) -> ScheduledRun:
+def schedule_next_via_helper(workflow_id: str, adapter: Any | None = None) -> ScheduledRun:
     """Schedule via the helper route; the adapter is never invoked either."""
     _ = adapter
     return _schedule_intent(workflow_id)
 
 
-def resume_workflow(
-    workflow_id: str, event_log: list[str] | None = None
-) -> ResumeView:
+def resume_workflow(workflow_id: str, event_log: list[str] | None = None) -> ResumeView:
     """Resume from durable state via reconcile-then-resume at the point.
 
     Recorded terminal runs are never re-executed: this seam returns
@@ -379,30 +371,22 @@ def resume_workflow(
     )
 
 
-def reinvoke_recorded_child(
-    identity: p8_01.RunIdentity, attempt_number: int = 0
-) -> bool:
+def reinvoke_recorded_child(identity: p8_01.RunIdentity, attempt_number: int = 0) -> bool:
     """Refuse to re-invoke a recorded child attempt; replay is the path."""
     _ = (identity, attempt_number)
     return False
 
 
-def admit(
-    workflow_id: str, identity: p8_01.RunIdentity, budget: p8_01.Budget
-) -> AdmitView:
+def admit(workflow_id: str, identity: p8_01.RunIdentity, budget: p8_01.Budget) -> AdmitView:
     """Gate admission on the workflow deadline without reshaping the budget."""
     _ = (workflow_id, identity, budget)
     return AdmitView(checked="admit/no-admit")
 
 
-def run_budget_unchanged(
-    identity: p8_01.RunIdentity, budget: p8_01.Budget
-) -> bool:
+def run_budget_unchanged(identity: p8_01.RunIdentity, budget: p8_01.Budget) -> bool:
     """Confirm admission leaves the per-run budget exactly as received."""
     _ = identity
-    return budget.model_dump() == p8_01.Budget.model_validate(
-        budget.model_dump()
-    ).model_dump()
+    return budget.model_dump() == p8_01.Budget.model_validate(budget.model_dump()).model_dump()
 
 
 def admit_with_clock(
@@ -569,9 +553,7 @@ def recovery_order() -> tuple[str, ...]:
 def recover_workflow(workflow_id: str) -> RecoveryView:
     """Recover post-crash with in-flight runs marked UNKNOWN, unsealed."""
     _ = workflow_id
-    return RecoveryView(
-        in_flight_mark="UNKNOWN", reconciled=True, terminal_state="UNKNOWN"
-    )
+    return RecoveryView(in_flight_mark="UNKNOWN", reconciled=True, terminal_state="UNKNOWN")
 
 
 def engine_plug_point() -> str:
@@ -595,9 +577,7 @@ def handoff_shape(identity: p8_01.RunIdentity) -> str:
     return "frozen-seam-identical"
 
 
-def handoff_workflow(
-    workflow_id: str, history: list[p8_01.RunIdentity] | None = None
-) -> Handoff:
+def handoff_workflow(workflow_id: str, history: list[p8_01.RunIdentity] | None = None) -> Handoff:
     """Project durable history to a deterministic handoff payload.
 
     Same history yields the same payload; distinct histories yield
@@ -606,16 +586,13 @@ def handoff_workflow(
     """
     entry = _ensure_workflow(workflow_id)
     ordered = list(history) if history is not None else list(entry.child_runs)
-    joined = ";".join(
-        item.run_id + ":" + item.input_fingerprint for item in ordered
-    )
+    joined = ";".join(item.run_id + ":" + item.input_fingerprint for item in ordered)
     digest = hashlib.sha256(joined.encode("utf-8")).hexdigest()
     terminal = entry.state if entry.state in TERMINAL_WORKFLOW else "open"
     payload: dict[str, Any] = {
         "workflow_id": workflow_id,
         "child_runs": [
-            {"run_id": item.run_id, "input_fingerprint": item.input_fingerprint}
-            for item in ordered
+            {"run_id": item.run_id, "input_fingerprint": item.input_fingerprint} for item in ordered
         ],
         "history_digest": digest,
         "terminal": terminal,

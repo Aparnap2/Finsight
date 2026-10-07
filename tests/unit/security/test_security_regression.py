@@ -29,9 +29,7 @@ from shared.safety.secrets import REDACTED, redact_mapping, scrub_text
 
 _TENANT = "meridian"
 _EXCEPTION_ID = "FS-2026-0916-00231"
-_FIXTURE_DIR = (
-    Path(__file__).resolve().parents[2] / "fixtures" / "security" / "prompt_injection"
-)
+_FIXTURE_DIR = Path(__file__).resolve().parents[2] / "fixtures" / "security" / "prompt_injection"
 
 
 def _bytes_for(source_id: str) -> bytes:
@@ -157,9 +155,7 @@ class TestGoldenFs231:
 
         plan = InvestigationPlan.model_validate(
             {
-                "hypothesis_text": (
-                    "Possible legacy batch rejection for account 4812."
-                ),
+                "hypothesis_text": ("Possible legacy batch rejection for account 4812."),
                 "capability_calls": [
                     {
                         "capability": "get_stripe_payment",

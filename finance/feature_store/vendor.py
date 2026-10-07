@@ -118,10 +118,7 @@ def build_vendor_features(df: pl.DataFrame) -> pl.DataFrame:
     )
 
     status_totals = df.group_by(["entity_id", "period"]).agg(
-        pl.col("amount")
-        .filter(pl.col("status") == "paid")
-        .sum()
-        .alias("vendor_paid_amount"),
+        pl.col("amount").filter(pl.col("status") == "paid").sum().alias("vendor_paid_amount"),
         pl.col("amount")
         .filter(pl.col("status").is_in(_OPEN_STATUSES))
         .sum()
@@ -134,8 +131,9 @@ def build_vendor_features(df: pl.DataFrame) -> pl.DataFrame:
         .with_columns(
             pl.col("vendor_paid_amount").fill_null(_ZERO),
             pl.col("vendor_open_amount").fill_null(_ZERO),
-            (pl.col("vendor_total_amount") / pl.col("vendor_invoice_count"))
-            .alias("vendor_avg_invoice_amount"),
+            (pl.col("vendor_total_amount") / pl.col("vendor_invoice_count")).alias(
+                "vendor_avg_invoice_amount"
+            ),
             (pl.col("_top_vendor_amount") / pl.col("vendor_total_amount").replace(_ZERO, None))
             .fill_null(_ZERO)
             .alias("vendor_concentration_ratio"),

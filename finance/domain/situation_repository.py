@@ -71,9 +71,7 @@ logger = logging.getLogger(__name__)
 _STATUS_VALUES = frozenset(item.value for item in SituationStatus)
 """Lifecycle state names accepted on stored rows and audit events."""
 
-_TERMINAL_STATUSES = frozenset(
-    {SituationStatus.CLOSED.value, SituationStatus.REJECTED.value}
-)
+_TERMINAL_STATUSES = frozenset({SituationStatus.CLOSED.value, SituationStatus.REJECTED.value})
 """Stored statuses that refuse every further save (D5 terminal-at-rest)."""
 
 
@@ -245,9 +243,7 @@ class SituationAuditRow(Base):
     """One immutable audit fact per persisted situation version."""
 
     __tablename__ = "situation_audits"
-    __table_args__ = (
-        UniqueConstraint("event_id", name="uq_situation_audits_event_once"),
-    )
+    __table_args__ = (UniqueConstraint("event_id", name="uq_situation_audits_event_once"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     event_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
@@ -382,9 +378,7 @@ def canonical_payload_bytes(situation: FinancialSituation) -> bytes:
         "rejection_reason": situation.rejection_reason,
         "situation_id": situation.situation_id,
         "status": situation.status.value,
-        "verification": _canonical_verification(
-            getattr(situation, "verification", None)
-        ),
+        "verification": _canonical_verification(getattr(situation, "verification", None)),
         "verified_total": (
             _decimal_text(situation.verified_total)
             if situation.verified_total is not None
@@ -431,9 +425,7 @@ def _rehydrate_verification(raw: dict[str, Any]) -> dict[str, Any]:
     """
     data = dict(raw)
     for money_key in ("legacy_total_after", "variance_after"):
-        if data.get(money_key) is not None and not isinstance(
-            data[money_key], Decimal
-        ):
+        if data.get(money_key) is not None and not isinstance(data[money_key], Decimal):
             data[money_key] = Decimal(str(data[money_key]))
     if data.get("checked_at") is not None and isinstance(data["checked_at"], str):
         data["checked_at"] = datetime.fromisoformat(data["checked_at"])
@@ -452,9 +444,7 @@ def _rehydrate_verification(raw: dict[str, Any]) -> dict[str, Any]:
             if nested is not None:
                 verdict_field = nested.model_fields.get("verdict")
                 if verdict_field is not None:
-                    data["verdict"] = _enum_member(
-                        verdict_field.annotation, data["verdict"]
-                    )
+                    data["verdict"] = _enum_member(verdict_field.annotation, data["verdict"])
         except Exception:  # noqa: BLE001 - best-effort coercion only
             pass
     return data
@@ -482,9 +472,7 @@ def _rehydrate(payload: str) -> FinancialSituation:
     data["status"] = SituationStatus(data["status"])
     decider_field = FinancialSituation.model_fields.get("decider_role")
     if decider_field is not None and isinstance(data.get("decider_role"), str):
-        data["decider_role"] = _enum_member(
-            decider_field.annotation, data["decider_role"]
-        )
+        data["decider_role"] = _enum_member(decider_field.annotation, data["decider_role"])
     if isinstance(data.get("evidence_ids"), (list, tuple)):
         data["evidence_ids"] = tuple(data["evidence_ids"])
     if isinstance(data.get("verification"), dict):
@@ -676,9 +664,7 @@ class SituationRepository:
             return self._save_sql(situation, expected_version, events)
         return self._save_memory(situation, expected_version, events)
 
-    def get_for_company(
-        self, company_id: str, situation_id: str
-    ) -> FinancialSituation | None:
+    def get_for_company(self, company_id: str, situation_id: str) -> FinancialSituation | None:
         """Company-scoped read — fails closed if the company is wrong.
 
         Returns ``None`` uniformly for missing rows, wrong-company
@@ -736,9 +722,7 @@ class SituationRepository:
         ]
         return matches
 
-    def audit_trail(
-        self, company_id: str, situation_id: str
-    ) -> list[SituationAuditEvent]:
+    def audit_trail(self, company_id: str, situation_id: str) -> list[SituationAuditEvent]:
         """Return the ordered audit events for one case (oldest first).
 
         Scoped like :meth:`get_for_company`: wrong-company or blank
@@ -806,9 +790,7 @@ class SituationRepository:
                     .order_by(SituationAuditRow.id.asc())
                     .all()
                 )
-                chain = [
-                    (row.event_id, row.prev_hash or "") for row in rows
-                ]
+                chain = [(row.event_id, row.prev_hash or "") for row in rows]
         else:
             chain = [
                 (event.event_id, event.prev_hash)
@@ -909,9 +891,7 @@ class SituationRepository:
                 .order_by(SituationAuditRow.id.desc())
                 .first()
             )
-            linked = _link_batch(
-                events, last_id_row[0] if last_id_row is not None else ""
-            )
+            linked = _link_batch(events, last_id_row[0] if last_id_row is not None else "")
             if row is None:
                 session.add(
                     SituationRow(
@@ -976,9 +956,7 @@ class SituationRepository:
                 session.rollback()
                 if _is_audit_duplicate(exc):
                     logger.warning("situation save rolled back sid=%s: %s", sid, exc)
-                    raise ValueError(
-                        f"audit event_id already stored for {sid}."
-                    ) from exc
+                    raise ValueError(f"audit event_id already stored for {sid}.") from exc
                 raise
             logger.info("situation saved sid=%s version=%s", sid, new_version)
             return new_version
@@ -1015,9 +993,7 @@ class SituationRepository:
             else:
                 actual_version = current["version"]
                 if expected_version is not None and expected_version != actual_version:
-                    raise ConcurrencyError(
-                        situation.situation_id, expected_version, actual_version
-                    )
+                    raise ConcurrencyError(situation.situation_id, expected_version, actual_version)
                 new_version = actual_version + 1
                 if not events and canonical_payload_bytes(situation) == current["payload"]:
                     logger.info(
@@ -1042,9 +1018,7 @@ class SituationRepository:
             linked = _link_batch(events, last_stored)
             for event in linked:
                 if event.event_id in self._audit_events:
-                    raise ValueError(
-                        f"audit event_id already stored: {event.event_id!r}."
-                    )
+                    raise ValueError(f"audit event_id already stored: {event.event_id!r}.")
             self._cases[key] = {
                 "status": situation.status.value,
                 "version": new_version,

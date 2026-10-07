@@ -57,6 +57,7 @@ def redact_mapping(data: dict[str, Any]) -> dict[str, Any]:
     Shallow: nested dicts are redacted one level deep; lists of dicts
     are handled element-wise. The input is never mutated.
     """
+
     def _redact_scalar(key: str, value: Any) -> Any:
         if _is_secret_key(key):
             return REDACTED

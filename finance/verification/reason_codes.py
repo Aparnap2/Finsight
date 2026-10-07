@@ -84,9 +84,7 @@ FAILED_CODES: frozenset[str] = frozenset(
 )
 """Exactly the nine F28 codes a FAILED report may carry; refusals excluded."""
 
-INCOMPLETE_CODES: frozenset[str] = frozenset(
-    {VERIFY_RESULT_MISSING, VERIFY_HANDOFF_CORRUPT}
-)
+INCOMPLETE_CODES: frozenset[str] = frozenset({VERIFY_RESULT_MISSING, VERIFY_HANDOFF_CORRUPT})
 """Runs that mint nothing: missing inputs or a corrupt handoff."""
 
 __all__ = [

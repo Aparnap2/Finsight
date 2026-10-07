@@ -4,6 +4,7 @@ TDD RED phase: finance/integration/ does not exist yet.
 All imports from finance.integration.spreadsheet_provider MUST fail
 with ModuleNotFoundError until the package is implemented.
 """
+
 from __future__ import annotations
 
 from pathlib import Path

@@ -97,9 +97,7 @@ def token_to_command(token: AuthorizationToken) -> GuardedExecutionCommand:
     )
 
 
-def intent_to_command(
-    intent: ExecutionIntent, *, authorization_id: str
-) -> GuardedExecutionCommand:
+def intent_to_command(intent: ExecutionIntent, *, authorization_id: str) -> GuardedExecutionCommand:
     """Map a derived intent onto the guard command.
 
     Args:
@@ -120,9 +118,7 @@ def intent_to_command(
     )
 
 
-def run_guards(
-    command: Any, *, environment: str = "sandbox"
-) -> GuardDecision:
+def run_guards(command: Any, *, environment: str = "sandbox") -> GuardDecision:
     """Run the shared guard over one command and return its decision.
 
     Args:

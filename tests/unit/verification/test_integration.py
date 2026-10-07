@@ -109,13 +109,9 @@ def _readers(store: FakeS3):
     def read_legacy(handoff: ExecutionHandoff) -> R2Observation:
         assert handoff.result_key is not None
         fresh = read_result_bytes(store, handoff.result_key, observed_at=T)
-        derived = derive_accepted_total(
-            fresh.data, batch_id=handoff.batch_id, observed_at=T
-        )
+        derived = derive_accepted_total(fresh.data, batch_id=handoff.batch_id, observed_at=T)
         assert derived.accepted_total == Decimal("10000.00")
-        legacy_after = compose_legacy_after(
-            Decimal("982500.00"), derived.accepted_total
-        )
+        legacy_after = compose_legacy_after(Decimal("982500.00"), derived.accepted_total)
         assert legacy_after == Decimal("992500.00")
         return R2Observation(
             accepted_total=derived.accepted_total,
@@ -128,9 +124,7 @@ def _readers(store: FakeS3):
         del handoff
         expected = read_expected(_ExpectedPort(), SITUATION, observed_at=T)
         pending = read_pending(_PendingPort(), BATCH, observed_at=T)
-        residual = compute_residual(
-            expected.total, Decimal("992500.00"), pending.pending
-        )
+        residual = compute_residual(expected.total, Decimal("992500.00"), pending.pending)
         assert residual == Decimal("0.00")
         return R3Observation(
             expected=expected.total,

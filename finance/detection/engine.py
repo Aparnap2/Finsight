@@ -200,9 +200,7 @@ def detect(
         seen[fact.fact_id] = fact.provenance.content_hash
     actionable = books.qb_total - provider.net
     gap = expected.expected_total - books.qb_total
-    stamp = _fingerprint(
-        [*(f.provenance.content_hash for f in present), str(bound)]
-    )
+    stamp = _fingerprint([*(f.provenance.content_hash for f in present), str(bound)])
     if legacy is None or legacy.rejected_total != 0 or legacy.rejected_reason:
         return DetectionVerdict(
             verdict=DetectionOutcome.EXCEPTION,

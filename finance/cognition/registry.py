@@ -60,15 +60,21 @@ class NodeRegistry:
         from finance.cognition.nodes.retriever import RetrieverNode
 
         self.register("planner", PlannerNode())
-        self.register("retriever", RetrieverNode(
-            spreadsheet_provider=spreadsheet_provider,
-        ))
-        self.register("executor", ExecutorNode(
-            materiality_engine=materiality_engine,
-            formula_evaluator=formula_evaluator,
-            evidence_engine=evidence_engine,
-            validation_suite=validation_suite,
-        ))
+        self.register(
+            "retriever",
+            RetrieverNode(
+                spreadsheet_provider=spreadsheet_provider,
+            ),
+        )
+        self.register(
+            "executor",
+            ExecutorNode(
+                materiality_engine=materiality_engine,
+                formula_evaluator=formula_evaluator,
+                evidence_engine=evidence_engine,
+                validation_suite=validation_suite,
+            ),
+        )
         self.register("verifier", VerifierNode())
         self.register("reflection", ReflectionNode())
 
@@ -84,10 +90,7 @@ class NodeRegistry:
     def configure_pipeline(self, pipeline: list[str]) -> None:
         for name in pipeline:
             if name not in self._nodes:
-                raise ValueError(
-                    f"Node '{name}' not registered. "
-                    f"Registered: {list(self._nodes)}"
-                )
+                raise ValueError(f"Node '{name}' not registered. Registered: {list(self._nodes)}")
         self._pipeline = list(pipeline)
 
     def get_pipeline(self) -> list[str]:

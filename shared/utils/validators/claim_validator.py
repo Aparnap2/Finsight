@@ -85,18 +85,26 @@ class ValidationResult:
 
 # ── Patterns ──────────────────────────────────────────────────────────────────
 
-MONETARY_PATTERN = re.compile(r'\$[\d,]+(?:\.\d{2})?')
+MONETARY_PATTERN = re.compile(r"\$[\d,]+(?:\.\d{2})?")
 CAUSAL_PATTERN = re.compile(
-    r'(?:driven by|due to|because of|resulted from|caused by|attributed to)\s+([\w\s]+)',
+    r"(?:driven by|due to|because of|resulted from|caused by|attributed to)\s+([\w\s]+)",
     re.IGNORECASE,
 )
 ACTION_PATTERN = re.compile(
-    r'(?:should|ought to|recommend|propose|suggest)\s+(\w+)\s+([\w\s]+?)(?:by|to|for|$)',
+    r"(?:should|ought to|recommend|propose|suggest)\s+(\w+)\s+([\w\s]+?)(?:by|to|for|$)",
     re.IGNORECASE,
 )
 COMPARATIVE_KEYWORDS = {
-    "largest", "biggest", "highest", "lowest", "smallest",
-    "most", "least", "top", "primary", "main",
+    "largest",
+    "biggest",
+    "highest",
+    "lowest",
+    "smallest",
+    "most",
+    "least",
+    "top",
+    "primary",
+    "main",
 }
 
 
@@ -146,11 +154,13 @@ def validate_numeric_claim(
         result.is_valid = False
         result.add_degraded(claim.text, DegradedMode.INSUFFICIENT_CAUSAL_EVIDENCE)
         result.errors.append(f"No facts to validate claim: {claim.text}")
-        result.unverified_claims.append({
-            "claim": claim.text,
-            "amount": str(amount),
-            "note": "No facts available for validation",
-        })
+        result.unverified_claims.append(
+            {
+                "claim": claim.text,
+                "amount": str(amount),
+                "note": "No facts available for validation",
+            }
+        )
         return result
 
     matched = False
@@ -166,13 +176,15 @@ def validate_numeric_claim(
         ratio = abs(amount - fact_amount) / abs(fact_amount)
         if ratio <= tolerance:
             matched = True
-            result.verified_claims.append({
-                "claim": claim.text,
-                "amount": str(amount),
-                "matched_fact": str(fact_amount),
-                "tolerance": str(tolerance),
-                "ratio": str(ratio),
-            })
+            result.verified_claims.append(
+                {
+                    "claim": claim.text,
+                    "amount": str(amount),
+                    "matched_fact": str(fact_amount),
+                    "tolerance": str(tolerance),
+                    "ratio": str(ratio),
+                }
+            )
             break
 
     if not matched:
@@ -182,11 +194,13 @@ def validate_numeric_claim(
             f"Claim {claim.text} (amount={amount}) does not match any fact "
             f"(closest: {closest}, tolerance: {tolerance})"
         )
-        result.unverified_claims.append({
-            "claim": claim.text,
-            "amount": str(amount),
-            "closest_fact": closest,
-        })
+        result.unverified_claims.append(
+            {
+                "claim": claim.text,
+                "amount": str(amount),
+                "closest_fact": closest,
+            }
+        )
 
     return result
 
@@ -213,32 +227,32 @@ def validate_comparative_claim(
     if len(candidates) < 2:
         result.is_valid = False
         result.add_degraded(claim_text, DegradedMode.INSUFFICIENT_CAUSAL_EVIDENCE)
-        result.errors.append(
-            f"Not enough candidates for comparative claim: {len(candidates)}"
-        )
+        result.errors.append(f"Not enough candidates for comparative claim: {len(candidates)}")
         return result
 
-    sorted_candidates = sorted(
-        candidates, key=lambda c: c.get(value_field, 0), reverse=True
-    )
+    sorted_candidates = sorted(candidates, key=lambda c: c.get(value_field, 0), reverse=True)
 
     if rank is not None and rank <= len(sorted_candidates):
         ranked_entry = sorted_candidates[rank - 1]
-        result.verified_claims.append({
-            "claim": claim_text,
-            "subject": subject,
-            "rank": rank,
-            "matched_value": str(ranked_entry.get(value_field, "N/A")),
-            "total_candidates": len(candidates),
-        })
+        result.verified_claims.append(
+            {
+                "claim": claim_text,
+                "subject": subject,
+                "rank": rank,
+                "matched_value": str(ranked_entry.get(value_field, "N/A")),
+                "total_candidates": len(candidates),
+            }
+        )
     else:
         # Just verify the subject exists in the top portion
-        result.verified_claims.append({
-            "claim": claim_text,
-            "subject": subject,
-            "total_candidates": len(candidates),
-            "note": "Claim validated against sorted candidate set",
-        })
+        result.verified_claims.append(
+            {
+                "claim": claim_text,
+                "subject": subject,
+                "total_candidates": len(candidates),
+                "note": "Claim validated against sorted candidate set",
+            }
+        )
 
     return result
 
@@ -264,30 +278,36 @@ def validate_causal_claim(
     result = ValidationResult()
 
     if driver_tree_edges:
-        result.verified_claims.append({
-            "claim": claim.text,
-            "cause": claim.cause,
-            "effect": claim.effect,
-            "driver_tree_edges": len(driver_tree_edges),
-        })
+        result.verified_claims.append(
+            {
+                "claim": claim.text,
+                "cause": claim.cause,
+                "effect": claim.effect,
+                "driver_tree_edges": len(driver_tree_edges),
+            }
+        )
         result.confidence = 0.7 if evidence_classes >= 2 else 0.5
     elif evidence_classes >= 2:
-        result.verified_claims.append({
-            "claim": claim.text,
-            "cause": claim.cause,
-            "effect": claim.effect,
-            "evidence_classes": evidence_classes,
-            "note": "Causal link supported by multiple evidence classes",
-        })
+        result.verified_claims.append(
+            {
+                "claim": claim.text,
+                "cause": claim.cause,
+                "effect": claim.effect,
+                "evidence_classes": evidence_classes,
+                "note": "Causal link supported by multiple evidence classes",
+            }
+        )
         result.confidence = 0.5
     else:
         result.is_valid = False
         result.add_degraded(claim.text, DegradedMode.INSUFFICIENT_CAUSAL_EVIDENCE)
-        result.unverified_claims.append({
-            "claim": claim.text,
-            "cause": claim.cause,
-            "note": "Insufficient evidence for causal claim",
-        })
+        result.unverified_claims.append(
+            {
+                "claim": claim.text,
+                "cause": claim.cause,
+                "note": "Insufficient evidence for causal claim",
+            }
+        )
         result.confidence = 0.2
 
     if has_alternative:
@@ -301,9 +321,21 @@ def validate_causal_claim(
 
 
 APPROVED_ACTION_TAXONOMY: set[str] = {
-    "reduce", "increase", "review", "renegotiate", "invest", "divest",
-    "restructure", "optimize", "consolidate", "delay", "accelerate",
-    "hedge", "automate", "outsource", "insource",
+    "reduce",
+    "increase",
+    "review",
+    "renegotiate",
+    "invest",
+    "divest",
+    "restructure",
+    "optimize",
+    "consolidate",
+    "delay",
+    "accelerate",
+    "hedge",
+    "automate",
+    "outsource",
+    "insource",
 }
 
 
@@ -328,9 +360,7 @@ def validate_action_claim(
     if claim.action not in APPROVED_ACTION_TAXONOMY:
         result.is_valid = False
         result.add_degraded(claim.text, DegradedMode.PRECEDENT_ONLY_SUPPORT)
-        result.errors.append(
-            f"Action '{claim.action}' not in approved taxonomy"
-        )
+        result.errors.append(f"Action '{claim.action}' not in approved taxonomy")
         return result
 
     if not cited_causes:
@@ -339,15 +369,17 @@ def validate_action_claim(
         result.confidence = 0.3
         return result
 
-    result.verified_claims.append({
-        "claim": claim.text,
-        "action": claim.action,
-        "target": claim.target,
-        "cited_causes": cited_causes,
-        "policy_permitted": policy_permitted,
-        "owner_identified": owner_identified,
-        "impact_quantified": impact_quantified,
-    })
+    result.verified_claims.append(
+        {
+            "claim": claim.text,
+            "action": claim.action,
+            "target": claim.target,
+            "cited_causes": cited_causes,
+            "policy_permitted": policy_permitted,
+            "owner_identified": owner_identified,
+            "impact_quantified": impact_quantified,
+        }
+    )
 
     result.confidence = 0.5
     if policy_permitted:
@@ -450,9 +482,7 @@ def validate_commentary_claims(
         action_claim = ActionClaim(text=match.group(), action=action, target=target)
         # Collect cause references from verified claims that have a 'cause' key
         cited_causes = [
-            vc["cause"]
-            for vc in result.verified_claims
-            if isinstance(vc, dict) and "cause" in vc
+            vc["cause"] for vc in result.verified_claims if isinstance(vc, dict) and "cause" in vc
         ]
         vr = validate_action_claim(
             claim=action_claim,

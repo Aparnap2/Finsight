@@ -98,9 +98,7 @@ class ArtifactView(BaseModel):
 
     @field_validator("amounts_by_sequence")
     @classmethod
-    def _check_amounts_two_dp(
-        cls, value: dict[int, Decimal]
-    ) -> dict[int, Decimal]:
+    def _check_amounts_two_dp(cls, value: dict[int, Decimal]) -> dict[int, Decimal]:
         """Require exact 2-dp Decimal amounts for every mapped sequence."""
         for sequence, amount in value.items():
             if sequence < 1:
@@ -213,9 +211,7 @@ def outcome_fingerprint(outcome: IngestionOutcome) -> str:
     return hashlib.sha256(outcome.model_dump_json().encode("utf-8")).hexdigest()
 
 
-def _result_key_for(
-    company_id: str, batch_id: str, result_key: str | None
-) -> str:
+def _result_key_for(company_id: str, batch_id: str, result_key: str | None) -> str:
     """Return the RESULT key, deriving it when the caller passes none."""
     if result_key is not None:
         key = result_key
@@ -312,8 +308,7 @@ def ingest_result(
     if receipt.batch_id != artifact.batch_id:
         raise IngestionRefused(
             EXEC_RESULT_CORRUPT,
-            "Artifact/receipt batch seam skew: "
-            f"{artifact.batch_id!r} vs {receipt.batch_id!r}.",
+            f"Artifact/receipt batch seam skew: {artifact.batch_id!r} vs {receipt.batch_id!r}.",
         )
     if hashlib.sha256(artifact.file_bytes).hexdigest() != artifact.outbound_sha256:
         raise IngestionRefused(
@@ -327,14 +322,15 @@ def ingest_result(
         _require_tz_aware("now", now)
         _require_tz_aware("window_start", window_start)
         return _unknown_outcome(
-            artifact=artifact, company_id=company_id, now=now,
-            window_start=window_start, window_seconds=window_seconds,
+            artifact=artifact,
+            company_id=company_id,
+            now=now,
+            window_start=window_start,
+            window_seconds=window_seconds,
         )
     result_sha256 = hashlib.sha256(raw).hexdigest()
     try:
-        observed = observe_legacy_result(
-            raw, batch_id=artifact.batch_id, company_id=company_id
-        )
+        observed = observe_legacy_result(raw, batch_id=artifact.batch_id, company_id=company_id)
     except ObservationRefused as exc:
         raise IngestionRefused(EXEC_RESULT_CORRUPT, str(exc)) from exc
     return ingest_observed(
@@ -399,8 +395,7 @@ def ingest_observed(
     if receipt.batch_id != artifact.batch_id:
         raise IngestionRefused(
             EXEC_RESULT_CORRUPT,
-            "Artifact/receipt batch seam skew: "
-            f"{artifact.batch_id!r} vs {receipt.batch_id!r}.",
+            f"Artifact/receipt batch seam skew: {artifact.batch_id!r} vs {receipt.batch_id!r}.",
         )
     if hashlib.sha256(artifact.file_bytes).hexdigest() != artifact.outbound_sha256:
         raise IngestionRefused(
@@ -409,8 +404,11 @@ def ingest_observed(
         )
     if observed is None:
         return _unknown_outcome(
-            artifact=artifact, company_id=company_id, now=now,
-            window_start=window_start, window_seconds=window_seconds,
+            artifact=artifact,
+            company_id=company_id,
+            now=now,
+            window_start=window_start,
+            window_seconds=window_seconds,
         )
     key = result_key
     parsed = observed.records
@@ -432,13 +430,13 @@ def ingest_observed(
     if sequences != expected:
         raise IngestionRefused(
             EXEC_RESULT_CORRUPT,
-            f"RESULT sequence skew in {key!r}: got {sequences}, "
-            f"OUTBOUND expects {expected}.",
+            f"RESULT sequence skew in {key!r}: got {sequences}, OUTBOUND expects {expected}.",
         )
 
     per_record = tuple(
         PerRecordOutcome(
-            sequence=entry.sequence, code=entry.code,
+            sequence=entry.sequence,
+            code=entry.code,
             detail=entry.detail,
         )
         for entry in sorted(parsed, key=lambda e: e.sequence)
@@ -572,7 +570,12 @@ def reconcile_late_result(
     if prior_unknown.outcome != OutcomeLabel.UNKNOWN or not prior_unknown.unknown_flag:
         raise ValueError("reconcile_late_result requires a prior_unknown UNKNOWN.")
     return ingest_result(
-        store, receipt, artifact=artifact, company_id=company_id,
-        result_key=result_key, now=now, window_start=window_start,
+        store,
+        receipt,
+        artifact=artifact,
+        company_id=company_id,
+        result_key=result_key,
+        now=now,
+        window_start=window_start,
         window_seconds=window_seconds,
     )

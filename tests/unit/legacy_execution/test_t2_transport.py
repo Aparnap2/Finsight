@@ -161,9 +161,7 @@ class _TamperPut(_Journal):
 
 def test_fs231_artifact_shape() -> None:
     """FS-231: single 10000.00/4812 correction + control, 80-char lines."""
-    artifact = build_artifact(
-        _fs231_intent(), batch_id=BATCH, processing_date="20260916"
-    )
+    artifact = build_artifact(_fs231_intent(), batch_id=BATCH, processing_date="20260916")
     assert artifact.execution_id == EXECUTION_ID
     assert artifact.batch_id == BATCH
     assert artifact.file_name == "CORRECTION_20260916_231.DAT"
@@ -201,17 +199,13 @@ def test_type01_payload_layout_explicit() -> None:
 
 def test_wire_21char_id_refused() -> None:
     """A line carrying the 21-char logical id on the wire refuses."""
-    artifact = build_artifact(
-        _fs231_intent(), batch_id=BATCH, processing_date="20260916"
-    )
+    artifact = build_artifact(_fs231_intent(), batch_id=BATCH, processing_date="20260916")
     good = _file_lines(artifact)[0]
     # Stuff the 21-char logical id into the 14-char wire window (cols 3-16).
     bad = good[:2] + BATCH[:14] + good[16:]
     assert len(bad) == 80
     with pytest.raises(ArtifactRefusedError, match="EXEC_ARTIFACT_REFUSED"):
-        verify_outbound_lines(
-            [bad], batch_id=BATCH, control_total=Decimal("10000.00")
-        )
+        verify_outbound_lines([bad], batch_id=BATCH, control_total=Decimal("10000.00"))
 
 
 def test_single_record_invariant() -> None:
@@ -242,16 +236,12 @@ def test_sequence_gap_refused() -> None:
     lines = _file_lines(artifact)
     assert len(lines) == 2
     with pytest.raises(ArtifactRefusedError, match="EXEC_ARTIFACT_REFUSED"):
-        verify_outbound_lines(
-            [lines[1]], batch_id=BATCH, control_total=Decimal("10000.00")
-        )
+        verify_outbound_lines([lines[1]], batch_id=BATCH, control_total=Decimal("10000.00"))
 
 
 def test_sequence_duplicate_refused() -> None:
     """A duplicated wire sequence refuses on self-verify."""
-    artifact = build_artifact(
-        _fs231_intent(), batch_id=BATCH, processing_date="20260916"
-    )
+    artifact = build_artifact(_fs231_intent(), batch_id=BATCH, processing_date="20260916")
     lines = _file_lines(artifact)
     with pytest.raises(ArtifactRefusedError, match="EXEC_ARTIFACT_REFUSED"):
         verify_outbound_lines(
@@ -261,9 +251,7 @@ def test_sequence_duplicate_refused() -> None:
 
 def test_checksum_failure_refused() -> None:
     """A flipped checksum nibble refuses naming the first bad line."""
-    artifact = build_artifact(
-        _fs231_intent(), batch_id=BATCH, processing_date="20260916"
-    )
+    artifact = build_artifact(_fs231_intent(), batch_id=BATCH, processing_date="20260916")
     lines = _file_lines(artifact)
     bad_first = lines[0][:-1] + ("0" if lines[0][-1] != "0" else "1")
     with pytest.raises(ArtifactRefusedError, match="line 1"):
@@ -274,9 +262,7 @@ def test_checksum_failure_refused() -> None:
 
 def test_control_mismatch_refused() -> None:
     """A control total that does not match the Decimal sum refuses."""
-    artifact = build_artifact(
-        _fs231_intent(), batch_id=BATCH, processing_date="20260916"
-    )
+    artifact = build_artifact(_fs231_intent(), batch_id=BATCH, processing_date="20260916")
     lines = _file_lines(artifact)
     with pytest.raises(ArtifactRefusedError, match="EXEC_ARTIFACT_REFUSED"):
         verify_outbound_lines(lines, batch_id=BATCH, control_total=Decimal("1.00"))
@@ -314,13 +300,9 @@ def test_derive_batch_id_deterministic() -> None:
 
 def test_put_verified_success_receipt() -> None:
     """PUT + read-back match yields a receipt bound to execution + batch."""
-    artifact = build_artifact(
-        _fs231_intent(), batch_id=BATCH, processing_date="20260916"
-    )
+    artifact = build_artifact(_fs231_intent(), batch_id=BATCH, processing_date="20260916")
     store = _Journal(FakeS3(COMPANY))
-    receipt = put_verified(
-        store, artifact, company_id=COMPANY, bucket_outbound=BUCKET, now=NOW
-    )
+    receipt = put_verified(store, artifact, company_id=COMPANY, bucket_outbound=BUCKET, now=NOW)
     assert isinstance(receipt, TransportReceipt)
     assert receipt.execution_id == EXECUTION_ID
     assert receipt.batch_id == BATCH
@@ -333,40 +315,28 @@ def test_put_verified_success_receipt() -> None:
 
 def test_tampered_bytes_readback_refused() -> None:
     """D4: bytes altered in flight refuse; the object is left for triage."""
-    artifact = build_artifact(
-        _fs231_intent(), batch_id=BATCH, processing_date="20260916"
-    )
+    artifact = build_artifact(_fs231_intent(), batch_id=BATCH, processing_date="20260916")
     store = _TamperPut(FakeS3(COMPANY))
     with pytest.raises(HashMismatchError, match="EXEC_HASH_MISMATCH"):
-        put_verified(
-            store, artifact, company_id=COMPANY, bucket_outbound=BUCKET, now=NOW
-        )
+        put_verified(store, artifact, company_id=COMPANY, bucket_outbound=BUCKET, now=NOW)
     assert store.exists(derive_outbound_key(COMPANY, BATCH, artifact.file_name))
 
 
 def test_prefix_escape_before_network() -> None:
     """D10: cross-company keys refuse before any network call (0 PUTs)."""
-    artifact = build_artifact(
-        _fs231_intent(), batch_id=BATCH, processing_date="20260916"
-    )
+    artifact = build_artifact(_fs231_intent(), batch_id=BATCH, processing_date="20260916")
     store = _Journal(FakeS3(COMPANY))
     with pytest.raises(PrefixEscapeError, match="EXEC_PREFIX_ESCAPE"):
-        put_verified(
-            store, artifact, company_id="otherco", bucket_outbound=BUCKET, now=NOW
-        )
+        put_verified(store, artifact, company_id="otherco", bucket_outbound=BUCKET, now=NOW)
     assert store.puts == 0
     assert store.gets == 0
 
 
 def test_retry_then_success_identical_bytes() -> None:
     """Two injected failures then success: 3 PUTs, byte-identical retries."""
-    artifact = build_artifact(
-        _fs231_intent(), batch_id=BATCH, processing_date="20260916"
-    )
+    artifact = build_artifact(_fs231_intent(), batch_id=BATCH, processing_date="20260916")
     store = _FlakyPut(FakeS3(COMPANY), failures=2)
-    receipt = put_verified(
-        store, artifact, company_id=COMPANY, bucket_outbound=BUCKET, now=NOW
-    )
+    receipt = put_verified(store, artifact, company_id=COMPANY, bucket_outbound=BUCKET, now=NOW)
     assert receipt.sha256 == artifact.outbound_sha256
     assert store.puts == 3
     assert all(chunk == artifact.file_bytes for chunk in store.journal)
@@ -374,14 +344,10 @@ def test_retry_then_success_identical_bytes() -> None:
 
 def test_retry_exhaustion_refuses_identical_bytes() -> None:
     """Persistent S3 failure exhausts 1+3 attempts with identical bytes."""
-    artifact = build_artifact(
-        _fs231_intent(), batch_id=BATCH, processing_date="20260916"
-    )
+    artifact = build_artifact(_fs231_intent(), batch_id=BATCH, processing_date="20260916")
     store = _AlwaysFail(FakeS3(COMPANY))
     with pytest.raises(TransportRefusedError, match="EXEC_TRANSPORT_REFUSED"):
-        put_verified(
-            store, artifact, company_id=COMPANY, bucket_outbound=BUCKET, now=NOW
-        )
+        put_verified(store, artifact, company_id=COMPANY, bucket_outbound=BUCKET, now=NOW)
     assert store.puts == 4  # 1 initial + 3 retries per A4
     assert len(store.journal) == 4
     assert all(chunk == artifact.file_bytes for chunk in store.journal)
@@ -394,16 +360,12 @@ def test_retry_exhaustion_refuses_identical_bytes() -> None:
 
 def test_recovery_present_match_zero_puts() -> None:
     """Object present with matching hash: receipt recorded, 0 PUTs."""
-    artifact = build_artifact(
-        _fs231_intent(), batch_id=BATCH, processing_date="20260916"
-    )
+    artifact = build_artifact(_fs231_intent(), batch_id=BATCH, processing_date="20260916")
     inner = FakeS3(COMPANY)
     key = derive_outbound_key(COMPANY, BATCH, artifact.file_name)
     inner.put_object(key, artifact.file_bytes)
     store = _Journal(inner)
-    receipt = recover_receipt(
-        store, artifact, company_id=COMPANY, bucket_outbound=BUCKET, now=NOW
-    )
+    receipt = recover_receipt(store, artifact, company_id=COMPANY, bucket_outbound=BUCKET, now=NOW)
     assert receipt.sha256 == artifact.outbound_sha256
     assert receipt.key == key
     assert store.puts == 0
@@ -411,30 +373,22 @@ def test_recovery_present_match_zero_puts() -> None:
 
 def test_recovery_absent_single_put() -> None:
     """Object absent: exactly one PUT+verify cycle on the probe path."""
-    artifact = build_artifact(
-        _fs231_intent(), batch_id=BATCH, processing_date="20260916"
-    )
+    artifact = build_artifact(_fs231_intent(), batch_id=BATCH, processing_date="20260916")
     store = _Journal(FakeS3(COMPANY))
-    receipt = recover_receipt(
-        store, artifact, company_id=COMPANY, bucket_outbound=BUCKET, now=NOW
-    )
+    receipt = recover_receipt(store, artifact, company_id=COMPANY, bucket_outbound=BUCKET, now=NOW)
     assert receipt.sha256 == artifact.outbound_sha256
     assert store.puts == 1  # probe path: single PUT, no retry loop
 
 
 def test_recovery_differs_refuses_no_reserialize() -> None:
     """Object present with differing bytes: refuse, never reserialize."""
-    artifact = build_artifact(
-        _fs231_intent(), batch_id=BATCH, processing_date="20260916"
-    )
+    artifact = build_artifact(_fs231_intent(), batch_id=BATCH, processing_date="20260916")
     inner = FakeS3(COMPANY)
     key = derive_outbound_key(COMPANY, BATCH, artifact.file_name)
     inner.put_object(key, b"DIFFERING-BYTES" * 64)
     store = _Journal(inner)
     with pytest.raises(HashMismatchError, match="EXEC_HASH_MISMATCH"):
-        recover_receipt(
-            store, artifact, company_id=COMPANY, bucket_outbound=BUCKET, now=NOW
-        )
+        recover_receipt(store, artifact, company_id=COMPANY, bucket_outbound=BUCKET, now=NOW)
     assert store.puts == 0
     raw, _ = inner.get_object(key)
     assert raw == b"DIFFERING-BYTES" * 64  # untouched, left for triage
@@ -442,14 +396,10 @@ def test_recovery_differs_refuses_no_reserialize() -> None:
 
 def test_recovery_absent_propagates_transport_refusal() -> None:
     """Absent object + failing PUT on the probe path refuses after 1 try."""
-    artifact = build_artifact(
-        _fs231_intent(), batch_id=BATCH, processing_date="20260916"
-    )
+    artifact = build_artifact(_fs231_intent(), batch_id=BATCH, processing_date="20260916")
     store = _AlwaysFail(FakeS3(COMPANY))
     with pytest.raises(TransportRefusedError, match="EXEC_TRANSPORT_REFUSED"):
-        recover_receipt(
-            store, artifact, company_id=COMPANY, bucket_outbound=BUCKET, now=NOW
-        )
+        recover_receipt(store, artifact, company_id=COMPANY, bucket_outbound=BUCKET, now=NOW)
     assert store.puts == 1
 
 
@@ -469,9 +419,7 @@ def test_recovery_absent_propagates_transport_refusal() -> None:
 def test_a5_seq_derivation(situation_id: str, expected_seq: str) -> None:
     """SEQ is the last three digits of the situation sequence — never 231."""
     assert derive_file_seq(situation_id) == expected_seq
-    assert derive_file_name("20260916", situation_id) == (
-        f"CORRECTION_20260916_{expected_seq}.DAT"
-    )
+    assert derive_file_name("20260916", situation_id) == (f"CORRECTION_20260916_{expected_seq}.DAT")
 
 
 def test_a5_filename_flows_into_artifact_and_key() -> None:
@@ -497,9 +445,7 @@ def test_absent_probe_key_raises_not_found() -> None:
 
 def test_receipt_timestamp_must_be_tz_aware() -> None:
     """Naive caller-supplied timestamps are rejected as input hygiene."""
-    artifact = build_artifact(
-        _fs231_intent(), batch_id=BATCH, processing_date="20260916"
-    )
+    artifact = build_artifact(_fs231_intent(), batch_id=BATCH, processing_date="20260916")
     store = _Journal(FakeS3(COMPANY))
     with pytest.raises(ValueError, match="tz-aware"):
         put_verified(
@@ -514,8 +460,6 @@ def test_receipt_timestamp_must_be_tz_aware() -> None:
 
 def test_wire_lines_sequence_types() -> None:
     """Helper contract: verify accepts any sequence of 80-char lines."""
-    artifact = build_artifact(
-        _fs231_intent(), batch_id=BATCH, processing_date="20260916"
-    )
+    artifact = build_artifact(_fs231_intent(), batch_id=BATCH, processing_date="20260916")
     lines: Sequence[str] = tuple(_file_lines(artifact))
     verify_outbound_lines(lines, batch_id=BATCH, control_total=Decimal("10000.00"))

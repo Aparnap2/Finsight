@@ -35,9 +35,7 @@ from finance.reasoning.report import ProvenanceEntry, ReasoningReport
 from shared.models.assertions import Assertion
 from shared.utils.tools.tool_result import ToolResult
 
-_ToolSourceType = Literal[
-    "financial_fact", "operational_metric", "policy_doc", "precedent"
-]
+_ToolSourceType = Literal["financial_fact", "operational_metric", "policy_doc", "precedent"]
 
 # Evidence source type -> ToolResult source type (the four allowed values).
 _SOURCE_TYPE_MAP: dict[str, _ToolSourceType] = {
@@ -97,9 +95,7 @@ def _tool_source_type(source_type: str) -> _ToolSourceType:
     return _SOURCE_TYPE_MAP.get(source_type, "operational_metric")
 
 
-def _evidence_to_tool_result(
-    evidence_item: EvidenceItem, ev_id: str, tenant_id: str
-) -> ToolResult:
+def _evidence_to_tool_result(evidence_item: EvidenceItem, ev_id: str, tenant_id: str) -> ToolResult:
     """Synthesize a ToolResult carrying the evidence item's quality metadata."""
     quality = _EVIDENCE_QUALITY.get(evidence_item.confidence, 0.5)
     return ToolResult(
@@ -301,29 +297,21 @@ def run_reasoning_pipeline(
         A frozen :class:`ReasoningReport`.
     """
     ctx = context if context is not None else ReasoningContext()
-    provider = (
-        commentary_provider
-        if commentary_provider is not None
-        else NullCommentaryProvider()
-    )
+    provider = commentary_provider if commentary_provider is not None else NullCommentaryProvider()
 
     ids = _assign_evidence_ids(evidence)
     assertions, linkage = _build_assertions(evidence, ids, ctx)
 
     confidence: dict[str, Decimal] = {}
     for assertion in assertions:
-        linked_evidence = _evidence_for(
-            evidence, ids, linkage.get(assertion.id, [])
-        )
+        linked_evidence = _evidence_for(evidence, ids, linkage.get(assertion.id, []))
         confidence[assertion.id] = score_assertion(
             assertion, linked_evidence, ctx.materiality_threshold
         )
 
     commentary = provider.generate(assertions)
 
-    degraded = bool(
-        getattr(provider, "degraded", isinstance(provider, NullCommentaryProvider))
-    )
+    degraded = bool(getattr(provider, "degraded", isinstance(provider, NullCommentaryProvider)))
 
     provenance = _build_provenance(ids, assertions, linkage, confidence, degraded)
 

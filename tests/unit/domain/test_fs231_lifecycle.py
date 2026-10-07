@@ -65,9 +65,6 @@ def _clean_situation(status: SituationStatus) -> FinancialSituation:
     )
 
 
-
-
-
 def _bound_close_report(
     situation: FinancialSituation,
     *,
@@ -200,9 +197,7 @@ def test_approval_requires_pinned_proposal_ref() -> None:
     with pytest.raises(ValueError, match="proposal_hash"):
         proposed.transition_to(SituationStatus.APPROVED)
     pinned = _pinned_proposed()
-    assert pinned.transition_to(SituationStatus.APPROVED).status is (
-        SituationStatus.APPROVED
-    )
+    assert pinned.transition_to(SituationStatus.APPROVED).status is (SituationStatus.APPROVED)
 
 
 def test_approval_rejects_blank_proposal_ref() -> None:

@@ -14,6 +14,7 @@ from typing import Any
 from finance.accounting.mock import MockQuickBooksAdapter
 from finance.exceptions.repository import ExceptionRepository
 from finance.exceptions.states import ExceptionState
+from shared.safety.idempotency import ClaimOutcome, IdempotencyStore
 from tests.unit.execution.test_execution_boundary import _Seed
 from tests.unit.execution.test_executor import _engine, _make_executor
 
@@ -21,12 +22,12 @@ from tests.unit.execution.test_executor import _engine, _make_executor
 class _ClaimCountingStore:
     """Proxy delegating to a real store while counting entry calls."""
 
-    def __init__(self, inner: Any) -> None:
+    def __init__(self, inner: IdempotencyStore) -> None:
         self._inner = inner
         self.claim_calls: list[tuple[str, str, str]] = []
         self.record_calls: list[tuple[str, str, str]] = []
 
-    def claim(self, tenant_id: str, key: str, payload_hash: str) -> Any:
+    def claim(self, tenant_id: str, key: str, payload_hash: str) -> ClaimOutcome:
         self.claim_calls.append((tenant_id, key, payload_hash))
         return self._inner.claim(tenant_id, key, payload_hash)
 

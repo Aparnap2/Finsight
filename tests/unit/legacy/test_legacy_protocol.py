@@ -467,16 +467,22 @@ class TestPartialProcessing:
         """A result can have both accepted and rejected records."""
         results = (
             LegacyRecordResult(
-                batch_id=BATCH_ID, sequence=1, result_code=RecordResult.ACCEPTED,
+                batch_id=BATCH_ID,
+                sequence=1,
+                result_code=RecordResult.ACCEPTED,
                 checksum=_make_result_checksum(BATCH_ID, 1, "AC"),
             ),
             LegacyRecordResult(
-                batch_id=BATCH_ID, sequence=2, result_code=RecordResult.REJECTED,
+                batch_id=BATCH_ID,
+                sequence=2,
+                result_code=RecordResult.REJECTED,
                 detail="Duplicate amount",
                 checksum=_make_result_checksum(BATCH_ID, 2, "RJ", "Duplicate amount"),
             ),
             LegacyRecordResult(
-                batch_id=BATCH_ID, sequence=3, result_code=RecordResult.ACCEPTED,
+                batch_id=BATCH_ID,
+                sequence=3,
+                result_code=RecordResult.ACCEPTED,
                 checksum=_make_result_checksum(BATCH_ID, 3, "AC"),
             ),
         )
@@ -496,7 +502,9 @@ class TestPartialProcessing:
         """A result with fewer records than header total is incomplete."""
         results = (
             LegacyRecordResult(
-                batch_id=BATCH_ID, sequence=1, result_code=RecordResult.ACCEPTED,
+                batch_id=BATCH_ID,
+                sequence=1,
+                result_code=RecordResult.ACCEPTED,
                 checksum=_make_result_checksum(BATCH_ID, 1, "AC"),
             ),
         )
@@ -543,11 +551,15 @@ class TestDuplicateDetection:
         """LegacyResult counts duplicate records."""
         results = (
             LegacyRecordResult(
-                batch_id=BATCH_ID, sequence=1, result_code=RecordResult.ACCEPTED,
+                batch_id=BATCH_ID,
+                sequence=1,
+                result_code=RecordResult.ACCEPTED,
                 checksum=_make_result_checksum(BATCH_ID, 1, "AC"),
             ),
             LegacyRecordResult(
-                batch_id=BATCH_ID, sequence=2, result_code=RecordResult.DUPLICATE,
+                batch_id=BATCH_ID,
+                sequence=2,
+                result_code=RecordResult.DUPLICATE,
                 checksum=_make_result_checksum(BATCH_ID, 2, "DU"),
             ),
         )
@@ -597,11 +609,15 @@ class TestResultRetryTimeoutSemantics:
         """Can look up a result by sequence number."""
         results = (
             LegacyRecordResult(
-                batch_id=BATCH_ID, sequence=1, result_code=RecordResult.ACCEPTED,
+                batch_id=BATCH_ID,
+                sequence=1,
+                result_code=RecordResult.ACCEPTED,
                 checksum=_make_result_checksum(BATCH_ID, 1, "AC"),
             ),
             LegacyRecordResult(
-                batch_id=BATCH_ID, sequence=2, result_code=RecordResult.REJECTED,
+                batch_id=BATCH_ID,
+                sequence=2,
+                result_code=RecordResult.REJECTED,
                 checksum=_make_result_checksum(BATCH_ID, 2, "RJ"),
             ),
         )

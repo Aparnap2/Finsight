@@ -16,6 +16,7 @@ from finance.formula_engine.formula_registry import Formula, FormulaRegistry
 # Formula Definitions
 # =============================================================================
 
+
 def _gross_margin(revenue: Decimal, cogs: Decimal) -> Decimal:
     return (revenue - cogs) / revenue
 
@@ -67,108 +68,133 @@ def _rd_pct(rd_expense: Decimal, revenue: Decimal) -> Decimal:
 def build_default_registry() -> FormulaRegistry:
     """Build a FormulaRegistry pre-loaded with all core financial formulas."""
     registry = FormulaRegistry()
-    registry.register(Formula(
-        name="gross_margin",
-        description="Gross profit as a percentage of revenue",
-        category="margin",
-        inputs=["revenue", "cogs"],
-        output_name="gross_margin",
-        fn=_gross_margin,
-    ))
-    registry.register(Formula(
-        name="operating_margin",
-        description="Operating income as a percentage of revenue",
-        category="margin",
-        inputs=["operating_income", "revenue"],
-        output_name="operating_margin",
-        fn=_operating_margin,
-    ))
-    registry.register(Formula(
-        name="ebitda_margin",
-        description="EBITDA as a percentage of revenue",
-        category="margin",
-        inputs=["ebitda", "revenue"],
-        output_name="ebitda_margin",
-        fn=_ebitda_margin,
-    ))
-    registry.register(Formula(
-        name="net_margin",
-        description="Net income as a percentage of revenue",
-        category="margin",
-        inputs=["net_income", "revenue"],
-        output_name="net_margin",
-        fn=_net_margin,
-    ))
-    registry.register(Formula(
-        name="revenue_growth",
-        description="Revenue growth rate between periods",
-        category="growth",
-        inputs=["current_revenue", "prior_revenue"],
-        output_name="revenue_growth",
-        fn=_revenue_growth,
-    ))
-    registry.register(Formula(
-        name="burn_rate",
-        description="Monthly cash burn rate",
-        category="aggregation",
-        inputs=["total_opex", "months"],
-        output_name="burn_rate",
-        fn=_burn_rate,
-    ))
-    registry.register(Formula(
-        name="runway",
-        description="Months of runway remaining",
-        category="aggregation",
-        inputs=["cash_balance", "burn_rate"],
-        output_name="runway",
-        fn=_runway,
-    ))
-    registry.register(Formula(
-        name="headcount_cost_per_employee",
-        description="Average cost per employee",
-        category="ratio",
-        inputs=["total_people_cost", "fte_count"],
-        output_name="headcount_cost_per_employee",
-        fn=_headcount_cost_per_employee,
-    ))
-    registry.register(Formula(
-        name="average_revenue_per_customer",
-        description="Average revenue per customer",
-        category="ratio",
-        inputs=["total_revenue", "customer_count"],
-        output_name="average_revenue_per_customer",
-        fn=_average_revenue_per_customer,
-    ))
-    registry.register(Formula(
-        name="cogs_pct",
-        description="COGS as a percentage of revenue",
-        category="margin",
-        inputs=["cogs", "revenue"],
-        output_name="cogs_pct",
-        fn=_cogs_pct,
-    ))
-    registry.register(Formula(
-        name="sgna_pct",
-        description="SG&A as a percentage of revenue",
-        category="margin",
-        inputs=["sgna", "revenue"],
-        output_name="sgna_pct",
-        fn=_sgna_pct,
-    ))
-    registry.register(Formula(
-        name="rd_pct",
-        description="R&D as a percentage of revenue",
-        category="margin",
-        inputs=["rd_expense", "revenue"],
-        output_name="rd_pct",
-        fn=_rd_pct,
-    ))
+    registry.register(
+        Formula(
+            name="gross_margin",
+            description="Gross profit as a percentage of revenue",
+            category="margin",
+            inputs=["revenue", "cogs"],
+            output_name="gross_margin",
+            fn=_gross_margin,
+        )
+    )
+    registry.register(
+        Formula(
+            name="operating_margin",
+            description="Operating income as a percentage of revenue",
+            category="margin",
+            inputs=["operating_income", "revenue"],
+            output_name="operating_margin",
+            fn=_operating_margin,
+        )
+    )
+    registry.register(
+        Formula(
+            name="ebitda_margin",
+            description="EBITDA as a percentage of revenue",
+            category="margin",
+            inputs=["ebitda", "revenue"],
+            output_name="ebitda_margin",
+            fn=_ebitda_margin,
+        )
+    )
+    registry.register(
+        Formula(
+            name="net_margin",
+            description="Net income as a percentage of revenue",
+            category="margin",
+            inputs=["net_income", "revenue"],
+            output_name="net_margin",
+            fn=_net_margin,
+        )
+    )
+    registry.register(
+        Formula(
+            name="revenue_growth",
+            description="Revenue growth rate between periods",
+            category="growth",
+            inputs=["current_revenue", "prior_revenue"],
+            output_name="revenue_growth",
+            fn=_revenue_growth,
+        )
+    )
+    registry.register(
+        Formula(
+            name="burn_rate",
+            description="Monthly cash burn rate",
+            category="aggregation",
+            inputs=["total_opex", "months"],
+            output_name="burn_rate",
+            fn=_burn_rate,
+        )
+    )
+    registry.register(
+        Formula(
+            name="runway",
+            description="Months of runway remaining",
+            category="aggregation",
+            inputs=["cash_balance", "burn_rate"],
+            output_name="runway",
+            fn=_runway,
+        )
+    )
+    registry.register(
+        Formula(
+            name="headcount_cost_per_employee",
+            description="Average cost per employee",
+            category="ratio",
+            inputs=["total_people_cost", "fte_count"],
+            output_name="headcount_cost_per_employee",
+            fn=_headcount_cost_per_employee,
+        )
+    )
+    registry.register(
+        Formula(
+            name="average_revenue_per_customer",
+            description="Average revenue per customer",
+            category="ratio",
+            inputs=["total_revenue", "customer_count"],
+            output_name="average_revenue_per_customer",
+            fn=_average_revenue_per_customer,
+        )
+    )
+    registry.register(
+        Formula(
+            name="cogs_pct",
+            description="COGS as a percentage of revenue",
+            category="margin",
+            inputs=["cogs", "revenue"],
+            output_name="cogs_pct",
+            fn=_cogs_pct,
+        )
+    )
+    registry.register(
+        Formula(
+            name="sgna_pct",
+            description="SG&A as a percentage of revenue",
+            category="margin",
+            inputs=["sgna", "revenue"],
+            output_name="sgna_pct",
+            fn=_sgna_pct,
+        )
+    )
+    registry.register(
+        Formula(
+            name="rd_pct",
+            description="R&D as a percentage of revenue",
+            category="margin",
+            inputs=["rd_expense", "revenue"],
+            output_name="rd_pct",
+            fn=_rd_pct,
+        )
+    )
     return registry
 
 
 # =============================================================================
 # Tests — Formula Registry
 # =============================================================================
+
 
 class TestFormulaRegistry:
     """Tests for Formula and FormulaRegistry."""
@@ -193,46 +219,61 @@ class TestFormulaRegistry:
     def test_formula_evaluate_gross_margin(self) -> None:
         """gross_margin(revenue=1000, cogs=600) → 0.4"""
         registry = build_default_registry()
-        result = registry.evaluate("gross_margin", {
-            "revenue": Decimal("1000"),
-            "cogs": Decimal("600"),
-        })
+        result = registry.evaluate(
+            "gross_margin",
+            {
+                "revenue": Decimal("1000"),
+                "cogs": Decimal("600"),
+            },
+        )
         assert result == Decimal("0.4")
 
     def test_formula_evaluate_operating_margin(self) -> None:
         """operating_margin(operating_income=200, revenue=1000) → 0.2"""
         registry = build_default_registry()
-        result = registry.evaluate("operating_margin", {
-            "operating_income": Decimal("200"),
-            "revenue": Decimal("1000"),
-        })
+        result = registry.evaluate(
+            "operating_margin",
+            {
+                "operating_income": Decimal("200"),
+                "revenue": Decimal("1000"),
+            },
+        )
         assert result == Decimal("0.2")
 
     def test_formula_evaluate_revenue_growth(self) -> None:
         """revenue_growth(1200, 1000) → 0.2"""
         registry = build_default_registry()
-        result = registry.evaluate("revenue_growth", {
-            "current_revenue": Decimal("1200"),
-            "prior_revenue": Decimal("1000"),
-        })
+        result = registry.evaluate(
+            "revenue_growth",
+            {
+                "current_revenue": Decimal("1200"),
+                "prior_revenue": Decimal("1000"),
+            },
+        )
         assert result == Decimal("0.2")
 
     def test_formula_evaluate_burn_rate(self) -> None:
         """burn_rate(500000, 6) → 83333.33"""
         registry = build_default_registry()
-        result = registry.evaluate("burn_rate", {
-            "total_opex": Decimal("500000"),
-            "months": Decimal("6"),
-        })
+        result = registry.evaluate(
+            "burn_rate",
+            {
+                "total_opex": Decimal("500000"),
+                "months": Decimal("6"),
+            },
+        )
         assert result == Decimal("83333.33")
 
     def test_formula_evaluate_runway(self) -> None:
         """runway(2000000, 83333.33) → 24.0"""
         registry = build_default_registry()
-        result = registry.evaluate("runway", {
-            "cash_balance": Decimal("2000000"),
-            "burn_rate": Decimal("83333.33"),
-        })
+        result = registry.evaluate(
+            "runway",
+            {
+                "cash_balance": Decimal("2000000"),
+                "burn_rate": Decimal("83333.33"),
+            },
+        )
         assert result == Decimal("24.0")
 
     def test_formula_list_by_category(self) -> None:
@@ -253,19 +294,22 @@ class TestFormulaRegistry:
         registry = build_default_registry()
         # Registering same name again should raise
         with pytest.raises(ValueError, match="already registered"):
-            registry.register(Formula(
-                name="gross_margin",
-                description="Duplicate",
-                category="margin",
-                inputs=["revenue", "cogs"],
-                output_name="gross_margin",
-                fn=_gross_margin,
-            ))
+            registry.register(
+                Formula(
+                    name="gross_margin",
+                    description="Duplicate",
+                    category="margin",
+                    inputs=["revenue", "cogs"],
+                    output_name="gross_margin",
+                    fn=_gross_margin,
+                )
+            )
 
 
 # =============================================================================
 # Tests — Dependency Resolver
 # =============================================================================
+
 
 class TestDependencyResolver:
     """Tests for DependencyResolver."""
@@ -290,30 +334,36 @@ class TestDependencyResolver:
         registry = FormulaRegistry()
 
         # Create a cycle: A depends on B, B depends on C, C depends on A
-        registry.register(Formula(
-            name="formula_a",
-            description="Depends on B",
-            category="ratio",
-            inputs=["output_b"],
-            output_name="output_a",
-            fn=lambda output_b: output_b * Decimal("2"),
-        ))
-        registry.register(Formula(
-            name="formula_b",
-            description="Depends on C",
-            category="ratio",
-            inputs=["output_c"],
-            output_name="output_b",
-            fn=lambda output_c: output_c * Decimal("2"),
-        ))
-        registry.register(Formula(
-            name="formula_c",
-            description="Depends on A (cycle!)",
-            category="ratio",
-            inputs=["output_a"],
-            output_name="output_c",
-            fn=lambda output_a: output_a * Decimal("2"),
-        ))
+        registry.register(
+            Formula(
+                name="formula_a",
+                description="Depends on B",
+                category="ratio",
+                inputs=["output_b"],
+                output_name="output_a",
+                fn=lambda output_b: output_b * Decimal("2"),
+            )
+        )
+        registry.register(
+            Formula(
+                name="formula_b",
+                description="Depends on C",
+                category="ratio",
+                inputs=["output_c"],
+                output_name="output_b",
+                fn=lambda output_c: output_c * Decimal("2"),
+            )
+        )
+        registry.register(
+            Formula(
+                name="formula_c",
+                description="Depends on A (cycle!)",
+                category="ratio",
+                inputs=["output_a"],
+                output_name="output_c",
+                fn=lambda output_a: output_a * Decimal("2"),
+            )
+        )
 
         resolver = DependencyResolver()
         assert resolver.has_cycle(registry) is True
@@ -334,6 +384,7 @@ class TestDependencyResolver:
 # =============================================================================
 # Tests — Formula Evaluator
 # =============================================================================
+
 
 class TestFormulaEvaluator:
     """Tests for FormulaEvaluator and EvaluationContext."""
@@ -431,6 +482,7 @@ class TestFormulaEvaluator:
 # Tests — Decimal Precision
 # =============================================================================
 
+
 class TestDecimalPrecision:
     """All results are Decimal with proper precision."""
 
@@ -442,8 +494,11 @@ class TestDecimalPrecision:
             pass  # Verified implicitly by type annotations
 
         # Verify outputs are Decimal
-        result = registry.evaluate("gross_margin", {
-            "revenue": Decimal("1000"),
-            "cogs": Decimal("600"),
-        })
+        result = registry.evaluate(
+            "gross_margin",
+            {
+                "revenue": Decimal("1000"),
+                "cogs": Decimal("600"),
+            },
+        )
         assert isinstance(result, Decimal)

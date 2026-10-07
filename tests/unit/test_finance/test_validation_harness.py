@@ -3,6 +3,7 @@
 Unified validation interface: common results, validator protocol, composite suites.
 Wraps existing validators (PeriodValidator, DataQuality checks) into the harness.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -16,6 +17,7 @@ class TestValidationResult:
     def test_result_creation(self) -> None:
         """Create a ValidationResult with basic fields."""
         from finance.validation.harness import ValidationResult
+
         r = ValidationResult(
             validator_name="test_validator",
             is_valid=True,
@@ -28,6 +30,7 @@ class TestValidationResult:
     def test_result_with_severity(self) -> None:
         """ValidationResult supports severity levels: error, warning, info."""
         from finance.validation.harness import ValidationResult
+
         r = ValidationResult(
             validator_name="coverage",
             is_valid=False,
@@ -39,6 +42,7 @@ class TestValidationResult:
     def test_result_defaults(self) -> None:
         """ValidationResult has sensible defaults."""
         from finance.validation.harness import ValidationResult
+
         r = ValidationResult(validator_name="check", is_valid=True)
         assert r.severity == "error"
         assert r.messages == []
@@ -46,6 +50,7 @@ class TestValidationResult:
     def test_result_with_metadata(self) -> None:
         """ValidationResult accepts optional metadata dict."""
         from finance.validation.harness import ValidationResult
+
         r = ValidationResult(
             validator_name="coverage",
             is_valid=True,
@@ -63,6 +68,7 @@ class TestValidatorProtocol:
     def test_validator_protocol_exists(self) -> None:
         """Validator is a Protocol class with a validate() method."""
         from finance.validation.harness import Validator
+
         assert hasattr(Validator, "validate")
 
     def test_concrete_validator_conforms(self) -> None:
@@ -71,9 +77,7 @@ class TestValidatorProtocol:
 
         class MyValidator:
             def validate(self, **kwargs: Any) -> ValidationResult:
-                return ValidationResult(
-                    validator_name="my", is_valid=True, messages=["OK"]
-                )
+                return ValidationResult(validator_name="my", is_valid=True, messages=["OK"])
 
         v: Validator = MyValidator()
         result = v.validate()
@@ -147,12 +151,17 @@ class TestValidationSuite:
             def __init__(self, name: str, valid: bool) -> None:
                 self.name = name
                 self.valid = valid
+
             def validate(self, **kwargs: Any) -> ValidationResult:
                 return ValidationResult(validator_name=self.name, is_valid=self.valid)
 
-        suite = ValidationSuite(validators=[
-            Flip("a", True), Flip("b", False), Flip("c", True),
-        ])
+        suite = ValidationSuite(
+            validators=[
+                Flip("a", True),
+                Flip("b", False),
+                Flip("c", True),
+            ]
+        )
         report = suite.run()
         assert report.total == 3
         assert report.passed_count == 2
@@ -162,6 +171,7 @@ class TestValidationSuite:
     def test_suite_empty(self) -> None:
         """Empty suite is trivially passing."""
         from finance.validation.harness import ValidationSuite
+
         suite = ValidationSuite()
         report = suite.run()
         assert report.passed is True
@@ -186,9 +196,7 @@ class TestValidatorAdapter:
 
         adapter = ValidatorAdapter(
             name="period_validator",
-            validator_fn=lambda: PeriodValidator().validate_year(
-                year=2026, calendar=cal
-            ),
+            validator_fn=lambda: PeriodValidator().validate_year(year=2026, calendar=cal),
         )
         result = adapter.validate()
         assert result.validator_name == "period_validator"
@@ -338,8 +346,11 @@ class TestValidationReport:
         class Fail:
             def validate(self, **kwargs: Any) -> ValidationResult:
                 return ValidationResult(
-                    validator_name="f", is_valid=False, messages=["Failed"],
-                    severity="critical", metadata={"key": "val"},
+                    validator_name="f",
+                    is_valid=False,
+                    messages=["Failed"],
+                    severity="critical",
+                    metadata={"key": "val"},
                 )
 
         suite = ValidationSuite(validators=[Fail()])

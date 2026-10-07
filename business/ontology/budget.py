@@ -46,10 +46,7 @@ class BudgetLine(BaseModel):
     description: str = ""
 
     def __str__(self) -> str:
-        return (
-            f"BudgetLine({self.account}, {self.amount}, "
-            f"{self.period})"
-        )
+        return f"BudgetLine({self.account}, {self.amount}, {self.period})"
 
 
 class Budget(BaseModel):
@@ -93,9 +90,7 @@ class Budget(BaseModel):
     def _validate_status(cls, v: str) -> str:
         allowed = {"draft", "review", "approved", "revised", "archived"}
         if v.lower() not in allowed:
-            raise ValueError(
-                f"Budget status must be one of {allowed}, got '{v}'"
-            )
+            raise ValueError(f"Budget status must be one of {allowed}, got '{v}'")
         return v.lower()
 
     @property
@@ -120,10 +115,7 @@ class Budget(BaseModel):
         return [line for line in self.lines if line.period == period]
 
     def __str__(self) -> str:
-        return (
-            f"Budget({self.budget_id}, {self.name}, "
-            f"FY{self.fiscal_year}, {self.status})"
-        )
+        return f"Budget({self.budget_id}, {self.name}, FY{self.fiscal_year}, {self.status})"
 
 
 class ForecastLine(BaseModel):
@@ -155,10 +147,7 @@ class ForecastLine(BaseModel):
     driver_value: float | None = None  # Operational driver value (not monetary)
 
     def __str__(self) -> str:
-        return (
-            f"ForecastLine({self.account}, {self.amount}, "
-            f"{self.period})"
-        )
+        return f"ForecastLine({self.account}, {self.amount}, {self.period})"
 
 
 class Forecast(BaseModel):
@@ -201,9 +190,7 @@ class Forecast(BaseModel):
     def _validate_status(cls, v: str) -> str:
         allowed = {"draft", "review", "published", "superseded", "archived"}
         if v.lower() not in allowed:
-            raise ValueError(
-                f"Forecast status must be one of {allowed}, got '{v}'"
-            )
+            raise ValueError(f"Forecast status must be one of {allowed}, got '{v}'")
         return v.lower()
 
     @property
@@ -221,7 +208,4 @@ class Forecast(BaseModel):
         return [line for line in self.lines if line.period == period]
 
     def __str__(self) -> str:
-        return (
-            f"Forecast({self.forecast_id}, {self.name}, "
-            f"v{self.version}, {self.status})"
-        )
+        return f"Forecast({self.forecast_id}, {self.name}, v{self.version}, {self.status})"

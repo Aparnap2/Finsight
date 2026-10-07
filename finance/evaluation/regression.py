@@ -56,16 +56,12 @@ class Comparator:
         if runtime_thresholds is not None:
             self._runtime_thresholds = runtime_thresholds
         else:
-            self._runtime_thresholds = self._load_thresholds(
-                thresholds_dir, "runtime.yaml"
-            )
+            self._runtime_thresholds = self._load_thresholds(thresholds_dir, "runtime.yaml")
 
         if business_thresholds is not None:
             self._business_thresholds = business_thresholds
         else:
-            self._business_thresholds = self._load_thresholds(
-                thresholds_dir, "business.yaml"
-            )
+            self._business_thresholds = self._load_thresholds(thresholds_dir, "business.yaml")
 
         self._all_thresholds: dict[str, Threshold] = {}
         self._all_thresholds.update(self._runtime_thresholds)
@@ -128,19 +124,25 @@ class Comparator:
         business_keys = _collect_keys(baseline_map, current_map, "business_metrics")
 
         baseline_runtime = _average_metric(
-            baseline_map, common_ids, runtime_keys, "runtime_metrics")
-        current_runtime = _average_metric(
-            current_map, common_ids, runtime_keys, "runtime_metrics")
+            baseline_map, common_ids, runtime_keys, "runtime_metrics"
+        )
+        current_runtime = _average_metric(current_map, common_ids, runtime_keys, "runtime_metrics")
         baseline_business = _average_metric(
-            baseline_map, common_ids, business_keys, "business_metrics")
+            baseline_map, common_ids, business_keys, "business_metrics"
+        )
         current_business = _average_metric(
-            current_map, common_ids, business_keys, "business_metrics")
+            current_map, common_ids, business_keys, "business_metrics"
+        )
 
         # ── Deltas ────────────────────────────────────────────────────
-        all_metrics = {**{f"runtime.{k}": v for k, v in baseline_runtime.items()},
-                       **{f"business.{k}": v for k, v in baseline_business.items()}}
-        current_all = {**{f"runtime.{k}": v for k, v in current_runtime.items()},
-                       **{f"business.{k}": v for k, v in current_business.items()}}
+        all_metrics = {
+            **{f"runtime.{k}": v for k, v in baseline_runtime.items()},
+            **{f"business.{k}": v for k, v in baseline_business.items()},
+        }
+        current_all = {
+            **{f"runtime.{k}": v for k, v in current_runtime.items()},
+            **{f"business.{k}": v for k, v in current_business.items()},
+        }
 
         deltas: dict[str, float] = {}
         for key in all_metrics:
@@ -205,9 +207,7 @@ class RegressionRunner:
 
     def save_baseline(self, reports: list[EvaluationReport]) -> None:
         path = self._baseline_dir / "baseline.json"
-        path.write_text(
-            json.dumps([r.to_dict() for r in reports], indent=2, default=str)
-        )
+        path.write_text(json.dumps([r.to_dict() for r in reports], indent=2, default=str))
 
     def load_baseline(self) -> list[EvaluationReport] | None:
         path = self._baseline_dir / "baseline.json"

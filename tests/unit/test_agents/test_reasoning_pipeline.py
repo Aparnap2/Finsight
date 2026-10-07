@@ -91,9 +91,7 @@ class TestStructuredCommentaryProvider:
     def test_valid_json_output_is_validated_and_serialized(self) -> None:
         payload = {
             "summary": "Revenue exceeded budget.",
-            "sections": [
-                {"heading": "Variance Analysis", "content": "Revenue is up $80,000."}
-            ],
+            "sections": [{"heading": "Variance Analysis", "content": "Revenue is up $80,000."}],
         }
         llm = FakeLLMClient(json.dumps(payload))
         provider = StructuredCommentaryProvider(llm_client=llm)
@@ -155,9 +153,7 @@ class TestPipelineViaAgents:
     def test_run_reasoning_commentary_with_injected_llm_client(self) -> None:
         payload = {
             "summary": "Executive summary text.",
-            "sections": [
-                {"heading": "Variance Analysis", "content": "Detailed body text."}
-            ],
+            "sections": [{"heading": "Variance Analysis", "content": "Detailed body text."}],
         }
         llm = FakeLLMClient(json.dumps(payload))
         context = ReasoningContext(period="2026-07", entity_name="Acme Corp")

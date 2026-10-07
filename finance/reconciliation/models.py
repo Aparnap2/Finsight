@@ -86,8 +86,7 @@ def _require_decimal(field_name: str, value: object) -> Decimal:
         )
     if not isinstance(value, Decimal) or not value.is_finite():
         raise InvariantViolation(
-            f"Field '{field_name}' must be a finite Decimal, "
-            f"got {type(value).__name__}."
+            f"Field '{field_name}' must be a finite Decimal, got {type(value).__name__}."
         )
     return value
 
@@ -153,9 +152,7 @@ class PaymentRecord:
             try:
                 status = PaymentStatus(status_value.strip().upper())
             except ValueError as exc:
-                raise InvariantViolation(
-                    f"Unknown payment status {status_value!r}."
-                ) from exc
+                raise InvariantViolation(f"Unknown payment status {status_value!r}.") from exc
             object.__setattr__(self, "status", status)
         else:
             raise InvariantViolation(
@@ -231,9 +228,7 @@ class ReconciliationResult:
                     "exception_code (I-code) is required when outcome is EXCEPTION."
                 )
         elif code_value is not None:
-            raise InvariantViolation(
-                "exception_code must be null unless outcome is EXCEPTION."
-            )
+            raise InvariantViolation("exception_code must be null unless outcome is EXCEPTION.")
         fingerprint_value: object = self.fingerprint
         if not isinstance(fingerprint_value, str):
             raise InvariantViolation("Field 'fingerprint' must be a string.")

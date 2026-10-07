@@ -92,9 +92,7 @@ class TestBoardReport:
     def test_sections_stored(self) -> None:
         """Section content is preserved."""
         report = _report()
-        assert report.sections[ReportSection.EXECUTIVE_SUMMARY].startswith(
-            "# Executive Summary"
-        )
+        assert report.sections[ReportSection.EXECUTIVE_SUMMARY].startswith("# Executive Summary")
 
     def test_is_draft_defaults_to_true(self) -> None:
         """Reports default to draft."""

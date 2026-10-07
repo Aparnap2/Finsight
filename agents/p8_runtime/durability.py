@@ -240,9 +240,7 @@ def _canonical_projection(state: DurableRunState) -> dict[str, Any]:
 
 def _blank_usage() -> p8_01.BudgetUsage:
     """Build a zero consumption record for unrecorded identities."""
-    return p8_01.BudgetUsage(
-        model_calls=0, tokens=0, tool_calls=0, elapsed_seconds=0.0, retries=0
-    )
+    return p8_01.BudgetUsage(model_calls=0, tokens=0, tool_calls=0, elapsed_seconds=0.0, retries=0)
 
 
 def _append_audit(key: tuple[str, str], event: str) -> None:
@@ -338,9 +336,7 @@ def execute_run(
     counting = _CountingAdapter(provider) if provider is not None else None
     _LIVE[key] = 1
     try:
-        record = p8_02.execute_run(
-            identity, active_budget, active_policy, adapter=counting
-        )
+        record = p8_02.execute_run(identity, active_budget, active_policy, adapter=counting)
     finally:
         _LIVE[key] = 0
     _PROVIDER_CALLS[key] = _PROVIDER_CALLS.get(key, 0) + (counting.calls if counting else 0)
@@ -362,9 +358,7 @@ def provider_call_count(identity: p8_01.RunIdentity) -> int:
     return _PROVIDER_CALLS.get(_durable_key(identity), 0)
 
 
-def replay_durable(
-    identity: p8_01.RunIdentity, provider: Any | None = None
-) -> ReplayView:
+def replay_durable(identity: p8_01.RunIdentity, provider: Any | None = None) -> ReplayView:
     """Replay the recorded outcome with zero invocations or budget use."""
     _ = provider
     key = _durable_key(identity)
@@ -458,9 +452,7 @@ def recover_run(
     return RecoveryView()
 
 
-def resume_run(
-    identity: p8_01.RunIdentity, provider: Any | None = None
-) -> ResumeMarker | bool:
+def resume_run(identity: p8_01.RunIdentity, provider: Any | None = None) -> ResumeMarker | bool:
     """Resume via reconcile plus resume; recorded terminals stay untouched."""
     _ = provider
     key = _durable_key(identity)

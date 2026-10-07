@@ -1,4 +1,5 @@
 """PeriodValidator — validates fiscal period consistency."""
+
 from datetime import timedelta
 
 from pydantic import BaseModel
@@ -40,9 +41,7 @@ class PeriodValidator:
             overlapping_periods=overlapping,
         )
 
-    def validate_year(
-        self, year: int, calendar: FiscalCalendar
-    ) -> list[PeriodValidationResult]:
+    def validate_year(self, year: int, calendar: FiscalCalendar) -> list[PeriodValidationResult]:
         year_periods = calendar.get_periods_for_year(year)
         results = [self.validate_period(p, calendar) for p in year_periods]
 
@@ -59,9 +58,7 @@ class PeriodValidator:
             )
         return results
 
-    def check_overlapping(
-        self, period: FiscalPeriod, calendar: FiscalCalendar
-    ) -> bool:
+    def check_overlapping(self, period: FiscalPeriod, calendar: FiscalCalendar) -> bool:
         for p in calendar._periods.values():
             if p.id == period.id:
                 continue
@@ -69,9 +66,7 @@ class PeriodValidator:
                 return True
         return False
 
-    def _find_overlapping_ids(
-        self, period: FiscalPeriod, calendar: FiscalCalendar
-    ) -> list[str]:
+    def _find_overlapping_ids(self, period: FiscalPeriod, calendar: FiscalCalendar) -> list[str]:
         overlapping: list[str] = []
         for p in calendar._periods.values():
             if p.id == period.id:
@@ -80,9 +75,7 @@ class PeriodValidator:
                 overlapping.append(p.id)
         return overlapping
 
-    def check_gaps(
-        self, year: int, calendar: FiscalCalendar
-    ) -> list[FiscalPeriod]:
+    def check_gaps(self, year: int, calendar: FiscalCalendar) -> list[FiscalPeriod]:
         year_periods = calendar.get_periods_for_year(year)
         if not year_periods:
             return []

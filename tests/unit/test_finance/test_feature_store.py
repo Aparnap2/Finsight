@@ -281,9 +281,7 @@ class TestBuilders:
         assert out.height >= 1
 
     @pytest.mark.parametrize("group", ALL_GROUPS)
-    def test_money_columns_are_decimal(
-        self, frames: dict[str, pl.DataFrame], group: str
-    ) -> None:
+    def test_money_columns_are_decimal(self, frames: dict[str, pl.DataFrame], group: str) -> None:
         """Every monetary feature column is a polars Decimal dtype."""
         out = FeatureRegistry().build(group, frames[group])
         for col in MONEY_COLUMNS_BY_GROUP[group]:

@@ -74,9 +74,7 @@ class FormulaEvaluator:
 
     # ── Full evaluation ──────────────────────────────────────────────────────
 
-    def evaluate(
-        self, seed_inputs: dict[str, Decimal]
-    ) -> EvaluationContext:
+    def evaluate(self, seed_inputs: dict[str, Decimal]) -> EvaluationContext:
         """Evaluate all registered formulas in dependency order.
 
         *seed_inputs* are the externally-provided raw values (account balances,
@@ -88,9 +86,7 @@ class FormulaEvaluator:
         context = EvaluationContext(values=dict(seed_inputs))
 
         try:
-            order = self._resolver.resolve(
-                self._registry, set(seed_inputs.keys())
-            )
+            order = self._resolver.resolve(self._registry, set(seed_inputs.keys()))
         except ValueError as exc:
             context.errors.append(
                 EvaluationError(
@@ -147,9 +143,7 @@ class FormulaEvaluator:
 
         # Resolve full order but only evaluate what's needed
         try:
-            full_order = self._resolver.resolve(
-                self._registry, set(seed_inputs.keys())
-            )
+            full_order = self._resolver.resolve(self._registry, set(seed_inputs.keys()))
         except ValueError as exc:
             context = EvaluationContext(values=dict(seed_inputs))
             context.errors.append(
@@ -169,17 +163,13 @@ class FormulaEvaluator:
 
     # ── Internal ─────────────────────────────────────────────────────────────
 
-    def _evaluate_in_order(
-        self, context: EvaluationContext, order: list[str]
-    ) -> None:
+    def _evaluate_in_order(self, context: EvaluationContext, order: list[str]) -> None:
         """Evaluate formulas in the given order, collecting errors."""
         for formula_name in order:
             formula = self._registry.get(formula_name)
 
             # Check for missing inputs
-            missing = [
-                inp for inp in formula.inputs if inp not in context.values
-            ]
+            missing = [inp for inp in formula.inputs if inp not in context.values]
             if missing:
                 context.errors.append(
                     EvaluationError(

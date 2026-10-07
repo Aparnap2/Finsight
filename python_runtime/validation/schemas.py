@@ -29,9 +29,7 @@ class FinancialDatasetSchema(pa.DataFrameModel):
     period: Series[str] = pa.Field(nullable=False)
     amount: Series[float] = pa.Field(nullable=False, ge=0)
     department: Series[str] = pa.Field(nullable=True)
-    currency: Series[str] = pa.Field(
-        nullable=True, isin=["USD", "EUR", "GBP", "INR", "JPY"]
-    )
+    currency: Series[str] = pa.Field(nullable=True, isin=["USD", "EUR", "GBP", "INR", "JPY"])
 
 
 class VarianceInputSchema(pa.DataFrameModel):

@@ -94,9 +94,8 @@ class TestAValidInputRepresented:
 
 class TestAInvalidDiscoveryRejected:
     def test_a2_success_false_is_invalid_discovery_result(self) -> None:
-        from agents.reasoning.resolution import reason  # type: ignore[import-not-found]
-
         from agents.discovery.result import DiscoveryFailure
+        from agents.reasoning.resolution import reason  # type: ignore[import-not-found]
 
         bad2 = DiscoveryResult(
             success=False,
@@ -289,9 +288,8 @@ class TestCEvidenceGrounded:
 
 class TestDUncertaintyPreservation:
     def test_d_contradictory_remains_flagged(self) -> None:
-        from agents.reasoning.resolution import reason  # type: ignore[import-not-found]
-
         from agents.discovery.engine import discover
+        from agents.reasoning.resolution import reason  # type: ignore[import-not-found]
 
         reg = _registry()
         ctx = RuntimeFactory().create_context(
@@ -324,9 +322,8 @@ class TestDUncertaintyPreservation:
         assert "VERIFIED" not in getattr(result, "candidate_interpretation", "")
 
     def test_d_stale_not_resolved_by_confidence(self) -> None:
-        from agents.reasoning.resolution import reason  # type: ignore[import-not-found]
-
         from agents.discovery.engine import discover
+        from agents.reasoning.resolution import reason  # type: ignore[import-not-found]
 
         stale_at = NOW - timedelta(seconds=7200)
         rec = EvidenceRecord(
@@ -509,9 +506,8 @@ class TestHReplayIntegrity:
 
 class TestIFailureSemantics:
     def test_i_typed_failure_codes_only(self) -> None:
-        from agents.reasoning.resolution import reason  # type: ignore[import-not-found]
-
         from agents.discovery.result import DiscoveryFailure
+        from agents.reasoning.resolution import reason  # type: ignore[import-not-found]
 
         allowed = {
             "INSUFFICIENT_EVIDENCE",
@@ -538,9 +534,8 @@ class TestIFailureSemantics:
         assert getattr(getattr(out, "failure", None), "code", "") in allowed
 
     def test_i_no_plausible_resolution_on_failure(self) -> None:
-        from agents.reasoning.resolution import reason  # type: ignore[import-not-found]
-
         from agents.discovery.result import DiscoveryFailure
+        from agents.reasoning.resolution import reason  # type: ignore[import-not-found]
 
         bad_disc = DiscoveryResult(
             success=False,

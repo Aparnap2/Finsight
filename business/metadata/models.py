@@ -178,10 +178,7 @@ class MetadataRegistry:
         """
         existing = self._entries.get(entry.id)
         if existing is not None and existing.version == entry.version:
-            msg = (
-                f"Entry '{entry.id}' is already registered at version "
-                f"'{entry.version}'"
-            )
+            msg = f"Entry '{entry.id}' is already registered at version '{entry.version}'"
             raise ValueError(msg)
 
         self._versions.setdefault(entry.id, set()).add(entry.version)
@@ -262,9 +259,7 @@ class MetadataRegistry:
         for entry in self._entries.values():
             for dep in entry.dependencies:
                 if dep not in known:
-                    problems.append(
-                        f"entry '{entry.id}' depends on unknown '{dep}'"
-                    )
+                    problems.append(f"entry '{entry.id}' depends on unknown '{dep}'")
         return problems
 
     # ------------------------------------------------------------------

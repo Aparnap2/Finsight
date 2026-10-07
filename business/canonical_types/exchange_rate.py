@@ -59,27 +59,20 @@ class ExchangeRate(BaseModel):
             raise ValueError(f"Exchange rate must be positive, got {v}")
         quantized = v.quantize(Decimal("0.00000001"))
         if quantized != v:
-            raise ValueError(
-                f"Exchange rate precision exceeds 8 decimal places: {v}"
-            )
+            raise ValueError(f"Exchange rate precision exceeds 8 decimal places: {v}")
         return quantized
 
     @field_validator("from_currency", "to_currency")
     @classmethod
     def _validate_currency(cls, v: CurrencyCode) -> CurrencyCode:
         if not isinstance(v, CurrencyCode):
-            raise TypeError(
-                f"Currency must be a CurrencyCode instance, got {type(v).__name__}"
-            )
+            raise TypeError(f"Currency must be a CurrencyCode instance, got {type(v).__name__}")
         return v
 
     def _check_currencies_differ(self) -> None:
         """Validate that from_currency differs from to_currency."""
         if self.from_currency == self.to_currency:
-            raise ValueError(
-                f"Cannot have exchange rate from {self.from_currency} "
-                f"to itself"
-            )
+            raise ValueError(f"Cannot have exchange rate from {self.from_currency} to itself")
 
     def model_post_init(self, __context: Any) -> None:
         """Post-initialization validation."""
@@ -147,13 +140,7 @@ class ExchangeRate(BaseModel):
         )
 
     def __str__(self) -> str:
-        return (
-            f"1 {self.from_currency} = {self.rate} {self.to_currency} "
-            f"({self.date})"
-        )
+        return f"1 {self.from_currency} = {self.rate} {self.to_currency} ({self.date})"
 
     def __repr__(self) -> str:
-        return (
-            f"ExchangeRate({self.from_currency}, {self.to_currency}, "
-            f"{self.rate}, {self.date})"
-        )
+        return f"ExchangeRate({self.from_currency}, {self.to_currency}, {self.rate}, {self.date})"

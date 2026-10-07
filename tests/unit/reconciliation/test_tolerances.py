@@ -138,18 +138,14 @@ class TestPercentTolerance:
 
     def test_zero_base_still_honors_absolute(self) -> None:
         """A zero net still honors absolute (percent of zero is zero)."""
-        tolerance = ReconciliationTolerance(
-            absolute=Decimal("2.00"), percent=Decimal("0.01")
-        )
+        tolerance = ReconciliationTolerance(absolute=Decimal("2.00"), percent=Decimal("0.01"))
         assert tolerance.apply(Decimal("0.00")) == Decimal("2.00")
         assert tolerance.allows(Decimal("2.00"), Decimal("0.00")) is True
         assert tolerance.allows(Decimal("2.01"), Decimal("0.00")) is False
 
     def test_combined_absolute_plus_percent(self) -> None:
         """Allowance is absolute + abs(percent * base) in Decimal."""
-        tolerance = ReconciliationTolerance(
-            absolute=Decimal("5.00"), percent=Decimal("0.01")
-        )
+        tolerance = ReconciliationTolerance(absolute=Decimal("5.00"), percent=Decimal("0.01"))
         assert tolerance.apply(Decimal("1000.00")) == Decimal("15.00")
         assert tolerance.allows(Decimal("15.00"), Decimal("1000.00")) is True
         assert tolerance.allows(Decimal("15.01"), Decimal("1000.00")) is False
@@ -163,9 +159,7 @@ class TestTenantInjection:
         expected = _leg(payment_id="exp", net=Decimal("35000.00"))
         observed = _leg(payment_id="obs", net=Decimal("35004.00"))
         strict = reconcile(expected, observed, ReconciliationTolerance())
-        lenient = reconcile(
-            expected, observed, ReconciliationTolerance(absolute=Decimal("5.00"))
-        )
+        lenient = reconcile(expected, observed, ReconciliationTolerance(absolute=Decimal("5.00")))
         assert strict.outcome is ReconciliationOutcome.EXCEPTION
         assert lenient.outcome is ReconciliationOutcome.TOLERANCE_MATCHED
         assert strict.tolerance_applied == Decimal("0")

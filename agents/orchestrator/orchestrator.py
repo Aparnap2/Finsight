@@ -12,6 +12,7 @@ no state transitions, no LangChain. Provider-independent: any
 
 from __future__ import annotations
 
+import contextlib
 import logging
 from collections.abc import Callable
 from typing import Any
@@ -399,15 +400,11 @@ class InvestigateOrchestrator:
                     pass
             # Flush observability
             if obs is not None:
-                try:
+                with contextlib.suppress(Exception):
                     obs.flush()
-                except Exception:
-                    pass
             elif trace_ctx is not None:
-                try:
+                with contextlib.suppress(Exception):
                     self._tracer.flush()  # type: ignore[union-attr]
-                except Exception:
-                    pass
             journal = self._collect_journal()
             return OrchestrationResult(
                 status="ACCEPTED_CANDIDATE",
@@ -423,10 +420,8 @@ class InvestigateOrchestrator:
 
         # Exhausted loop
         if obs is not None:
-            try:
+            with contextlib.suppress(Exception):
                 obs.flush()
-            except Exception:
-                pass
         journal = self._collect_journal()
         return OrchestrationResult(
             status="REPLAN_EXHAUSTED_HITL",

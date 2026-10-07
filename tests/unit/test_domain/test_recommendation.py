@@ -233,9 +233,7 @@ class TestRecommendationLifecycle:
 
     def test_owner_and_target_date_are_settable(self) -> None:
         """Owner and target date are settable."""
-        rec = _recommendation(
-            owner="finance.lead", target_date=date(2026, 9, 30)
-        )
+        rec = _recommendation(owner="finance.lead", target_date=date(2026, 9, 30))
         assert rec.owner == "finance.lead"
         assert rec.target_date == date(2026, 9, 30)
 

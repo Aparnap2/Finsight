@@ -81,13 +81,7 @@ EXPIRES_AT = datetime(2026, 9, 17, 10, 0, 0, tzinfo=UTC)
 def make_result_line(batch_id: str, sequence: int, code: str, detail: str) -> str:
     """Build one 80-char RESULT line with a valid checksum (test helper)."""
     compact = _batch_id_to_compact(batch_id)
-    body = (
-        "01"
-        + compact
-        + str(sequence).zfill(8)
-        + code
-        + detail.ljust(50)[:50]
-    )
+    body = "01" + compact + str(sequence).zfill(8) + code + detail.ljust(50)[:50]
     assert len(body) == 76
     return body + _compute_checksum(body)
 
@@ -178,9 +172,12 @@ def test_verbatim_ac_recording() -> None:
     assert outcome.rejected_total == Decimal("0.00")
     assert outcome.per_record[0].code == "AC"
     assert outcome.per_record[0].detail == "POSTED"
-    assert outcome.result_sha256 == hashlib.sha256(
-        result_file_bytes([make_result_line(BATCH_ID, 1, "AC", "POSTED")])
-    ).hexdigest()
+    assert (
+        outcome.result_sha256
+        == hashlib.sha256(
+            result_file_bytes([make_result_line(BATCH_ID, 1, "AC", "POSTED")])
+        ).hexdigest()
+    )
     assert outcome.unknown_flag is False
     assert outcome.code is None
 
@@ -190,8 +187,12 @@ def test_verbatim_rj_invalid_account_code_preserved() -> None:
     line = make_result_line(BATCH_ID, 1, "RJ", "INVALID_ACCOUNT_CODE")
     bucket = FakeS3({result_key(): result_file_bytes([line])})
     outcome = ingest_result(
-        bucket, make_receipt(), artifact=make_artifact(),
-        company_id=COMPANY_ID, now=T1, window_start=T0,
+        bucket,
+        make_receipt(),
+        artifact=make_artifact(),
+        company_id=COMPANY_ID,
+        now=T1,
+        window_start=T0,
     )
     assert outcome.outcome == OutcomeLabel.REJECTED
     assert outcome.per_record[0].code == "RJ"
@@ -213,8 +214,12 @@ def test_verbatim_du_recorded_never_double_counts() -> None:
         amounts={1: Decimal("6000.00"), 2: Decimal("4000.00")},
     )
     outcome = ingest_result(
-        bucket, make_receipt(), artifact=artifact,
-        company_id=COMPANY_ID, now=T1, window_start=T0,
+        bucket,
+        make_receipt(),
+        artifact=artifact,
+        company_id=COMPANY_ID,
+        now=T1,
+        window_start=T0,
     )
     assert outcome.duplicate_count == 1
     assert outcome.per_record[1].code == "DU"
@@ -238,12 +243,20 @@ def test_partial_preserved_never_auto_retried() -> None:
         amounts={1: Decimal("6000.00"), 2: Decimal("4000.00")},
     )
     first = ingest_result(
-        bucket, make_receipt(), artifact=artifact,
-        company_id=COMPANY_ID, now=T1, window_start=T0,
+        bucket,
+        make_receipt(),
+        artifact=artifact,
+        company_id=COMPANY_ID,
+        now=T1,
+        window_start=T0,
     )
     second = ingest_result(
-        bucket, make_receipt(), artifact=artifact,
-        company_id=COMPANY_ID, now=T1, window_start=T0,
+        bucket,
+        make_receipt(),
+        artifact=artifact,
+        company_id=COMPANY_ID,
+        now=T1,
+        window_start=T0,
     )
     assert first.outcome == OutcomeLabel.PARTIAL
     assert first.accepted_total == Decimal("6000.00")
@@ -259,8 +272,12 @@ def test_control_mismatch_records_rejected_in_full() -> None:
     # Amounts attribute 9999.99 against the 10000.00 OUTBOUND control.
     artifact = make_artifact(amounts={1: Decimal("9999.99")})
     outcome = ingest_result(
-        bucket, make_receipt(), artifact=artifact,
-        company_id=COMPANY_ID, now=T1, window_start=T0,
+        bucket,
+        make_receipt(),
+        artifact=artifact,
+        company_id=COMPANY_ID,
+        now=T1,
+        window_start=T0,
     )
     assert outcome.outcome == OutcomeLabel.REJECTED
     assert outcome.code == EXEC_CONTROL_TOTAL_MISMATCH
@@ -272,8 +289,12 @@ def test_control_mismatch_records_rejected_in_full() -> None:
 def test_unknown_on_missing_in_window() -> None:
     """X39: absent RESULT records UNKNOWN with the poll deadline (no clock)."""
     outcome = ingest_result(
-        FakeS3({}), make_receipt(), artifact=make_artifact(),
-        company_id=COMPANY_ID, now=T1, window_start=T0,
+        FakeS3({}),
+        make_receipt(),
+        artifact=make_artifact(),
+        company_id=COMPANY_ID,
+        now=T1,
+        window_start=T0,
     )
     assert outcome.outcome == OutcomeLabel.UNKNOWN
     assert outcome.unknown_flag is True
@@ -287,12 +308,20 @@ def test_late_result_reconciles_preserving_history() -> None:
     """X40: late RESULT supersedes by pointer; UNKNOWN entry never edited."""
     store = ExecutionRecordStore()
     unknown = ingest_result(
-        FakeS3({}), make_receipt(), artifact=make_artifact(),
-        company_id=COMPANY_ID, now=T1, window_start=T0,
+        FakeS3({}),
+        make_receipt(),
+        artifact=make_artifact(),
+        company_id=COMPANY_ID,
+        now=T1,
+        window_start=T0,
     )
     row, _ = store.claim(
-        EXECUTION_ID, binding_digest=BINDING, company_id=COMPANY_ID,
-        situation_id=SITUATION_ID, batch_id=BATCH_ID, expires_at=EXPIRES_AT,
+        EXECUTION_ID,
+        binding_digest=BINDING,
+        company_id=COMPANY_ID,
+        situation_id=SITUATION_ID,
+        batch_id=BATCH_ID,
+        expires_at=EXPIRES_AT,
     )
     row = store.attach_receipt(row.execution_id, make_receipt())
     row = store.attach_outcome(row.execution_id, unknown)
@@ -302,8 +331,12 @@ def test_late_result_reconciles_preserving_history() -> None:
     line = make_result_line(BATCH_ID, 1, "AC", "POSTED")
     late = reconcile_late_result(
         FakeS3({result_key(): result_file_bytes([line])}),
-        make_receipt(), artifact=make_artifact(), company_id=COMPANY_ID,
-        now=TLATE, window_start=T0, prior_unknown=unknown,
+        make_receipt(),
+        artifact=make_artifact(),
+        company_id=COMPANY_ID,
+        now=TLATE,
+        window_start=T0,
+        prior_unknown=unknown,
     )
     row = store.attach_outcome(row.execution_id, late)
     assert row.outcome is not None and row.outcome.outcome == OutcomeLabel.ACCEPTED
@@ -317,8 +350,12 @@ def test_reconcile_requires_prior_unknown() -> None:
     """Late reconcile without a prior UNKNOWN is a programming error."""
     with pytest.raises(ValueError, match="prior_unknown"):
         reconcile_late_result(
-            FakeS3({}), make_receipt(), artifact=make_artifact(),
-            company_id=COMPANY_ID, now=TLATE, window_start=T0,
+            FakeS3({}),
+            make_receipt(),
+            artifact=make_artifact(),
+            company_id=COMPANY_ID,
+            now=TLATE,
+            window_start=T0,
             prior_unknown=ingest_ac(),
         )
 
@@ -337,8 +374,12 @@ def test_corrupt_checksum_refuses() -> None:
     bucket = FakeS3({result_key(): result_file_bytes([bad])})
     with pytest.raises(IngestionRefused) as exc:
         ingest_result(
-            bucket, make_receipt(), artifact=make_artifact(),
-            company_id=COMPANY_ID, now=T1, window_start=T0,
+            bucket,
+            make_receipt(),
+            artifact=make_artifact(),
+            company_id=COMPANY_ID,
+            now=T1,
+            window_start=T0,
         )
     assert exc.value.code == EXEC_RESULT_CORRUPT
 
@@ -348,8 +389,12 @@ def test_short_line_refuses() -> None:
     bucket = FakeS3({result_key(): b"TOO-SHORT\n"})
     with pytest.raises(IngestionRefused) as exc:
         ingest_result(
-            bucket, make_receipt(), artifact=make_artifact(),
-            company_id=COMPANY_ID, now=T1, window_start=T0,
+            bucket,
+            make_receipt(),
+            artifact=make_artifact(),
+            company_id=COMPANY_ID,
+            now=T1,
+            window_start=T0,
         )
     assert exc.value.code == EXEC_RESULT_CORRUPT
 
@@ -364,8 +409,12 @@ def test_missing_sequences_refuse_as_corrupt() -> None:
     )
     with pytest.raises(IngestionRefused) as exc:
         ingest_result(
-            bucket, make_receipt(), artifact=artifact,
-            company_id=COMPANY_ID, now=T1, window_start=T0,
+            bucket,
+            make_receipt(),
+            artifact=artifact,
+            company_id=COMPANY_ID,
+            now=T1,
+            window_start=T0,
         )
     assert exc.value.code == EXEC_RESULT_CORRUPT
 
@@ -376,8 +425,12 @@ def test_batch_skew_refuses() -> None:
     bucket = FakeS3({result_key(): result_file_bytes([line])})
     with pytest.raises(IngestionRefused) as exc:
         ingest_result(
-            bucket, make_receipt(), artifact=make_artifact(),
-            company_id=COMPANY_ID, now=T1, window_start=T0,
+            bucket,
+            make_receipt(),
+            artifact=make_artifact(),
+            company_id=COMPANY_ID,
+            now=T1,
+            window_start=T0,
         )
     assert exc.value.code == EXEC_RESULT_CORRUPT
 
@@ -387,8 +440,12 @@ def test_seam_mismatch_refuses() -> None:
     receipt = make_receipt().model_copy(update={"batch_id": "LEGACY-20260916-0099"})
     with pytest.raises(IngestionRefused) as exc:
         ingest_result(
-            FakeS3({}), receipt, artifact=make_artifact(),
-            company_id=COMPANY_ID, now=T1, window_start=T0,
+            FakeS3({}),
+            receipt,
+            artifact=make_artifact(),
+            company_id=COMPANY_ID,
+            now=T1,
+            window_start=T0,
         )
     assert exc.value.code == EXEC_RESULT_CORRUPT
 
@@ -401,8 +458,10 @@ def test_seam_mismatch_refuses() -> None:
 def claim_row(store: ExecutionRecordStore, **over: Any) -> Any:
     """Claim the FS-231 row with overridable fields."""
     params: dict[str, Any] = {
-        "binding_digest": BINDING, "company_id": COMPANY_ID,
-        "situation_id": SITUATION_ID, "batch_id": BATCH_ID,
+        "binding_digest": BINDING,
+        "company_id": COMPANY_ID,
+        "situation_id": SITUATION_ID,
+        "batch_id": BATCH_ID,
         "expires_at": EXPIRES_AT,
     }
     params.update(over)
@@ -449,8 +508,11 @@ def test_r4_new_batch_attempt_refused() -> None:
     claim_row(store)
     with pytest.raises(ApprovalRefused) as exc:
         store.claim(
-            EXECUTION_ID, binding_digest=BINDING, company_id=COMPANY_ID,
-            situation_id=SITUATION_ID, batch_id="LEGACY-20260916-0044",
+            EXECUTION_ID,
+            binding_digest=BINDING,
+            company_id=COMPANY_ID,
+            situation_id=SITUATION_ID,
+            batch_id="LEGACY-20260916-0044",
             expires_at=EXPIRES_AT,
         )
     assert exc.value.code.value == "AUTHORIZATION_REPLAYED"
@@ -464,8 +526,12 @@ def test_r5_r6_unknown_window_replay_then_late_reconcile() -> None:
     store = ExecutionRecordStore()
     claim_row(store)
     unknown = ingest_result(
-        FakeS3({}), make_receipt(), artifact=make_artifact(),
-        company_id=COMPANY_ID, now=T1, window_start=T0,
+        FakeS3({}),
+        make_receipt(),
+        artifact=make_artifact(),
+        company_id=COMPANY_ID,
+        now=T1,
+        window_start=T0,
     )
     store.attach_outcome(EXECUTION_ID, unknown)
     gap_read = store.replay(EXECUTION_ID)
@@ -533,7 +599,9 @@ def test_second_outcome_without_unknown_path_refused() -> None:
             record_count=2,
             amounts={1: Decimal("6000.00"), 2: Decimal("4000.00")},
         ),
-        company_id=COMPANY_ID, now=T1, window_start=T0,
+        company_id=COMPANY_ID,
+        now=T1,
+        window_start=T0,
     )
     with pytest.raises(RecordTransitionError):
         store.attach_outcome(EXECUTION_ID, other)
@@ -546,9 +614,7 @@ def test_replay_is_byte_identical() -> None:
     recorded = ingest_ac()
     store.attach_outcome(EXECUTION_ID, recorded)
     for _ in range(3):
-        assert outcome_fingerprint(store.replay(EXECUTION_ID)) == outcome_fingerprint(
-            recorded
-        )
+        assert outcome_fingerprint(store.replay(EXECUTION_ID)) == outcome_fingerprint(recorded)
 
 
 # ---------------------------------------------------------------------------
@@ -561,15 +627,23 @@ def test_handoff_unknown_uses_nulls_not_zeros() -> None:
     store = ExecutionRecordStore()
     claim_row(store)
     unknown = ingest_result(
-        FakeS3({}), make_receipt(), artifact=make_artifact(),
-        company_id=COMPANY_ID, now=T1, window_start=T0,
+        FakeS3({}),
+        make_receipt(),
+        artifact=make_artifact(),
+        company_id=COMPANY_ID,
+        now=T1,
+        window_start=T0,
     )
     row = store.attach_outcome(EXECUTION_ID, unknown)
     assert row.outcome is not None
     handoff = build_handoff(
-        record=row, outcome=row.outcome, receipt=make_receipt(),
-        artifact=make_artifact(), authorization_id=AUTHZ_ID,
-        proposal_hash=PROPOSAL_HASH, proposal_version=PROPOSAL_VERSION,
+        record=row,
+        outcome=row.outcome,
+        receipt=make_receipt(),
+        artifact=make_artifact(),
+        authorization_id=AUTHZ_ID,
+        proposal_hash=PROPOSAL_HASH,
+        proposal_version=PROPOSAL_VERSION,
         recorded_at=T1,
     )
     assert handoff.unknown_flag is True
@@ -584,10 +658,14 @@ def test_handoff_carries_both_hashes_and_no_verdict() -> None:
     """X47: handoff carries both digests; it asserts no verdict anywhere."""
     outcome = ingest_ac()
     handoff = build_handoff(
-        record=claim_row(ExecutionRecordStore())[0], outcome=outcome,
-        receipt=make_receipt(), artifact=make_artifact(),
-        authorization_id=AUTHZ_ID, proposal_hash=PROPOSAL_HASH,
-        proposal_version=PROPOSAL_VERSION, recorded_at=T1,
+        record=claim_row(ExecutionRecordStore())[0],
+        outcome=outcome,
+        receipt=make_receipt(),
+        artifact=make_artifact(),
+        authorization_id=AUTHZ_ID,
+        proposal_hash=PROPOSAL_HASH,
+        proposal_version=PROPOSAL_VERSION,
+        recorded_at=T1,
     )
     assert handoff.outbound_sha256 == make_artifact().outbound_sha256
     assert handoff.result_sha256 == outcome.result_sha256
@@ -601,6 +679,7 @@ def test_handoff_carries_both_hashes_and_no_verdict() -> None:
 # Pipeline: E1-E6 order, short-circuit, FS-231 golden (X5, X48-X51)
 # ---------------------------------------------------------------------------
 
+
 def claimed_store() -> ReservationStore:
     """Reservation store with the golden execution pre-claimed (E1 done)."""
     from finance.legacy_execution.reservation import ReservationBinding
@@ -609,12 +688,12 @@ def claimed_store() -> ReservationStore:
     store.claim_execution(
         EXECUTION_ID,
         ReservationBinding(
-            binding_digest=BINDING, company_id=COMPANY_ID,
+            binding_digest=BINDING,
+            company_id=COMPANY_ID,
             situation_id=SITUATION_ID,
         ),
     )
     return store
-
 
 
 def golden_stages(puts: list[str], ran: list[str]) -> dict[str, Any]:
@@ -623,21 +702,27 @@ def golden_stages(puts: list[str], ran: list[str]) -> dict[str, Any]:
     def reservation(ctx: ExecutionContext) -> ReservationGrant:
         ran.append("reservation")
         return ReservationGrant(
-            execution_id=ctx.execution_id, batch_id=BATCH_ID,
-            company_id=ctx.company_id, situation_id=ctx.situation_id,
+            execution_id=ctx.execution_id,
+            batch_id=BATCH_ID,
+            company_id=ctx.company_id,
+            situation_id=ctx.situation_id,
             authorization_id=ctx.authorization_id,
             proposal_hash=ctx.proposal_hash,
             proposal_version=ctx.proposal_version,
-            binding_digest=ctx.binding_digest, expires_at=ctx.expires_at,
+            binding_digest=ctx.binding_digest,
+            expires_at=ctx.expires_at,
             replayed=False,
         )
 
     def intent(grant: ReservationGrant) -> IntentView:
         ran.append("intent")
         return IntentView(
-            execution_id=grant.execution_id, action="REPROCESS_LEGACY_RECORD",
-            amount_exact=Decimal("10000.00"), account_code="4812",
-            company_id=grant.company_id, situation_id=grant.situation_id,
+            execution_id=grant.execution_id,
+            action="REPROCESS_LEGACY_RECORD",
+            amount_exact=Decimal("10000.00"),
+            account_code="4812",
+            company_id=grant.company_id,
+            situation_id=grant.situation_id,
             batch_id=grant.batch_id,
         )
 
@@ -653,8 +738,10 @@ def golden_stages(puts: list[str], ran: list[str]) -> dict[str, Any]:
         return make_receipt(artifact_view.file_bytes)
 
     return {
-        "reservation": reservation, "intent": intent,
-        "artifact": artifact, "transport": transport,
+        "reservation": reservation,
+        "intent": intent,
+        "artifact": artifact,
+        "transport": transport,
         "reservation_store": claimed_store(),
     }
 
@@ -662,11 +749,16 @@ def golden_stages(puts: list[str], ran: list[str]) -> dict[str, Any]:
 def golden_context() -> ExecutionContext:
     """FS-231 execution context with fixed timestamps."""
     return ExecutionContext(
-        execution_id=EXECUTION_ID, company_id=COMPANY_ID,
-        situation_id=SITUATION_ID, authorization_id=AUTHZ_ID,
-        proposal_hash=PROPOSAL_HASH, proposal_version=PROPOSAL_VERSION,
-        binding_digest=BINDING, expires_at=EXPIRES_AT,
-        now=T1, window_start=T0,
+        execution_id=EXECUTION_ID,
+        company_id=COMPANY_ID,
+        situation_id=SITUATION_ID,
+        authorization_id=AUTHZ_ID,
+        proposal_hash=PROPOSAL_HASH,
+        proposal_version=PROPOSAL_VERSION,
+        binding_digest=BINDING,
+        expires_at=EXPIRES_AT,
+        now=T1,
+        window_start=T0,
     )
 
 
@@ -677,7 +769,9 @@ def test_fs231_golden_end_to_end_accepted() -> None:
     puts: list[str] = []
     ran: list[str] = []
     result = run_execution(
-        golden_context(), result_store=bucket, **golden_stages(puts, ran),
+        golden_context(),
+        result_store=bucket,
+        **golden_stages(puts, ran),
     )
     assert result.permitted is True
     assert result.code is None
@@ -687,17 +781,22 @@ def test_fs231_golden_end_to_end_accepted() -> None:
     assert result.handoff.control_total == Decimal("10000.00")
     assert result.handoff.accepted_total == Decimal("10000.00")
     assert result.handoff.rejected_count == 0
-    assert result.handoff.result_sha256 == hashlib.sha256(
-        result_file_bytes([line])
-    ).hexdigest()
+    assert result.handoff.result_sha256 == hashlib.sha256(result_file_bytes([line])).hexdigest()
     assert result.handoff.batch_id == BATCH_ID
     assert puts == [BATCH_ID]  # exactly one PUT (X41)
     # `ran` tracks the injected T1/T2 stand-ins; the audit proves all 7 steps.
     assert ran == ["reservation", "intent", "artifact", "transport"]
     stages = [entry.stage for entry in result.audit]
-    assert stages == ["E1-reservation", "E2-intent", "E3-artifact",
-                      "E4-transport", "E5-observation", "E6-ingestion",
-                      "E6-record", "handoff"]
+    assert stages == [
+        "E1-reservation",
+        "E2-intent",
+        "E3-artifact",
+        "E4-transport",
+        "E5-observation",
+        "E6-ingestion",
+        "E6-record",
+        "handoff",
+    ]
     assert all(entry.permitted for entry in result.audit)
 
 
@@ -754,7 +853,9 @@ def test_pipeline_maps_ingestion_corrupt_to_refusal() -> None:
     puts: list[str] = []
     ran: list[str] = []
     result = run_execution(
-        golden_context(), result_store=bucket, **golden_stages(puts, ran),
+        golden_context(),
+        result_store=bucket,
+        **golden_stages(puts, ran),
     )
     assert result.permitted is False
     assert result.code == EXEC_RESULT_CORRUPT
@@ -768,7 +869,9 @@ def test_pipeline_records_unknown_handoff_when_result_missing() -> None:
     puts: list[str] = []
     ran: list[str] = []
     result = run_execution(
-        golden_context(), result_store=FakeS3({}), **golden_stages(puts, ran),
+        golden_context(),
+        result_store=FakeS3({}),
+        **golden_stages(puts, ran),
     )
     assert result.permitted is True
     assert result.handoff is not None
@@ -785,7 +888,9 @@ def test_pipeline_replay_returns_recorded_outcome_without_second_put() -> None:
     first_puts: list[str] = []
     first_ran: list[str] = []
     first = run_execution(
-        golden_context(), result_store=bucket, record_store=record_store,
+        golden_context(),
+        result_store=bucket,
+        record_store=record_store,
         **golden_stages(first_puts, first_ran),
     )
     assert first.permitted is True
@@ -793,11 +898,14 @@ def test_pipeline_replay_returns_recorded_outcome_without_second_put() -> None:
     def replay_reservation(ctx: ExecutionContext) -> ReservationGrant:
         existing = record_store.claimed(ctx.execution_id)
         assert existing is not None and existing.outcome is not None
-        raise PipelineRefused("E1-reservation", "AUTHORIZATION_REPLAYED",
-                              "replay-read expects the recorded outcome")
+        raise PipelineRefused(
+            "E1-reservation", "AUTHORIZATION_REPLAYED", "replay-read expects the recorded outcome"
+        )
 
     second = run_execution(
-        golden_context(), result_store=bucket, record_store=record_store,
+        golden_context(),
+        result_store=bucket,
+        record_store=record_store,
         **{**golden_stages([], []), "reservation": replay_reservation},
     )
     assert second.permitted is False

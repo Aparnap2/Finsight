@@ -23,9 +23,7 @@ FIFTY_K = Decimal("50000.00")
 TEN_PCT = Decimal("10.00")
 
 
-def compute_variance(
-    actual: Decimal, budget: Decimal
-) -> tuple[Decimal, Decimal | None]:
+def compute_variance(actual: Decimal, budget: Decimal) -> tuple[Decimal, Decimal | None]:
     """Compute variance amount and percentage.
 
     Formula:
@@ -51,8 +49,7 @@ class TestVarianceFormula:
             expected: Decimal = case["expected_variance"]
             result, _ = compute_variance(actual, budget)
             assert result == expected, (
-                f"Variance({actual}, {budget}) = {result}, "
-                f"expected {expected}"
+                f"Variance({actual}, {budget}) = {result}, expected {expected}"
             )
 
     def test_variance_percentage(self, variance_data: list[dict[str, Any]]) -> None:
@@ -63,17 +60,13 @@ class TestVarianceFormula:
             expected_pct: Decimal | None = case.get("expected_variance_pct")
             _, result_pct = compute_variance(actual, budget)
             if expected_pct is None:
-                assert result_pct is None, (
-                    f"Expected None for division by zero, got {result_pct}"
-                )
+                assert result_pct is None, f"Expected None for division by zero, got {result_pct}"
             else:
                 assert result_pct is not None, (
-                    f"Expected {expected_pct}, got None for "
-                    f"actual={actual} budget={budget}"
+                    f"Expected {expected_pct}, got None for actual={actual} budget={budget}"
                 )
                 assert result_pct == expected_pct, (
-                    f"Variance%({actual}, {budget}) = {result_pct}, "
-                    f"expected {expected_pct}"
+                    f"Variance%({actual}, {budget}) = {result_pct}, expected {expected_pct}"
                 )
 
     def test_variance_sign_convention(self) -> None:
@@ -82,16 +75,14 @@ class TestVarianceFormula:
         actual, budget = Decimal("120000.00"), Decimal("100000.00")
         variance, _ = compute_variance(actual, budget)
         assert variance > Decimal("0.00"), (
-            f"Expense variance should be positive (unfavorable), "
-            f"got {variance}"
+            f"Expense variance should be positive (unfavorable), got {variance}"
         )
 
         # Expense account: actual < budget → favorable → negative variance
         actual2, budget2 = Decimal("80000.00"), Decimal("100000.00")
         variance2, _ = compute_variance(actual2, budget2)
         assert variance2 < Decimal("0.00"), (
-            f"Expense variance should be negative (favorable), "
-            f"got {variance2}"
+            f"Expense variance should be negative (favorable), got {variance2}"
         )
 
     def test_zero_variance(self) -> None:
@@ -100,9 +91,7 @@ class TestVarianceFormula:
         assert variance == Decimal("0.00"), (
             f"Expected zero variance when actual equals budget, got {variance}"
         )
-        assert pct == Decimal("0.00"), (
-            f"Expected zero pct when actual equals budget, got {pct}"
-        )
+        assert pct == Decimal("0.00"), f"Expected zero pct when actual equals budget, got {pct}"
 
     def test_negative_budget_variance_sign(self) -> None:
         """Negative budgets should still follow variance = actual - budget."""
@@ -110,8 +99,7 @@ class TestVarianceFormula:
         variance, pct = compute_variance(actual, budget)
         # actual > budget (less negative) → unfavorable for expense
         assert variance > Decimal("0.00"), (
-            f"With negative budget, actual > budget should give positive "
-            f"variance, got {variance}"
+            f"With negative budget, actual > budget should give positive variance, got {variance}"
         )
         assert pct is not None and pct > Decimal("0.00"), (
             f"Expected positive variance % for this case, got {pct}"
@@ -122,9 +110,7 @@ class TestMaterialityThreshold:
     """Tests for materiality: variance > $50K AND > 10%."""
 
     @staticmethod
-    def is_material(
-        variance_amount: Decimal, variance_pct: Decimal | None
-    ) -> bool:
+    def is_material(variance_amount: Decimal, variance_pct: Decimal | None) -> bool:
         """Determine whether a variance is material.
 
         Materiality requires BOTH:
@@ -137,48 +123,48 @@ class TestMaterialityThreshold:
 
     def test_large_amount_large_pct_is_material(self) -> None:
         """$100K variance at 50% should be material."""
-        assert self.is_material(
-            Decimal("100000.00"), Decimal("50.00")
-        ), "$100K at 50% should be material"
+        assert self.is_material(Decimal("100000.00"), Decimal("50.00")), (
+            "$100K at 50% should be material"
+        )
 
     def test_large_amount_small_pct_not_material(self) -> None:
         """$100K variance at 2% should NOT be material."""
-        assert not self.is_material(
-            Decimal("100000.00"), Decimal("2.00")
-        ), "$100K at 2% should not be material"
+        assert not self.is_material(Decimal("100000.00"), Decimal("2.00")), (
+            "$100K at 2% should not be material"
+        )
 
     def test_small_amount_large_pct_not_material(self) -> None:
         """$10K variance at 50% should NOT be material."""
-        assert not self.is_material(
-            Decimal("10000.00"), Decimal("50.00")
-        ), "$10K at 50% should not be material"
+        assert not self.is_material(Decimal("10000.00"), Decimal("50.00")), (
+            "$10K at 50% should not be material"
+        )
 
     def test_amount_at_threshold(self) -> None:
         """Exactly $50K at exactly 10% should NOT be material (not strictly >)."""
-        assert not self.is_material(
-            FIFTY_K, TEN_PCT
-        ), "$50K at 10% should not be material (not strictly greater)"
+        assert not self.is_material(FIFTY_K, TEN_PCT), (
+            "$50K at 10% should not be material (not strictly greater)"
+        )
 
     def test_just_above_threshold_is_material(self) -> None:
         """$50,001 at 10.01% should be material."""
-        assert self.is_material(
-            Decimal("50001.00"), Decimal("10.01")
-        ), "$50,001 at 10.01% should be material"
+        assert self.is_material(Decimal("50001.00"), Decimal("10.01")), (
+            "$50,001 at 10.01% should be material"
+        )
 
     def test_negative_variance_materiality(self) -> None:
         """Negative variances should use absolute values for threshold check."""
-        assert self.is_material(
-            Decimal("-100000.00"), Decimal("-50.00")
-        ), "-$100K at -50% should be material (absolute check)"
+        assert self.is_material(Decimal("-100000.00"), Decimal("-50.00")), (
+            "-$100K at -50% should be material (absolute check)"
+        )
 
     def test_zero_budget_variance_materiality(self) -> None:
         """When budget is zero (pct is None), only amount threshold applies."""
-        assert self.is_material(
-            Decimal("75000.00"), None
-        ), "$75K with zero budget should be material"
-        assert not self.is_material(
-            Decimal("30000.00"), None
-        ), "$30K with zero budget should not be material"
+        assert self.is_material(Decimal("75000.00"), None), (
+            "$75K with zero budget should be material"
+        )
+        assert not self.is_material(Decimal("30000.00"), None), (
+            "$30K with zero budget should not be material"
+        )
 
 
 class TestTrialBalanceBalancing:
@@ -189,7 +175,7 @@ class TestTrialBalanceBalancing:
         """Sum all debit values from trial balance rows."""
         total = Decimal("0.00")
         for row in data:
-            d: Decimal | None = row.get("debit")  
+            d: Decimal | None = row.get("debit")
             if d is not None:
                 total += d
         return total
@@ -199,7 +185,7 @@ class TestTrialBalanceBalancing:
         """Sum all credit values from trial balance rows."""
         total = Decimal("0.00")
         for row in data:
-            c: Decimal | None = row.get("credit")  
+            c: Decimal | None = row.get("credit")
             if c is not None:
                 total += c
         return total
@@ -225,23 +211,17 @@ class TestTrialBalanceBalancing:
         total_debits = self.total_debits(unbalanced_tb.data)
         total_credits = self.total_credits(unbalanced_tb.data)
         imbalance = abs(total_debits - total_credits)
-        assert imbalance > Decimal("0.00"), (
-            f"Expected non-zero imbalance, got {imbalance}"
-        )
+        assert imbalance > Decimal("0.00"), f"Expected non-zero imbalance, got {imbalance}"
         assert imbalance % Decimal("0.01") == Decimal("0.00"), (
             f"Imbalance {imbalance} should be precise to 2 decimal places"
         )
 
-    def test_tb_contains_only_numeric_debit_credit(
-        self, balanced_tb: ExampleSet
-    ) -> None:
+    def test_tb_contains_only_numeric_debit_credit(self, balanced_tb: ExampleSet) -> None:
         """Debit and credit values should all be Decimal types."""
         for i, row in enumerate(balanced_tb.data):
             debit = row.get("debit")
             credit = row.get("credit")
-            assert isinstance(debit, Decimal), (
-                f"Row {i}: debit {debit!r} is {type(debit).__name__}"
-            )
+            assert isinstance(debit, Decimal), f"Row {i}: debit {debit!r} is {type(debit).__name__}"
             assert isinstance(credit, Decimal), (
                 f"Row {i}: credit {credit!r} is {type(credit).__name__}"
             )
@@ -268,41 +248,29 @@ class TestInvoiceStatusMachine:
 
     def test_valid_draft_to_approved(self) -> None:
         """draft → approved is a valid transition."""
-        assert self.can_transition("draft", "approved"), (
-            "draft → approved should be valid"
-        )
+        assert self.can_transition("draft", "approved"), "draft → approved should be valid"
 
     def test_valid_approved_to_paid(self) -> None:
         """approved → paid is a valid transition."""
-        assert self.can_transition("approved", "paid"), (
-            "approved → paid should be valid"
-        )
+        assert self.can_transition("approved", "paid"), "approved → paid should be valid"
 
     def test_invalid_draft_to_paid(self) -> None:
         """draft → paid is invalid (skips approval)."""
-        assert not self.can_transition("draft", "paid"), (
-            "draft → paid should be invalid"
-        )
+        assert not self.can_transition("draft", "paid"), "draft → paid should be invalid"
 
     def test_invalid_paid_to_approved(self) -> None:
         """paid → approved is invalid (cannot un-pay)."""
-        assert not self.can_transition("paid", "approved"), (
-            "paid → approved should be invalid"
-        )
+        assert not self.can_transition("paid", "approved"), "paid → approved should be invalid"
 
     def test_good_invoice_statuses(self, good_invoices: ExampleSet) -> None:
         """All good invoices should have valid statuses (approved or paid)."""
         for i, row in enumerate(good_invoices.data):
             status = row.get("status")
-            assert status in ("approved", "paid"), (
-                f"Row {i}: unexpected status '{status}'"
-            )
+            assert status in ("approved", "paid"), f"Row {i}: unexpected status '{status}'"
 
     def test_unknown_status_rejected(self) -> None:
         """An empty or unknown status string should not match any transition."""
-        assert not self.can_transition("", "approved"), (
-            "Empty status should not allow transitions"
-        )
+        assert not self.can_transition("", "approved"), "Empty status should not allow transitions"
         assert not self.can_transition("cancelled", "approved"), (
             "'cancelled' is not a valid starting status"
         )
@@ -329,18 +297,12 @@ class TestPeriodFormat:
         """2026-01 through 2026-12 should all be valid."""
         for m in range(1, 13):
             period = f"2026-{m:02d}"
-            assert self.is_valid_period(period), (
-                f"Period '{period}' should be valid"
-            )
+            assert self.is_valid_period(period), f"Period '{period}' should be valid"
 
     def test_invalid_month(self) -> None:
         """Months outside 01-12 should be invalid."""
-        assert not self.is_valid_period("2026-13"), (
-            "Month 13 should be invalid"
-        )
-        assert not self.is_valid_period("2026-00"), (
-            "Month 00 should be invalid"
-        )
+        assert not self.is_valid_period("2026-13"), "Month 13 should be invalid"
+        assert not self.is_valid_period("2026-00"), "Month 00 should be invalid"
 
     def test_invalid_format(self) -> None:
         """Malformed period strings should be rejected."""

@@ -72,10 +72,7 @@ def decide_escalation(
             f"{type(raw).__name__}: float/bool money is rejected."
         )
     if not isinstance(raw, Decimal) or not raw.is_finite():
-        raise ValueError(
-            "variance must be a finite Decimal, "
-            f"got {type(raw).__name__}."
-        )
+        raise ValueError(f"variance must be a finite Decimal, got {type(raw).__name__}.")
     rules = MeridianBusinessRules()
     legacy_approval = rules.legacy_always_requires_approval()
     tier = rules.evaluate_refund(abs(raw))

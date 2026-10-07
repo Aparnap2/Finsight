@@ -129,9 +129,7 @@ class TestHashPii:
 
     def test_raw_value_absent(self) -> None:
         """The raw PII value never appears in its hash."""
-        assert "alice@example.com" not in hash_pii(
-            "alice@example.com", tenant_id="meridian"
-        )
+        assert "alice@example.com" not in hash_pii("alice@example.com", tenant_id="meridian")
 
     def test_contains_secret_literal_flags_sk(self) -> None:
         """sk- literals are flagged; redacted text is clean."""
@@ -188,9 +186,7 @@ class TestTracerSanitization:
         monkeypatch = pytest.MonkeyPatch()
         monkeypatch.setitem(sys.modules, "langfuse", fake_module)
         try:
-            tracer = LangfuseTracer(
-                public_key="pk-test", secret_key="sk-test", host="http://x"
-            )
+            tracer = LangfuseTracer(public_key="pk-test", secret_key="sk-test", host="http://x")
         finally:
             monkeypatch.undo()
         fake_sdk_ctx = MagicMock()
@@ -232,8 +228,6 @@ class TestEvidenceSecretContainment:
         """Scrubbed evidence text logged; raw secret never in log records."""
         content = f"Gmail memo carries {_SECRET} inline"
         with caplog.at_level(logging.INFO):
-            logging.getLogger("finsight.evidence").info(
-                "evidence content: %s", scrub_text(content)
-            )
+            logging.getLogger("finsight.evidence").info("evidence content: %s", scrub_text(content))
         assert _SECRET not in caplog.text
         assert "evidence content" in caplog.text

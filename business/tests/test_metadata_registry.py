@@ -97,12 +97,8 @@ class TestMetadataRegistry:
         """Entries are countable and filterable by kind."""
         registry = MetadataRegistry()
         for i in range(3):
-            registry.register(
-                RegistryEntry(id=f"formula:f{i}", kind="formula", owner="A")
-            )
-        registry.register(
-            RegistryEntry(id="policy:p0", kind="policy", owner="A")
-        )
+            registry.register(RegistryEntry(id=f"formula:f{i}", kind="formula", owner="A"))
+        registry.register(RegistryEntry(id="policy:p0", kind="policy", owner="A"))
         assert len(registry) == 4
         assert len(registry.get_by_kind("formula")) == 3
         assert len(registry.get_by_kind("policy")) == 1
@@ -110,12 +106,8 @@ class TestMetadataRegistry:
     def test_validate_versions_clean(self) -> None:
         """A registry with consistent versions has no problems."""
         registry = MetadataRegistry()
-        registry.register(
-            RegistryEntry(id="formula:a", kind="formula", owner="A", version="1.0.0")
-        )
-        registry.register(
-            RegistryEntry(id="formula:b", kind="formula", owner="A", version="1.0.0")
-        )
+        registry.register(RegistryEntry(id="formula:a", kind="formula", owner="A", version="1.0.0"))
+        registry.register(RegistryEntry(id="formula:b", kind="formula", owner="A", version="1.0.0"))
         assert registry.validate_versions() == []
 
     def test_validate_dependencies_missing(self) -> None:

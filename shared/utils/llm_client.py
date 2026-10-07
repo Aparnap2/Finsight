@@ -1,6 +1,9 @@
-from typing import Any
+from __future__ import annotations
 
-from openai import OpenAI
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:  # pragma: no cover - import only for type checking
+    from openai import OpenAI
 
 from shared.config import get_settings
 
@@ -15,6 +18,10 @@ class LLMClient:
         self._provider = "poolside"
 
     def _get_client(self) -> OpenAI:
+        # Deferred SDK import: importing this module must not load the
+        # network stack (integration purity gates assert on sys.modules).
+        from openai import OpenAI
+
         if self._client is not None:
             return self._client
 
@@ -44,9 +51,7 @@ class LLMClient:
 
         return self._client
 
-    def generate(
-        self, prompt: str, max_tokens: int = 512, temperature: float = 0.3
-    ) -> str:
+    def generate(self, prompt: str, max_tokens: int = 512, temperature: float = 0.3) -> str:
         client = self._get_client()
         request_kwargs: dict[str, Any] = {
             "model": self.model,
@@ -55,9 +60,7 @@ class LLMClient:
             "temperature": temperature,
         }
         if self._provider == "poolside":
-            request_kwargs["extra_body"] = {
-                "chat_template_kwargs": {"enable_thinking": False}
-            }
+            request_kwargs["extra_body"] = {"chat_template_kwargs": {"enable_thinking": False}}
 
         response = client.chat.completions.create(**request_kwargs)
         return response.choices[0].message.content or ""

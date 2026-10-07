@@ -37,10 +37,9 @@ class VarianceAccuracy:
         for exp in expected:
             for act in actual:
                 if exp.get("account_id") == act.get("account_id"):
-                    if (
-                        exp.get("variance_amount") == act.get("variance_amount")
-                        and exp.get("variance_pct") == act.get("variance_pct")
-                    ):
+                    if exp.get("variance_amount") == act.get("variance_amount") and exp.get(
+                        "variance_pct"
+                    ) == act.get("variance_pct"):
                         matched += 1
                     break
 
@@ -125,10 +124,7 @@ class UnsupportedClaimRate:
     def compute(assertions: list[Any]) -> float:
         if not assertions:
             return 1.0
-        supported = sum(
-            1 for a in assertions
-            if a.support_level in ("verified", "probable")
-        )
+        supported = sum(1 for a in assertions if a.support_level in ("verified", "probable"))
         return supported / len(assertions)
 
 
@@ -158,9 +154,9 @@ class PolicyCompliance:
             return 1.0
         blocked = {"block", "escalate"}
         compliant = sum(
-            1 for a in assertions
-            if a.max_allowed_action not in blocked
-            or a.max_allowed_action == "route_for_review"
+            1
+            for a in assertions
+            if a.max_allowed_action not in blocked or a.max_allowed_action == "route_for_review"
         )
         return compliant / len(assertions)
 
@@ -187,8 +183,7 @@ class PlanningAccuracy:
 
         if required_intents:
             found_required = sum(
-                1 for r in required_intents
-                if any(r.lower() in obj for obj in action_objectives)
+                1 for r in required_intents if any(r.lower() in obj for obj in action_objectives)
             )
             required_score = found_required / len(required_intents)
         else:
@@ -196,8 +191,7 @@ class PlanningAccuracy:
 
         if forbidden_intents:
             found_forbidden = sum(
-                1 for f in forbidden_intents
-                if any(f.lower() in obj for obj in action_objectives)
+                1 for f in forbidden_intents if any(f.lower() in obj for obj in action_objectives)
             )
             forbidden_score = 1.0 - (found_forbidden / len(forbidden_intents))
         else:

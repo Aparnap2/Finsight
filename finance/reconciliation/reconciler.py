@@ -77,18 +77,13 @@ def reconcile(
     tolerance_value: object = tolerance
     if not isinstance(tolerance_value, ReconciliationTolerance):
         raise ToleranceError(
-            "tolerance must be a ReconciliationTolerance, "
-            f"got {type(tolerance_value).__name__}."
+            f"tolerance must be a ReconciliationTolerance, got {type(tolerance_value).__name__}."
         )
     duplicate_value: object = duplicate
     if not isinstance(duplicate_value, bool):
-        raise InvariantViolation(
-            f"duplicate must be a bool, got {type(duplicate_value).__name__}."
-        )
+        raise InvariantViolation(f"duplicate must be a bool, got {type(duplicate_value).__name__}.")
     if processor_value.currency != ledger_value.currency:
-        raise CurrencyMismatch(
-            processor_value.currency, ledger_value.currency, "reconcile"
-        )
+        raise CurrencyMismatch(processor_value.currency, ledger_value.currency, "reconcile")
 
     base = abs(processor_value.net)
     difference = ledger_value.net - processor_value.net
@@ -101,9 +96,7 @@ def reconcile(
         exception_code = None
     else:
         outcome = ReconciliationOutcome.EXCEPTION
-        exception_code = classify(
-            processor_value, ledger_value, duplicate=duplicate_value
-        ).value
+        exception_code = classify(processor_value, ledger_value, duplicate=duplicate_value).value
     materiality = (
         MaterialityVerdict.MATERIAL
         if abs(difference) > allowance

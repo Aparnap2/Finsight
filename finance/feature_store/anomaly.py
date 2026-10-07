@@ -141,10 +141,7 @@ def build_anomaly_features(df: pl.DataFrame) -> pl.DataFrame:
         )
         .with_columns(
             pl.col("variance_amount").abs().alias("anomaly_abs_deviation"),
-            (
-                pl.col("variance_amount").abs()
-                / pl.col("budget_amount").abs().replace(_ZERO, None)
-            )
+            (pl.col("variance_amount").abs() / pl.col("budget_amount").abs().replace(_ZERO, None))
             .fill_null(_ZERO)
             .alias("anomaly_deviation_ratio"),
             (pl.col("actual_amount") > pl.col("budget_amount") * _SPIKE_MULTIPLIER).alias(

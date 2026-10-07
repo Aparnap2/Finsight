@@ -58,10 +58,7 @@ class FormulaLineage:
             for dep in record.get("dependencies", []):
                 dep_id = str(dep)
                 if dep_id not in self.records:
-                    msg = (
-                        f"Formula '{formula_id}' depends on unknown "
-                        f"'{dep_id}'"
-                    )
+                    msg = f"Formula '{formula_id}' depends on unknown '{dep_id}'"
                     raise ValueError(msg)
                 self._dependents[dep_id].append(formula_id)
 
@@ -118,9 +115,7 @@ class FormulaLineage:
             Sorted list of leaf ``formula_id`` values.
         """
         return sorted(
-            formula_id
-            for formula_id in self.records
-            if not self._dependents.get(formula_id)
+            formula_id for formula_id in self.records if not self._dependents.get(formula_id)
         )
 
     def impact_analysis(self, formula_id: str) -> dict[str, Any]:

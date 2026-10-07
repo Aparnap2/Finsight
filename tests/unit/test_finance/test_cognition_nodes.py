@@ -113,13 +113,21 @@ class TestExecutorNode:
         from finance.cognition.state.action import ActionPlan
         from shared.models.state import Variance
 
-        state = make_state(context={"variances": [
-            Variance(
-                account_id="4000", account_name="Revenue", department="Sales",
-                actual_amount=Decimal("110000"), budget_amount=Decimal("100000"),
-                variance_amount=Decimal("10000"), variance_pct=Decimal("10.0"),
-            ),
-        ]})
+        state = make_state(
+            context={
+                "variances": [
+                    Variance(
+                        account_id="4000",
+                        account_name="Revenue",
+                        department="Sales",
+                        actual_amount=Decimal("110000"),
+                        budget_amount=Decimal("100000"),
+                        variance_amount=Decimal("10000"),
+                        variance_pct=Decimal("10.0"),
+                    ),
+                ]
+            }
+        )
         state.action_plan = ActionPlan()
         state.action_plan.add(objective="determine_revenue_variance")
         result = ExecutorNode().execute(state)
@@ -139,16 +147,23 @@ class TestExecutorNode:
         from finance.formula_engine.formula_registry import Formula, FormulaRegistry
 
         registry = FormulaRegistry()
-        registry.register(Formula(
-            name="gross_margin", description="GM", category="margin",
-            inputs=["revenue", "cogs"], output_name="gross_margin",
-            fn=lambda revenue, cogs: revenue - cogs,
-        ))
+        registry.register(
+            Formula(
+                name="gross_margin",
+                description="GM",
+                category="margin",
+                inputs=["revenue", "cogs"],
+                output_name="gross_margin",
+                fn=lambda revenue, cogs: revenue - cogs,
+            )
+        )
         resolver = DependencyResolver()
         evaluator = FormulaEvaluator(registry=registry, resolver=resolver)
         plan = ActionPlan()
-        plan.add(objective="compute_key_performance_indicators",
-                 inputs={"seed_inputs": {"revenue": Decimal("1000"), "cogs": Decimal("600")}})
+        plan.add(
+            objective="compute_key_performance_indicators",
+            inputs={"seed_inputs": {"revenue": Decimal("1000"), "cogs": Decimal("600")}},
+        )
         state = make_state()
         state.action_plan = plan
         result = ExecutorNode(formula_evaluator=evaluator).execute(state)
@@ -164,13 +179,21 @@ class TestExecutorNode:
         from finance.cognition.state.action import ActionPlan
         from shared.models.state import Variance
 
-        state = make_state(context={"variances": [
-            Variance(
-                account_id="4000", account_name="Revenue", department="Sales",
-                actual_amount=Decimal("110000"), budget_amount=Decimal("100000"),
-                variance_amount=Decimal("10000"), variance_pct=Decimal("10.0"),
-            ),
-        ]})
+        state = make_state(
+            context={
+                "variances": [
+                    Variance(
+                        account_id="4000",
+                        account_name="Revenue",
+                        department="Sales",
+                        actual_amount=Decimal("110000"),
+                        budget_amount=Decimal("100000"),
+                        variance_amount=Decimal("10000"),
+                        variance_pct=Decimal("10.0"),
+                    ),
+                ]
+            }
+        )
         state.action_plan = ActionPlan()
         state.action_plan.add(objective="determine_revenue_variance")
         result = ExecutorNode().execute(state)
@@ -254,8 +277,11 @@ class TestVerifierNode:
         state = make_state()
         state.assertions = [
             Assertion(
-                id="a1", type=AssertionType.NUMERIC, text="Weak",
-                confidence=0.6, support_level=SupportLevel.WEAK,
+                id="a1",
+                type=AssertionType.NUMERIC,
+                text="Weak",
+                confidence=0.6,
+                support_level=SupportLevel.WEAK,
             ),
         ]
         result = VerifierNode().execute(state)
@@ -269,8 +295,11 @@ class TestVerifierNode:
         state = make_state()
         state.assertions = [
             Assertion(
-                id="a1", type=AssertionType.NUMERIC, text="No evidence",
-                confidence=0.6, missing_evidence=["gl_accounts"],
+                id="a1",
+                type=AssertionType.NUMERIC,
+                text="No evidence",
+                confidence=0.6,
+                missing_evidence=["gl_accounts"],
             ),
         ]
         result = VerifierNode().execute(state)
@@ -283,8 +312,11 @@ class TestVerifierNode:
         state = make_state()
         state.assertions = [
             Assertion(
-                id="a1", type=AssertionType.NUMERIC, text="Contradicted",
-                confidence=0.6, contradictions=["a2 says opposite"],
+                id="a1",
+                type=AssertionType.NUMERIC,
+                text="Contradicted",
+                confidence=0.6,
+                contradictions=["a2 says opposite"],
             ),
         ]
         result = VerifierNode().execute(state)
@@ -361,11 +393,13 @@ class TestReflectionNode:
         plan.add(objective="determine_revenue_variance")
         plan.add(objective="compute_key_performance_indicators")
         plan.add(objective="collect_supporting_evidence")
-        state = make_state(context={
-            "overall_confidence": 0.5,
-            "evidence": ["e1"],
-            "evidence_items": [{"claim": "test"}],
-        })
+        state = make_state(
+            context={
+                "overall_confidence": 0.5,
+                "evidence": ["e1"],
+                "evidence_items": [{"claim": "test"}],
+            }
+        )
         state.action_plan = plan
         result = ReflectionNode().execute(state)
         assert result.state_updates["loop_decision"] in ("continue", "finalize")
@@ -378,11 +412,13 @@ class TestReflectionNode:
         plan.add(objective="determine_revenue_variance")
         plan.add(objective="compute_key_performance_indicators")
         plan.add(objective="collect_supporting_evidence")
-        state = make_state(context={
-            "overall_confidence": 0.5,
-            "validation_report": {"failed_count": 2, "passed": False},
-            "evidence_items": [{"claim": "test"}],
-        })
+        state = make_state(
+            context={
+                "overall_confidence": 0.5,
+                "validation_report": {"failed_count": 2, "passed": False},
+                "evidence_items": [{"claim": "test"}],
+            }
+        )
         state.action_plan = plan
         result = ReflectionNode().execute(state)
         gaps = result.state_updates.get("gaps", [])
@@ -411,13 +447,19 @@ class TestReflectionNode:
         plan.add(objective="determine_revenue_variance")
         plan.add(objective="compute_key_performance_indicators")
         plan.add(objective="collect_supporting_evidence")
-        state = make_state(context={
-            "overall_confidence": 0.5,
-            "evidence_items": [{"claim": "test"}],
-            "action_verifications": [
-                {"objective": "determine_revenue_variance", "passed": False, "status": "failed"},
-            ],
-        })
+        state = make_state(
+            context={
+                "overall_confidence": 0.5,
+                "evidence_items": [{"claim": "test"}],
+                "action_verifications": [
+                    {
+                        "objective": "determine_revenue_variance",
+                        "passed": False,
+                        "status": "failed",
+                    },
+                ],
+            }
+        )
         state.action_plan = plan
         result = ReflectionNode().execute(state)
         gaps = result.state_updates.get("gaps", [])

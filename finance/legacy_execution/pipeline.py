@@ -165,9 +165,7 @@ IntentStage = Callable[[ReservationGrant], IntentView]
 ArtifactStage = Callable[[IntentView], ArtifactView]
 TransportStage = Callable[[ArtifactView], ReceiptView]
 ObservationStage = Callable[[ArtifactView, ReceiptView], ObservedBatch | None]
-IngestionStage = Callable[
-    [ArtifactView, ReceiptView, "ObservedBatch | None"], IngestionOutcome
-]
+IngestionStage = Callable[[ArtifactView, ReceiptView, "ObservedBatch | None"], IngestionOutcome]
 RecordStage = Callable[[ReceiptView, IngestionOutcome], ExecutionRecord]
 HandoffStage = Callable[[ExecutionRecord, IngestionOutcome], ExecutionHandoff]
 
@@ -227,9 +225,7 @@ def run_execution(
     """
     log: list[AuditEntry] = audit if audit is not None else []
     store = record_store if record_store is not None else ExecutionRecordStore()
-    bindings = (
-        reservation_store if reservation_store is not None else ReservationStore()
-    )
+    bindings = reservation_store if reservation_store is not None else ReservationStore()
 
     def observe_default(
         artifact_view: ArtifactView, receipt_view: ReceiptView
@@ -237,9 +233,7 @@ def run_execution(
         del receipt_view
         if result_store is None or not hasattr(result_store, "read_result"):
             raise ValueError("Default observation needs a ResultReader result_store.")
-        key = _result_key_for(
-            ctx.company_id, artifact_view.batch_id, ctx.result_key
-        )
+        key = _result_key_for(ctx.company_id, artifact_view.batch_id, ctx.result_key)
         raw = result_store.read_result(key)  # type: ignore[union-attr]
         if raw is None:
             return None
@@ -252,9 +246,7 @@ def run_execution(
         receipt_view: ReceiptView,
         observed: ObservedBatch | None,
     ) -> IngestionOutcome:
-        key = _result_key_for(
-            ctx.company_id, artifact_view.batch_id, ctx.result_key
-        )
+        key = _result_key_for(ctx.company_id, artifact_view.batch_id, ctx.result_key)
         return ingest_observed(
             observed,
             artifact=artifact_view,
@@ -267,20 +259,19 @@ def run_execution(
             window_seconds=ctx.window_seconds,
         )
 
-    def record_default(
-        receipt_view: ReceiptView, outcome: IngestionOutcome
-    ) -> ExecutionRecord:
+    def record_default(receipt_view: ReceiptView, outcome: IngestionOutcome) -> ExecutionRecord:
         store.claim(
-            ctx.execution_id, binding_digest=ctx.binding_digest,
-            company_id=ctx.company_id, situation_id=ctx.situation_id,
-            batch_id=receipt_view.batch_id, expires_at=ctx.expires_at,
+            ctx.execution_id,
+            binding_digest=ctx.binding_digest,
+            company_id=ctx.company_id,
+            situation_id=ctx.situation_id,
+            batch_id=receipt_view.batch_id,
+            expires_at=ctx.expires_at,
         )
         store.attach_receipt(ctx.execution_id, receipt_view)
         return store.attach_outcome(ctx.execution_id, outcome)
 
-    def handoff_default(
-        record_row: ExecutionRecord, outcome: IngestionOutcome
-    ) -> ExecutionHandoff:
+    def handoff_default(record_row: ExecutionRecord, outcome: IngestionOutcome) -> ExecutionHandoff:
         receipt_view = ReceiptView(
             execution_id=record_row.execution_id,
             batch_id=outcome.batch_id,
@@ -291,10 +282,14 @@ def run_execution(
         )
         current_artifact = artifact_cache["artifact"]
         return build_handoff(
-            record=record_row, outcome=outcome, receipt=receipt_view,
-            artifact=current_artifact, authorization_id=ctx.authorization_id,
+            record=record_row,
+            outcome=outcome,
+            receipt=receipt_view,
+            artifact=current_artifact,
+            authorization_id=ctx.authorization_id,
             proposal_hash=ctx.proposal_hash,
-            proposal_version=ctx.proposal_version, recorded_at=ctx.now,
+            proposal_version=ctx.proposal_version,
+            recorded_at=ctx.now,
         )
 
     observe_fn = observation if observation is not None else observe_default
@@ -304,23 +299,31 @@ def run_execution(
     artifact_cache: dict[str, ArtifactView] = {}
 
     def note(
-        stage: str, digest: str, permitted: bool, code: str,
+        stage: str,
+        digest: str,
+        permitted: bool,
+        code: str,
         hashes: tuple[str, ...] = (),
     ) -> None:
         log.append(
             AuditEntry(
-                stage=stage, input_digest=digest, permitted=permitted,
-                code=code, artifact_hashes=hashes,
+                stage=stage,
+                input_digest=digest,
+                permitted=permitted,
+                code=code,
+                artifact_hashes=hashes,
             )
         )
 
-    def refuse(
-        stage: str, code: str, outcome: IngestionOutcome | None = None
-    ) -> PipelineResult:
+    def refuse(stage: str, code: str, outcome: IngestionOutcome | None = None) -> PipelineResult:
         note(stage, _digest(stage, ctx.execution_id, code), False, code)
         return PipelineResult(
-            execution_id=ctx.execution_id, permitted=False, code=code,
-            refused_stage=stage, outcome=outcome, handoff=None,
+            execution_id=ctx.execution_id,
+            permitted=False,
+            code=code,
+            refused_stage=stage,
+            outcome=outcome,
+            handoff=None,
             audit=tuple(log),
         )
 
@@ -332,10 +335,17 @@ def run_execution(
         return refuse(STAGE_RESERVATION, exc.code.value)
     note(
         STAGE_RESERVATION,
-        _digest(STAGE_RESERVATION, grant.execution_id, grant.company_id,
-                grant.situation_id, grant.proposal_hash,
-                str(grant.proposal_version), grant.binding_digest),
-        True, "PERMIT",
+        _digest(
+            STAGE_RESERVATION,
+            grant.execution_id,
+            grant.company_id,
+            grant.situation_id,
+            grant.proposal_hash,
+            str(grant.proposal_version),
+            grant.binding_digest,
+        ),
+        True,
+        "PERMIT",
     )
 
     if grant.replayed:
@@ -344,34 +354,43 @@ def run_execution(
             note(
                 STAGE_RESERVATION,
                 _digest(STAGE_RESERVATION, ctx.execution_id, "replay-read"),
-                True, "AUTHORIZATION_REPLAYED",
+                True,
+                "AUTHORIZATION_REPLAYED",
             )
             return PipelineResult(
-                execution_id=ctx.execution_id, permitted=True,
-                code="AUTHORIZATION_REPLAYED", refused_stage=None,
-                outcome=prior.outcome, handoff=None, audit=tuple(log),
+                execution_id=ctx.execution_id,
+                permitted=True,
+                code="AUTHORIZATION_REPLAYED",
+                refused_stage=None,
+                outcome=prior.outcome,
+                handoff=None,
+                audit=tuple(log),
             )
         durable = bindings.receipt_status(ctx.execution_id)
         if durable is not None and durable.outcome_payload:
             try:
-                replayed_outcome = IngestionOutcome.model_validate_json(
-                    durable.outcome_payload
-                )
+                replayed_outcome = IngestionOutcome.model_validate_json(durable.outcome_payload)
             except ValueError:
                 replayed_outcome = None
             if replayed_outcome is not None:
                 note(
                     STAGE_RESERVATION,
                     _digest(
-                        STAGE_RESERVATION, ctx.execution_id,
+                        STAGE_RESERVATION,
+                        ctx.execution_id,
                         "replay-read-durable",
                     ),
-                    True, "AUTHORIZATION_REPLAYED",
+                    True,
+                    "AUTHORIZATION_REPLAYED",
                 )
                 return PipelineResult(
-                    execution_id=ctx.execution_id, permitted=True,
-                    code="AUTHORIZATION_REPLAYED", refused_stage=None,
-                    outcome=replayed_outcome, handoff=None, audit=tuple(log),
+                    execution_id=ctx.execution_id,
+                    permitted=True,
+                    code="AUTHORIZATION_REPLAYED",
+                    refused_stage=None,
+                    outcome=replayed_outcome,
+                    handoff=None,
+                    audit=tuple(log),
                 )
             return refuse(STAGE_RESERVATION, "DURABLE_OUTCOME_CORRUPT")
         if durable is not None and (
@@ -381,7 +400,8 @@ def run_execution(
         note(
             STAGE_RESERVATION,
             _digest(STAGE_RESERVATION, ctx.execution_id, "resume-no-outcome"),
-            True, "RESUME",
+            True,
+            "RESUME",
         )
 
     try:
@@ -392,10 +412,16 @@ def run_execution(
         return refuse(STAGE_INTENT, exc.code.value)
     note(
         STAGE_INTENT,
-        _digest(STAGE_INTENT, intent_view.execution_id, intent_view.batch_id,
-                intent_view.action, _money(intent_view.amount_exact),
-                intent_view.account_code),
-        True, "PERMIT",
+        _digest(
+            STAGE_INTENT,
+            intent_view.execution_id,
+            intent_view.batch_id,
+            intent_view.action,
+            _money(intent_view.amount_exact),
+            intent_view.account_code,
+        ),
+        True,
+        "PERMIT",
     )
 
     try:
@@ -414,10 +440,16 @@ def run_execution(
     artifact_cache["artifact"] = artifact_view
     note(
         STAGE_ARTIFACT,
-        _digest(STAGE_ARTIFACT, artifact_view.execution_id,
-                artifact_view.batch_id, str(artifact_view.record_count),
-                _money(artifact_view.control_total)),
-        True, "PERMIT", (artifact_view.outbound_sha256,),
+        _digest(
+            STAGE_ARTIFACT,
+            artifact_view.execution_id,
+            artifact_view.batch_id,
+            str(artifact_view.record_count),
+            _money(artifact_view.control_total),
+        ),
+        True,
+        "PERMIT",
+        (artifact_view.outbound_sha256,),
     )
 
     try:
@@ -428,9 +460,15 @@ def run_execution(
         return refuse(STAGE_TRANSPORT, exc.code.value)
     note(
         STAGE_TRANSPORT,
-        _digest(STAGE_TRANSPORT, receipt_view.execution_id,
-                receipt_view.batch_id, receipt_view.key, receipt_view.sha256),
-        True, "PERMIT",
+        _digest(
+            STAGE_TRANSPORT,
+            receipt_view.execution_id,
+            receipt_view.batch_id,
+            receipt_view.key,
+            receipt_view.sha256,
+        ),
+        True,
+        "PERMIT",
         (artifact_view.outbound_sha256, receipt_view.sha256),
     )
 
@@ -444,16 +482,21 @@ def run_execution(
         note(
             STAGE_OBSERVATION,
             _digest(STAGE_OBSERVATION, artifact_view.batch_id, "absent"),
-            True, "ABSENT",
+            True,
+            "ABSENT",
         )
     else:
         note(
             STAGE_OBSERVATION,
             _digest(
-                STAGE_OBSERVATION, artifact_view.batch_id,
-                str(len(observed.records)), observed.raw_sha256,
+                STAGE_OBSERVATION,
+                artifact_view.batch_id,
+                str(len(observed.records)),
+                observed.raw_sha256,
             ),
-            True, "OBSERVED", (observed.raw_sha256,),
+            True,
+            "OBSERVED",
+            (observed.raw_sha256,),
         )
 
     try:
@@ -464,11 +507,12 @@ def run_execution(
         return refuse(STAGE_INGESTION, exc.code.value)
     note(
         STAGE_INGESTION,
-        _digest(STAGE_INGESTION, outcome.execution_id, outcome.batch_id,
-                outcome_fingerprint(outcome)),
-        True, outcome.code or "RECORDED",
-        tuple(h for h in (outcome.outbound_sha256, outcome.result_sha256)
-              if h is not None),
+        _digest(
+            STAGE_INGESTION, outcome.execution_id, outcome.batch_id, outcome_fingerprint(outcome)
+        ),
+        True,
+        outcome.code or "RECORDED",
+        tuple(h for h in (outcome.outbound_sha256, outcome.result_sha256) if h is not None),
     )
 
     try:
@@ -485,9 +529,14 @@ def run_execution(
         )
     note(
         STAGE_RECORD,
-        _digest(STAGE_RECORD, record_row.execution_id,
-                record_row.state.value, outcome_fingerprint(outcome)),
-        True, "RECORDED",
+        _digest(
+            STAGE_RECORD,
+            record_row.execution_id,
+            record_row.state.value,
+            outcome_fingerprint(outcome),
+        ),
+        True,
+        "RECORDED",
     )
 
     try:
@@ -498,15 +547,23 @@ def run_execution(
         return refuse(STAGE_HANDOFF, exc.code.value, outcome)
     note(
         STAGE_HANDOFF,
-        _digest(STAGE_HANDOFF, handoff_out.execution_id,
-                handoff_out.batch_id, handoff_out.outbound_sha256,
-                handoff_out.result_sha256 or "absent"),
-        True, "EMITTED",
-        tuple(h for h in (handoff_out.outbound_sha256,
-                          handoff_out.result_sha256) if h is not None),
+        _digest(
+            STAGE_HANDOFF,
+            handoff_out.execution_id,
+            handoff_out.batch_id,
+            handoff_out.outbound_sha256,
+            handoff_out.result_sha256 or "absent",
+        ),
+        True,
+        "EMITTED",
+        tuple(h for h in (handoff_out.outbound_sha256, handoff_out.result_sha256) if h is not None),
     )
     return PipelineResult(
-        execution_id=ctx.execution_id, permitted=True, code=None,
-        refused_stage=None, outcome=outcome, handoff=handoff_out,
+        execution_id=ctx.execution_id,
+        permitted=True,
+        code=None,
+        refused_stage=None,
+        outcome=outcome,
+        handoff=handoff_out,
         audit=tuple(log),
     )

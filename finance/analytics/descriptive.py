@@ -51,11 +51,7 @@ def compute_totals(
     assert_money_columns(df, value_cols)
 
     aggregates = [pl.col(col).sum().alias(f"{col}_total") for col in value_cols]
-    return (
-        df.group_by(list(group_cols))
-        .agg(aggregates)
-        .sort(list(group_cols))
-    )
+    return df.group_by(list(group_cols)).agg(aggregates).sort(list(group_cols))
 
 
 def compute_period_over_period(
@@ -101,9 +97,7 @@ def compute_period_over_period(
             .then(None)
             .when(prior == _ZERO)
             .then(_ZERO)
-            .otherwise(
-                (pl.col(col) - prior) / prior.abs().replace(_ZERO, None)
-            )
+            .otherwise((pl.col(col) - prior) / prior.abs().replace(_ZERO, None))
         ).alias(f"{col}_growth")
         expressions.append(prior.alias(f"{col}_prior"))
         expressions.append(delta)

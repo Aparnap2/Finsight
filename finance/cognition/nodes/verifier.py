@@ -23,9 +23,7 @@ class VerifierNode:
     def execute(self, state: ReasoningState) -> NodeResult:
         assertions = state.assertions
 
-        low_confidence = [
-            a for a in assertions if a.confidence < self.MIN_CONFIDENCE_THRESHOLD
-        ]
+        low_confidence = [a for a in assertions if a.confidence < self.MIN_CONFIDENCE_THRESHOLD]
         unsupported = [
             a
             for a in assertions
@@ -33,11 +31,7 @@ class VerifierNode:
         ]
         missing_evidence = [a for a in assertions if a.missing_evidence]
         contradicted = [a for a in assertions if a.contradictions]
-        verified = [
-            a
-            for a in assertions
-            if a.support_level == SupportLevel.VERIFIED
-        ]
+        verified = [a for a in assertions if a.support_level == SupportLevel.VERIFIED]
 
         avg_confidence = mean([a.confidence for a in assertions]) if assertions else 0.0
         issues = len(low_confidence) + len(unsupported)
@@ -45,23 +39,15 @@ class VerifierNode:
 
         message_parts: list[str] = []
         if assertions:
-            message_parts.append(
-                f"{len(verified)}/{len(assertions)} verified"
-            )
+            message_parts.append(f"{len(verified)}/{len(assertions)} verified")
             if low_confidence:
                 message_parts.append(f"{len(low_confidence)} low-confidence")
             if unsupported:
-                message_parts.append(
-                    f"{len(unsupported)} unsupported"
-                )
+                message_parts.append(f"{len(unsupported)} unsupported")
             if missing_evidence:
-                message_parts.append(
-                    f"{len(missing_evidence)} missing evidence"
-                )
+                message_parts.append(f"{len(missing_evidence)} missing evidence")
             if contradicted:
-                message_parts.append(
-                    f"{len(contradicted)} contradicted"
-                )
+                message_parts.append(f"{len(contradicted)} contradicted")
         else:
             message_parts.append("no assertions")
 
@@ -84,30 +70,29 @@ class VerifierNode:
 
         if state.action_plan is not None:
             from finance.cognition.state.action import ActionPlan
+
             plan: ActionPlan | None = (
-                state.action_plan
-                if isinstance(state.action_plan, ActionPlan)
-                else None
+                state.action_plan if isinstance(state.action_plan, ActionPlan) else None
             )
             if plan is not None:
                 for action in plan.actions:
                     actions_total += 1
                     has_outputs = bool(action.outputs)
                     has_evidence = bool(action.evidence_ids)
-                    passed = action.status == ActionStatus.SUCCESS and (
-                        has_outputs or has_evidence
-                    )
+                    passed = action.status == ActionStatus.SUCCESS and (has_outputs or has_evidence)
                     if passed:
                         actions_passed += 1
 
-                    action_verifications.append({
-                        "action_id": action.id,
-                        "objective": action.objective,
-                        "status": action.status.value,
-                        "passed": passed,
-                        "has_outputs": has_outputs,
-                        "has_evidence": has_evidence,
-                    })
+                    action_verifications.append(
+                        {
+                            "action_id": action.id,
+                            "objective": action.objective,
+                            "status": action.status.value,
+                            "passed": passed,
+                            "has_outputs": has_outputs,
+                            "has_evidence": has_evidence,
+                        }
+                    )
 
         state_updates["action_verifications"] = action_verifications
         if actions_total > 0:

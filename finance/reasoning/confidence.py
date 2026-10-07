@@ -114,9 +114,7 @@ def _evidence_quality(evidence: list[EvidenceItem]) -> float:
     """Average numeric quality proxy for the given evidence items."""
     if not evidence:
         return 0.5
-    total = sum(
-        _EVIDENCE_CONFIDENCE_QUALITY.get(ev.confidence, 0.5) for ev in evidence
-    )
+    total = sum(_EVIDENCE_CONFIDENCE_QUALITY.get(ev.confidence, 0.5) for ev in evidence)
     return total / len(evidence)
 
 

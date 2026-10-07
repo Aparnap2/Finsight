@@ -143,9 +143,7 @@ def test_real_track_composition_seams() -> None:
     assert t2_intent.account_code == ACCOUNT
 
     # E3 real: intent-only artifact, pinned batch.
-    artifact = build_artifact(
-        t2_intent, batch_id=BATCH, processing_date="20260916"
-    )
+    artifact = build_artifact(t2_intent, batch_id=BATCH, processing_date="20260916")
     assert artifact.file_name == "CORRECTION_20260916_231.DAT"
     assert artifact.control_total == AMOUNT
 
@@ -167,18 +165,17 @@ def test_real_track_composition_seams() -> None:
     # E4 real: PUT into a real FakeS3 outbound bucket.
     outbound = FakeS3(COMPANY)
     receipt = put_verified(
-        outbound, artifact, company_id=COMPANY,
-        bucket_outbound=OUTBOUND_BUCKET, now=T_PUT,
+        outbound,
+        artifact,
+        company_id=COMPANY,
+        bucket_outbound=OUTBOUND_BUCKET,
+        now=T_PUT,
     )
     assert receipt.sha256 == artifact.outbound_sha256
 
     # Seed the RESULT with the real codec, then E5+E6 real.
-    result_bytes = (
-        "\n".join([_result_line(1, "AC", "POSTED")]) + "\n"
-    ).encode("ascii")
-    observed = observe_legacy_result(
-        result_bytes, batch_id=BATCH, company_id=COMPANY
-    )
+    result_bytes = ("\n".join([_result_line(1, "AC", "POSTED")]) + "\n").encode("ascii")
+    observed = observe_legacy_result(result_bytes, batch_id=BATCH, company_id=COMPANY)
     assert [(r.sequence, r.code) for r in observed.records] == [(1, "AC")]
     outcome = ingest_observed(
         observed,
@@ -197,8 +194,12 @@ def test_real_track_composition_seams() -> None:
 
     records = ExecutionRecordStore()
     records.claim(
-        KEY, binding_digest=token.binding_digest, company_id=COMPANY,
-        situation_id=SITUATION, batch_id=BATCH, expires_at=T_EXPIRES,
+        KEY,
+        binding_digest=token.binding_digest,
+        company_id=COMPANY,
+        situation_id=SITUATION,
+        batch_id=BATCH,
+        expires_at=T_EXPIRES,
     )
     records.attach_receipt(KEY, ReceiptView(**receipt.model_dump()))
     records.attach_outcome(KEY, outcome)
@@ -227,9 +228,7 @@ def test_pipeline_spine_audits_all_real_stages() -> None:
     token = _mint_token()
     reservations = ReservationStore()
     outbound = FakeS3(COMPANY)
-    result_bytes = (
-        "\n".join([_result_line(1, "AC", "POSTED")]) + "\n"
-    ).encode("ascii")
+    result_bytes = ("\n".join([_result_line(1, "AC", "POSTED")]) + "\n").encode("ascii")
 
     class _ResultBucket:
         def read_result(self, key: str) -> bytes | None:
@@ -247,12 +246,15 @@ def test_pipeline_spine_audits_all_real_stages() -> None:
         )
         assert claim.reservation.binding_digest == token.binding_digest
         return ReservationGrant(
-            execution_id=ctx.execution_id, batch_id=BATCH,
-            company_id=ctx.company_id, situation_id=ctx.situation_id,
+            execution_id=ctx.execution_id,
+            batch_id=BATCH,
+            company_id=ctx.company_id,
+            situation_id=ctx.situation_id,
             authorization_id=ctx.authorization_id,
             proposal_hash=ctx.proposal_hash,
             proposal_version=ctx.proposal_version,
-            binding_digest=ctx.binding_digest, expires_at=ctx.expires_at,
+            binding_digest=ctx.binding_digest,
+            expires_at=ctx.expires_at,
             replayed=claim.status == "REPLAY",
         )
 
@@ -261,45 +263,60 @@ def test_pipeline_spine_audits_all_real_stages() -> None:
         produced = derive_intent(token)
         assert produced.scope_batch == BATCH
         return IntentView(
-            execution_id=produced.execution_id, action=produced.action,
+            execution_id=produced.execution_id,
+            action=produced.action,
             amount_exact=produced.amount_exact,
             account_code=produced.account_code,
             company_id=produced.company_id,
-            situation_id=produced.situation_id, batch_id=BATCH,
+            situation_id=produced.situation_id,
+            batch_id=BATCH,
         )
 
     def artifact(intent_view: IntentView) -> ArtifactView:
         assert intent_view.amount_exact == AMOUNT
         assert intent_view.account_code == ACCOUNT
-        t2 = T2Intent.model_validate({
-            **intent_view.model_dump(),
-            "idempotency_key": intent_view.execution_id,
-            "proposal_hash": PROPOSAL_HASH,
-            "proposal_version": 1,
-        })
+        t2 = T2Intent.model_validate(
+            {
+                **intent_view.model_dump(),
+                "idempotency_key": intent_view.execution_id,
+                "proposal_hash": PROPOSAL_HASH,
+                "proposal_version": 1,
+            }
+        )
         assert t2.execution_id == t2.idempotency_key == KEY
-        built = build_artifact(t2, batch_id=intent_view.batch_id,
-                               processing_date="20260916")
+        built = build_artifact(t2, batch_id=intent_view.batch_id, processing_date="20260916")
         return ArtifactView(**built.model_dump())
 
     def transport(artifact_view: ArtifactView) -> ReceiptView:
         made = put_verified(
-            outbound, artifact_view, company_id=COMPANY,
-            bucket_outbound=OUTBOUND_BUCKET, now=T_PUT,
+            outbound,
+            artifact_view,
+            company_id=COMPANY,
+            bucket_outbound=OUTBOUND_BUCKET,
+            now=T_PUT,
         )
         return ReceiptView(**made.model_dump())
 
     ctx = ExecutionContext(
-        execution_id=KEY, company_id=COMPANY, situation_id=SITUATION,
+        execution_id=KEY,
+        company_id=COMPANY,
+        situation_id=SITUATION,
         authorization_id=token.authorization_id,
-        proposal_hash=PROPOSAL_HASH, proposal_version=1,
-        binding_digest=token.binding_digest, expires_at=T_EXPIRES,
-        now=T_NOW, window_start=T0,
+        proposal_hash=PROPOSAL_HASH,
+        proposal_version=1,
+        binding_digest=token.binding_digest,
+        expires_at=T_EXPIRES,
+        now=T_NOW,
+        window_start=T0,
         result_key=f"{COMPANY}/{BATCH}/RESULT_20260916_231.DAT",
     )
     result = run_execution(
-        ctx, reservation=reservation, intent=intent, artifact=artifact,
-        transport=transport, reservation_store=reservations,
+        ctx,
+        reservation=reservation,
+        intent=intent,
+        artifact=artifact,
+        transport=transport,
+        reservation_store=reservations,
         result_store=_ResultBucket(),
     )
     assert result.permitted is True
@@ -307,8 +324,14 @@ def test_pipeline_spine_audits_all_real_stages() -> None:
     assert result.handoff.outcome == "ACCEPTED"
     stages = [entry.stage for entry in result.audit]
     assert stages == [
-        "E1-reservation", "E2-intent", "E3-artifact", "E4-transport",
-        "E5-observation", "E6-ingestion", "E6-record", "handoff",
+        "E1-reservation",
+        "E2-intent",
+        "E3-artifact",
+        "E4-transport",
+        "E5-observation",
+        "E6-ingestion",
+        "E6-record",
+        "handoff",
     ]
     assert all(entry.permitted for entry in result.audit)
 
@@ -405,12 +428,15 @@ def _full_real_run(
             },
         )
         return ReservationGrant(
-            execution_id=ctx.execution_id, batch_id=BATCH,
-            company_id=ctx.company_id, situation_id=ctx.situation_id,
+            execution_id=ctx.execution_id,
+            batch_id=BATCH,
+            company_id=ctx.company_id,
+            situation_id=ctx.situation_id,
             authorization_id=ctx.authorization_id,
             proposal_hash=ctx.proposal_hash,
             proposal_version=ctx.proposal_version,
-            binding_digest=ctx.binding_digest, expires_at=ctx.expires_at,
+            binding_digest=ctx.binding_digest,
+            expires_at=ctx.expires_at,
             replayed=claim.status == "REPLAY",
         )
 
@@ -419,30 +445,36 @@ def _full_real_run(
         assert grant.execution_id == token.idempotency_key
         produced = derive_intent(token)
         return IntentView(
-            execution_id=produced.execution_id, action=produced.action,
+            execution_id=produced.execution_id,
+            action=produced.action,
             amount_exact=produced.amount_exact,
             account_code=produced.account_code,
             company_id=produced.company_id,
-            situation_id=produced.situation_id, batch_id=BATCH,
+            situation_id=produced.situation_id,
+            batch_id=BATCH,
         )
 
     def artifact(intent_view: IntentView) -> ArtifactView:
         ran.append("artifact")
-        t2 = T2Intent.model_validate({
-            **intent_view.model_dump(),
-            "idempotency_key": intent_view.execution_id,
-            "proposal_hash": PROPOSAL_HASH,
-            "proposal_version": 1,
-        })
-        built = build_artifact(t2, batch_id=intent_view.batch_id,
-                               processing_date="20260916")
+        t2 = T2Intent.model_validate(
+            {
+                **intent_view.model_dump(),
+                "idempotency_key": intent_view.execution_id,
+                "proposal_hash": PROPOSAL_HASH,
+                "proposal_version": 1,
+            }
+        )
+        built = build_artifact(t2, batch_id=intent_view.batch_id, processing_date="20260916")
         return ArtifactView(**built.model_dump())
 
     def transport(artifact_view: ArtifactView) -> ReceiptView:
         ran.append("transport")
         made = put_verified(
-            outbound, artifact_view, company_id=COMPANY,
-            bucket_outbound=OUTBOUND_BUCKET, now=T_PUT,
+            outbound,
+            artifact_view,
+            company_id=COMPANY,
+            bucket_outbound=OUTBOUND_BUCKET,
+            now=T_PUT,
         )
         return ReceiptView(**made.model_dump())
 
@@ -452,26 +484,34 @@ def _full_real_run(
             return result_bytes
 
     ctx = ExecutionContext(
-        execution_id=KEY, company_id=COMPANY, situation_id=SITUATION,
+        execution_id=KEY,
+        company_id=COMPANY,
+        situation_id=SITUATION,
         authorization_id=token.authorization_id,
-        proposal_hash=PROPOSAL_HASH, proposal_version=1,
-        binding_digest=token.binding_digest, expires_at=T_EXPIRES,
-        now=T_NOW, window_start=T0,
+        proposal_hash=PROPOSAL_HASH,
+        proposal_version=1,
+        binding_digest=token.binding_digest,
+        expires_at=T_EXPIRES,
+        now=T_NOW,
+        window_start=T0,
         result_key=f"{COMPANY}/{BATCH}/RESULT_20260916_231.DAT",
     )
     result = run_execution(
-        ctx, reservation=reservation, intent=intent, artifact=artifact,
-        transport=transport, reservation_store=reservations,
-        record_store=records, result_store=_Results(),
+        ctx,
+        reservation=reservation,
+        intent=intent,
+        artifact=artifact,
+        transport=transport,
+        reservation_store=reservations,
+        record_store=records,
+        result_store=_Results(),
     )
     return result, ran
 
 
 def _accepted_result_bytes() -> bytes:
     """Single-AC RESULT bytes for the FS-231 correction batch."""
-    return (
-        "\n".join([_result_line(1, "AC", "POSTED")]) + "\n"
-    ).encode("ascii")
+    return ("\n".join([_result_line(1, "AC", "POSTED")]) + "\n").encode("ascii")
 
 
 def test_second_presentation_skips_everything_after_e1() -> None:
@@ -480,7 +520,9 @@ def test_second_presentation_skips_everything_after_e1() -> None:
     records = ExecutionRecordStore()
     outbound = _CountingS3(COMPANY)
     first, first_ran = _full_real_run(
-        reservations=reservations, records=records, outbound=outbound,
+        reservations=reservations,
+        records=records,
+        outbound=outbound,
         result_bytes=_accepted_result_bytes(),
     )
     assert first.permitted is True
@@ -488,7 +530,9 @@ def test_second_presentation_skips_everything_after_e1() -> None:
     assert outbound.puts == 1
 
     second, second_ran = _full_real_run(
-        reservations=reservations, records=records, outbound=outbound,
+        reservations=reservations,
+        records=records,
+        outbound=outbound,
         result_bytes=_accepted_result_bytes(),
     )
     assert second.permitted is True
@@ -515,7 +559,9 @@ def test_replay_without_outcome_resumes_recovery() -> None:
     records = ExecutionRecordStore()
     outbound = _CountingS3(COMPANY)
     result, ran = _full_real_run(
-        reservations=reservations, records=records, outbound=outbound,
+        reservations=reservations,
+        records=records,
+        outbound=outbound,
         result_bytes=_accepted_result_bytes(),
     )
     assert result.permitted is True
@@ -523,8 +569,14 @@ def test_replay_without_outcome_resumes_recovery() -> None:
     assert result.handoff.outcome == "ACCEPTED"
     stages = [e.stage for e in result.audit]
     assert stages == [
-        "E1-reservation", "E1-reservation", "E2-intent", "E3-artifact",
-        "E4-transport", "E5-observation", "E6-ingestion", "E6-record",
+        "E1-reservation",
+        "E1-reservation",
+        "E2-intent",
+        "E3-artifact",
+        "E4-transport",
+        "E5-observation",
+        "E6-ingestion",
+        "E6-record",
         "handoff",
     ]
     assert [e.code for e in result.audit][1] == "RESUME"
@@ -591,7 +643,9 @@ def test_corrupt_terminal_outcome_refuses_no_effect(payload) -> None:
     outbound = _CountingS3(COMPANY)
 
     result, ran = _full_real_run(
-        reservations=reservations, records=records, outbound=outbound,
+        reservations=reservations,
+        records=records,
+        outbound=outbound,
         result_bytes=_accepted_result_bytes(),
     )
     assert result.permitted is False

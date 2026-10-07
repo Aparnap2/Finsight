@@ -1,14 +1,15 @@
 from __future__ import annotations
 
 import threading
+from pathlib import Path
 
-from sqlalchemy import create_engine
+from sqlalchemy import Engine, create_engine
 from sqlalchemy.pool import StaticPool
 
+from shared.safety.idempotency import IdempotencyStore
 
-def _store(engine=None):
-    from shared.safety.idempotency import IdempotencyStore
 
+def _store(engine: Engine | None = None) -> IdempotencyStore:
     if engine is None:
         engine = create_engine(
             "sqlite://",
@@ -34,7 +35,7 @@ class TestIdempotencyClaimContract:
         store.claim("t-acme", "k2", "hash-y")
         assert store.payload_hash_for("t-acme", "k2") == "hash-x"
 
-    def test_concurrent_claims_produce_exactly_one_fresh(self, tmp_path) -> None:
+    def test_concurrent_claims_produce_exactly_one_fresh(self, tmp_path: Path) -> None:
         from shared.safety.idempotency import ClaimOutcome
 
         db = tmp_path / "race.db"

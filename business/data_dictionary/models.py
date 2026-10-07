@@ -329,5 +329,5 @@ class DataDictionary:
         for table in self._tables.values():
             for col in table.columns:
                 if col.glossary_ref is not None and glossary.lookup(col.glossary_ref) is None:
-                        broken += 1
+                    broken += 1
         return broken

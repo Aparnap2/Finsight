@@ -90,9 +90,7 @@ def derive_intent(
 
     def _refuse(message: str) -> ApprovalRefused:
         """Build the E2 scope-escape refusal signal."""
-        return ApprovalRefused(
-            RefusalCode.AUTHORIZATION_SCOPE_ESCAPE, "E2", message
-        )
+        return ApprovalRefused(RefusalCode.AUTHORIZATION_SCOPE_ESCAPE, "E2", message)
 
     if token.action not in ALLOWED_ACTIONS:
         raise _refuse(f"Intent action {token.action!r} outside closed vocabulary.")
@@ -100,10 +98,7 @@ def derive_intent(
         raise _refuse("Presented action differs from the token-bound action.")
     if presented_amount is not None and presented_amount != token.amount_exact:
         raise _refuse("Presented amount drifts from the token-bound amount.")
-    if (
-        presented_account_code is not None
-        and presented_account_code != token.account_code
-    ):
+    if presented_account_code is not None and presented_account_code != token.account_code:
         raise _refuse("Presented account code differs from the token-bound code.")
     if scope_batch_override is not None and scope_batch_override != token.scope_batch:
         raise _refuse("Presented batch scope differs from the token-bound batch.")

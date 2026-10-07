@@ -178,13 +178,16 @@ class TrajectoryHarness:
         """
         self._check_tenant(request, tenant_id)
         if self._mode in ("live", "e2e") and not is_live_allowed():
-            raise TrajectoryLiveError(
-                f"mode {self._mode!r} requires {_LIVE_ENV_VAR}=1."
-            )
+            raise TrajectoryLiveError(f"mode {self._mode!r} requires {_LIVE_ENV_VAR}=1.")
         started = now_utc()
         steps: list[TrajectoryStep] = []
-        self._record(steps, "INPUT", tenant_id=tenant_id, status="received",
-                     evidence_ids=tuple(request.evidence_ids))
+        self._record(
+            steps,
+            "INPUT",
+            tenant_id=tenant_id,
+            status="received",
+            evidence_ids=tuple(request.evidence_ids),
+        )
 
         final_status = "REJECTED_REPLAN"
         attempt = 0
@@ -192,7 +195,9 @@ class TrajectoryHarness:
         while attempt <= _MAX_REPLANS:
             if self._llm_calls >= _MAX_LLM_CALLS:
                 self._record(
-                    steps, "FINAL", tenant_id=tenant_id,
+                    steps,
+                    "FINAL",
+                    tenant_id=tenant_id,
                     status="BUDGET_EXHAUSTED",
                     reason_codes=("budget_exhausted:llm_calls",),
                     attempt=attempt,
@@ -210,9 +215,13 @@ class TrajectoryHarness:
                 latency = (time.monotonic() - call_started) * 1000.0
                 code = f"planner_rejected:{type(exc).__name__}"
                 self._record(
-                    steps, "VERIFIER", tenant_id=tenant_id,
-                    status="REJECTED_REPLAN", reason_codes=(code,),
-                    attempt=attempt, latency_ms=latency,
+                    steps,
+                    "VERIFIER",
+                    tenant_id=tenant_id,
+                    status="REJECTED_REPLAN",
+                    reason_codes=(code,),
+                    attempt=attempt,
+                    latency_ms=latency,
                 )
                 attempt += 1
                 if attempt > _MAX_REPLANS:
@@ -223,32 +232,45 @@ class TrajectoryHarness:
             latency = (time.monotonic() - call_started) * 1000.0
             kind: TrajectoryStepKind = "MODEL_OUTPUT" if attempt == 0 else "NEXT_OUTPUT"
             self._record(
-                steps, kind, tenant_id=tenant_id, status="planned",
+                steps,
+                kind,
+                tenant_id=tenant_id,
+                status="planned",
                 evidence_ids=tuple(plan.evidence_required),
-                attempt=attempt, latency_ms=latency,
+                attempt=attempt,
+                latency_ms=latency,
             )
             # VERIFIER (deterministic, no LLM).
             verdict = self._verifier.verify(plan, set(request.evidence_ids))
             self._record(
-                steps, "VERIFIER", tenant_id=tenant_id, status=verdict.status,
+                steps,
+                "VERIFIER",
+                tenant_id=tenant_id,
+                status=verdict.status,
                 evidence_ids=tuple(plan.evidence_required),
                 reason_codes=tuple(verdict.reasons),
                 attempt=attempt,
             )
             if verdict.status == "ACCEPTED":
                 # TOOL + TOOL_RESULT via the deterministic executor.
-                for call in sorted(plan.capability_calls,
-                                   key=lambda c: c.order_index):
+                for call in sorted(plan.capability_calls, key=lambda c: c.order_index):
                     self._record(
-                        steps, "TOOL", tenant_id=tenant_id, status="called",
-                        capability=call.capability, attempt=attempt,
+                        steps,
+                        "TOOL",
+                        tenant_id=tenant_id,
+                        status="called",
+                        capability=call.capability,
+                        attempt=attempt,
                     )
                 outcomes = self._executor.execute(plan, tenant_id)
                 for outcome in outcomes:
                     self._record(
-                        steps, "TOOL_RESULT", tenant_id=tenant_id,
+                        steps,
+                        "TOOL_RESULT",
+                        tenant_id=tenant_id,
                         status="ok" if outcome.success else "empty",
-                        capability=outcome.capability, attempt=attempt,
+                        capability=outcome.capability,
+                        attempt=attempt,
                     )
                 final_status = "ACCEPTED"
                 break
@@ -260,8 +282,7 @@ class TrajectoryHarness:
                 final_status = "REJECTED_REPLAN"
                 break
             # Loop continues: the next iteration records NEXT_OUTPUT.
-        self._record(steps, "FINAL", tenant_id=tenant_id, status=final_status,
-                     attempt=attempt)
+        self._record(steps, "FINAL", tenant_id=tenant_id, status=final_status, attempt=attempt)
         return Trajectory(
             trajectory_id=f"traj-{self._correlation_id}",
             correlation_id=self._correlation_id,

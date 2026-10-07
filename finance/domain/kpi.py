@@ -5,7 +5,6 @@ margin, EBITDA margin, and revenue growth rate.  They provide a high-level
 view of financial health and are tracked over time.
 """
 
-
 from pydantic import BaseModel
 
 from finance.domain._types import MoneyDecimal

@@ -4,6 +4,7 @@ The Context Builder gathers all relevant data (KPIs, variances, evidence,
 business context) and packages it into a validated FinanceContextPack
 that is sent to the LLM for commentary generation.
 """
+
 from __future__ import annotations
 
 from finance.context.models import FinanceContextPack

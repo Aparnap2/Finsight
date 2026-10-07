@@ -75,6 +75,7 @@ class PipelineResultResponse(BaseModel):
 
 class AssertionResponse(BaseModel):
     """Serialized assertion (truth layer)."""
+
     id: str
     type: str
     text: str
@@ -94,6 +95,7 @@ class AssertionResponse(BaseModel):
 
 class CommentarySectionResponse(BaseModel):
     """A single rendered commentary section."""
+
     section_type: str
     content: str
     cited_data_points: list[str] = []
@@ -185,6 +187,7 @@ class CommentaryResponse(BaseModel):
 
 class PipelineExecuteRequest(BaseModel):
     """Request body for the full truth/render pipeline."""
+
     period: str
     tenant_id: str = "CF001"
     force: bool = False
@@ -192,6 +195,7 @@ class PipelineExecuteRequest(BaseModel):
 
 class PipelineExecuteResponse(BaseModel):
     """Full pipeline response with both truth (assertions) and rendered output."""
+
     period: str
     tenant_id: str
     status: str

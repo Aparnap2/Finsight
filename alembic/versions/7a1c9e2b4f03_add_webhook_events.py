@@ -36,9 +36,7 @@ def upgrade() -> None:
         sa.Column("received_at", sa.DateTime(), nullable=True),
         sa.Column("created_at", sa.DateTime(), nullable=True),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint(
-            "provider", "event_id", name="uq_webhook_events_provider_event"
-        ),
+        sa.UniqueConstraint("provider", "event_id", name="uq_webhook_events_provider_event"),
     )
     op.create_index("ix_webhook_events_tenant_id", "webhook_events", ["tenant_id"])
     op.create_index("ix_webhook_events_fingerprint", "webhook_events", ["fingerprint"])

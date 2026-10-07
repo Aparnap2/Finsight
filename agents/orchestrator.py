@@ -86,6 +86,7 @@ def _route_after_review(state: PipelineState) -> str:
 # Review and remediation nodes
 # ---------------------------------------------------------------------------
 
+
 def review_node(state: PipelineState) -> dict[str, Any]:
     """HITL review node — records the review decision.
 
@@ -135,6 +136,7 @@ def remediation_node(state: PipelineState) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 # Graph builder
 # ---------------------------------------------------------------------------
+
 
 def build_graph(
     checkpointer: BaseCheckpointSaver[Any] | None = None,

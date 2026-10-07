@@ -28,7 +28,6 @@ from shared.tracing.redaction import (
     sanitize_output,
 )
 
-
 # ---------------------------------------------------------------------------
 # Correlation: tenant-safe derivation webhook → S3 → LLM → execution
 # ---------------------------------------------------------------------------
@@ -190,17 +189,35 @@ class TestObservabilityTraceNoOp:
             ctx,
             name="planner_llm",
             model="groq",
-            input_data={"hypothesis_text": "candidate with alice@example.com", "gmail_body": "huge"},
+            input_data={
+                "hypothesis_text": "candidate with alice@example.com",
+                "gmail_body": "huge",
+            },
             output={"hypothesis_text": "ok", "evidence_required": ["ev-1"]},
             usage={},
         )
         obs.verifier(ctx, status="ACCEPTED", reason_codes=())
-        obs.capability_call(ctx, capability="search_gmail", args={"query": "refund", "body": "secret"}, order_index=0)
-        obs.capability_result(ctx, capability="search_gmail", result_summary={"row_count": 1}, success=True)
+        obs.capability_call(
+            ctx,
+            capability="search_gmail",
+            args={"query": "refund", "body": "secret"},
+            order_index=0,
+        )
+        obs.capability_result(
+            ctx,
+            capability="search_gmail",
+            result_summary={"row_count": 1},
+            success=True,
+        )
         obs.replan(ctx, attempt=1, reason_codes=("grounding_violation",))
         obs.final_candidate(ctx, hypothesis_ref="hypo", evidence_required=("ev-1",))
         obs.policy(ctx, decision="ALLOW")
-        obs.approval(ctx, decision="APPROVED", approver_ref="approver-1", idempotency_key="appr-1234567890123456")
+        obs.approval(
+            ctx,
+            decision="APPROVED",
+            approver_ref="approver-1",
+            idempotency_key="appr-1234567890123456",
+        )
         obs.execution(ctx, idempotency_key="exec-1234567890123456", status="executed")
         obs.verification(ctx, status="VERIFIED")
         obs.flush()
@@ -215,7 +232,13 @@ class TestObservabilityTraceNoOp:
 
     def test_tenant_safe_ids_only(self) -> None:
         tracer = NoOpTracer()
-        obs = ObservabilityTrace(tracer, correlation_id="CASE-1027", tenant_id="tenant-a", case_id="CASE-1027", exception_type="I-REFUND-LAG")
+        obs = ObservabilityTrace(
+            tracer,
+            correlation_id="CASE-1027",
+            tenant_id="tenant-a",
+            case_id="CASE-1027",
+            exception_type="I-REFUND-LAG",
+        )
         ctx = obs.start_case()
         # Should not raise when ids are tenant-safe
         obs.context_assembly(ctx, evidence_ids=("ev-1",), status="ok")
@@ -224,7 +247,13 @@ class TestObservabilityTraceNoOp:
         tracer = create_tracer(_env={})
         assert isinstance(tracer, NoOpTracer)
         # Flow completes with no network
-        obs = ObservabilityTrace(tracer, correlation_id="CASE-1027", tenant_id="tenant-a", case_id="CASE-1027", exception_type="I-REFUND-LAG")
+        obs = ObservabilityTrace(
+            tracer,
+            correlation_id="CASE-1027",
+            tenant_id="tenant-a",
+            case_id="CASE-1027",
+            exception_type="I-REFUND-LAG",
+        )
         ctx = obs.start_case()
         obs.verification(ctx, status="VERIFIED")
         tracer.flush()  # type: ignore[union-attr]
@@ -271,7 +300,11 @@ class TestWiringThroughTracer:
                 "InvestigationPlan": {
                     "hypothesis_text": "candidate hypothesis with alice@example.com",
                     "capability_calls": [
-                        {"capability": "get_stripe_payment", "args": {"payment_id": "pay_1"}, "order_index": 0}
+                        {
+                            "capability": "get_stripe_payment",
+                            "args": {"payment_id": "pay_1"},
+                            "order_index": 0,
+                        }
                     ],
                     "evidence_required": ["ev-1"],
                     "escalation": False,
@@ -332,14 +365,24 @@ class TestWiringThroughTracer:
 
         tracer = CaptureTracer()
         bundle = AdapterBundle(
-            gmail_corpus={"tenant-a": [{"message_id": "m1", "subject": "hi", "body": "secret body with alice@example.com"}]},
+            gmail_corpus={
+                "tenant-a": [
+                    {
+                        "message_id": "m1",
+                        "subject": "hi",
+                        "body": "secret body with alice@example.com",
+                    }
+                ]
+            },
             qb_adapter=MockQuickBooksAdapter(),
             ledger_repository=InMemoryLedgerRepository(),
         )
         executor = CapabilityExecutor(bundle, tracer=tracer)  # type: ignore[arg-type]
         plan = InvestigationPlan(
             hypothesis_text="hypo",
-            capability_calls=(CapabilityCall(capability="search_gmail", args={"query": "hi"}, order_index=0),),
+            capability_calls=(
+                CapabilityCall(capability="search_gmail", args={"query": "hi"}, order_index=0),
+            ),
             evidence_required=("ev-1",),
             escalation=False,
         )
@@ -383,7 +426,11 @@ class TestWiringThroughTracer:
         verifier = Verifier(tracer=tracer)  # type: ignore[arg-type]
         plan = InvestigationPlan(
             hypothesis_text="candidate",
-            capability_calls=(CapabilityCall(capability="get_stripe_payment", args={"payment_id": "pay_1"}, order_index=0),),
+            capability_calls=(
+                CapabilityCall(
+                    capability="get_stripe_payment", args={"payment_id": "pay_1"}, order_index=0
+                ),
+            ),
             evidence_required=("ev-1",),
             escalation=False,
         )
@@ -431,7 +478,11 @@ class TestWiringThroughTracer:
                 "InvestigationPlan": {
                     "hypothesis_text": "hypo",
                     "capability_calls": [
-                        {"capability": "get_stripe_payment", "args": {"payment_id": "pay_1"}, "order_index": 0}
+                        {
+                            "capability": "get_stripe_payment",
+                            "args": {"payment_id": "pay_1"},
+                            "order_index": 0,
+                        }
                     ],
                     "evidence_required": ["ev-1"],
                     "escalation": False,
@@ -454,7 +505,9 @@ class TestWiringThroughTracer:
             capability_allowlist=("get_stripe_payment",),
         )
         # Derive correlation from s3_key (tenant-a/CASE-1027/file)
-        result = orch.run(req, "tenant-a", correlation_id="CASE-1027", s3_key="tenant-a/CASE-1027/batch.csv")
+        result = orch.run(
+            req, "tenant-a", correlation_id="CASE-1027", s3_key="tenant-a/CASE-1027/batch.csv"
+        )
         assert result.request_id == "CASE-1027"
         # Correlation_id trace should contain hops
         assert any("trace:CASE-1027" in s for s in tracer.spans)

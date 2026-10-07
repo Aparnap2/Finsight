@@ -57,9 +57,7 @@ class TestCompileFormula:
     def test_evaluate_with_decimal_inputs(self) -> None:
         """Evaluation returns a Decimal result."""
         compiled = compile_formula(GROSS_MARGIN)
-        result = compiled.evaluate(
-            {"net_revenue": Decimal("1000"), "cogs": Decimal("600")}
-        )
+        result = compiled.evaluate({"net_revenue": Decimal("1000"), "cogs": Decimal("600")})
         assert result == Decimal("40.0")
         assert isinstance(result, Decimal)
 
@@ -128,9 +126,7 @@ class TestCompileFormula:
     def test_registry_wide_name_resolution(self) -> None:
         """Names resolve against a registry name index."""
         records = load_records()
-        name_index = {
-            _normalise(r["id"]): r["id"] for r in records
-        }
+        name_index = {_normalise(r["id"]): r["id"] for r in records}
         record = next(r for r in records if r["id"] == "gross_margin")
         compiled = compile_formula(record, name_index)
         assert compiled.supported
@@ -149,9 +145,7 @@ class TestCompiledFormula:
 
     def test_division_by_zero_raises(self) -> None:
         """Division by zero raises a FormulaEvaluationError."""
-        compiled = compile_formula(
-            {**GROSS_MARGIN, "expression": "A / B", "inputs": []}
-        )
+        compiled = compile_formula({**GROSS_MARGIN, "expression": "A / B", "inputs": []})
         with pytest.raises(FormulaEvaluationError):
             compiled.evaluate({"A": Decimal("1"), "B": Decimal("0")})
 
@@ -164,7 +158,5 @@ class TestCompiledFormula:
                 "inputs": [],
             }
         )
-        result = compiled.evaluate(
-            {"A": Decimal("2"), "B": Decimal("3"), "C": Decimal("-4")}
-        )
+        result = compiled.evaluate({"A": Decimal("2"), "B": Decimal("3"), "C": Decimal("-4")})
         assert result == Decimal("13")

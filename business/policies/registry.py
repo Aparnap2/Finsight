@@ -74,8 +74,7 @@ POLICY_REGISTRY = PolicyRegistry(
             ),
             scope="variance",
             condition=(
-                "abs(variance_amount) > {amount_threshold} and"
-                " abs(variance_pct) > {pct_threshold}"
+                "abs(variance_amount) > {amount_threshold} and abs(variance_pct) > {pct_threshold}"
             ),
             action=(
                 "Classify variance as material; escalate to commentary engine for explanation."

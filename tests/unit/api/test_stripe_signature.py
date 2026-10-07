@@ -80,8 +80,7 @@ def verify_or_raise(
         raise SignatureError("Signature mismatch.")
     if abs(now - timestamp) > tolerance:
         raise SignatureError(
-            f"Timestamp outside tolerance: skew={abs(now - timestamp)}s "
-            f"exceeds {tolerance}s."
+            f"Timestamp outside tolerance: skew={abs(now - timestamp)}s exceeds {tolerance}s."
         )
     return timestamp
 
@@ -194,9 +193,7 @@ class TestAppVerifierParity:
         # Arrange: header built by the implementation under test.
         header = app_webhooks.build_signature_header(PAYLOAD, SECRET, FIXED_NOW)
         # Act: verify through the real verifier.
-        timestamp = app_webhooks.verify_stripe_signature(
-            PAYLOAD, header, SECRET, FIXED_NOW
-        )
+        timestamp = app_webhooks.verify_stripe_signature(PAYLOAD, header, SECRET, FIXED_NOW)
         # Assert: embedded timestamp is returned.
         assert timestamp == FIXED_NOW
 
@@ -207,59 +204,41 @@ class TestAppVerifierParity:
         mutated = PAYLOAD[:-1] + (b"}" if PAYLOAD[-1:] != b"}" else b"]")
         # Act + Assert: delivering mutated bytes mismatches.
         with pytest.raises(AppSignatureError) as exc_info:
-            app_webhooks.verify_stripe_signature(
-                mutated, header, SECRET, FIXED_NOW
-            )
+            app_webhooks.verify_stripe_signature(mutated, header, SECRET, FIXED_NOW)
         assert exc_info.value.reason == "mismatch"
 
     def test_app_past_boundary_minus_300_passes(self) -> None:
         """Exactly -300s is inside the inclusive window."""
         # Arrange: header stamped at the past boundary.
-        header = app_webhooks.build_signature_header(
-            PAYLOAD, SECRET, FIXED_NOW - 300
-        )
+        header = app_webhooks.build_signature_header(PAYLOAD, SECRET, FIXED_NOW - 300)
         # Act: verify at the fixed now.
-        timestamp = app_webhooks.verify_stripe_signature(
-            PAYLOAD, header, SECRET, FIXED_NOW
-        )
+        timestamp = app_webhooks.verify_stripe_signature(PAYLOAD, header, SECRET, FIXED_NOW)
         # Assert: boundary timestamp is accepted.
         assert timestamp == FIXED_NOW - 300
 
     def test_app_past_boundary_minus_301_fails(self) -> None:
         """-301s expires with reason ``expired``."""
         # Arrange: header one second past the window.
-        header = app_webhooks.build_signature_header(
-            PAYLOAD, SECRET, FIXED_NOW - 301
-        )
+        header = app_webhooks.build_signature_header(PAYLOAD, SECRET, FIXED_NOW - 301)
         # Act + Assert: expired rejection.
         with pytest.raises(AppSignatureError) as exc_info:
-            app_webhooks.verify_stripe_signature(
-                PAYLOAD, header, SECRET, FIXED_NOW
-            )
+            app_webhooks.verify_stripe_signature(PAYLOAD, header, SECRET, FIXED_NOW)
         assert exc_info.value.reason == "expired"
 
     def test_app_future_boundary_plus_300_passes(self) -> None:
         """Exactly +300s clock skew is inside the inclusive window."""
         # Arrange: header stamped at the future boundary.
-        header = app_webhooks.build_signature_header(
-            PAYLOAD, SECRET, FIXED_NOW + 300
-        )
+        header = app_webhooks.build_signature_header(PAYLOAD, SECRET, FIXED_NOW + 300)
         # Act: verify at the fixed now.
-        timestamp = app_webhooks.verify_stripe_signature(
-            PAYLOAD, header, SECRET, FIXED_NOW
-        )
+        timestamp = app_webhooks.verify_stripe_signature(PAYLOAD, header, SECRET, FIXED_NOW)
         # Assert: boundary timestamp is accepted.
         assert timestamp == FIXED_NOW + 300
 
     def test_app_future_boundary_plus_301_fails(self) -> None:
         """+301s future skew expires with reason ``expired``."""
         # Arrange: header one second past the future window.
-        header = app_webhooks.build_signature_header(
-            PAYLOAD, SECRET, FIXED_NOW + 301
-        )
+        header = app_webhooks.build_signature_header(PAYLOAD, SECRET, FIXED_NOW + 301)
         # Act + Assert: expired rejection.
         with pytest.raises(AppSignatureError) as exc_info:
-            app_webhooks.verify_stripe_signature(
-                PAYLOAD, header, SECRET, FIXED_NOW
-            )
+            app_webhooks.verify_stripe_signature(PAYLOAD, header, SECRET, FIXED_NOW)
         assert exc_info.value.reason == "expired"

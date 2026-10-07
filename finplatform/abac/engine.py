@@ -112,9 +112,7 @@ class PolicyEngine:
         # combine == "all": matched iff every rule passed (none failed).
         # combine == "any": matched iff at least one rule passed.
         matched = (
-            (first_fail_reason is None)
-            if combine == "all"
-            else (first_pass_reason is not None)
+            (first_fail_reason is None) if combine == "all" else (first_pass_reason is not None)
         )
 
         if effect == "allow":

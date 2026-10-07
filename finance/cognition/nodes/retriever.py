@@ -30,10 +30,9 @@ class RetrieverNode:
         retrieved_for: list[str] = []
         if state.action_plan is not None:
             from finance.cognition.state.action import ActionPlan
+
             plan: ActionPlan | None = (
-                state.action_plan
-                if isinstance(state.action_plan, ActionPlan)
-                else None
+                state.action_plan if isinstance(state.action_plan, ActionPlan) else None
             )
             if plan is not None:
                 for action in plan.actions:

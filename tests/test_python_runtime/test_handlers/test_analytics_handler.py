@@ -110,9 +110,7 @@ class TestAnalyticsHandler:
         # FileNotFoundError gets caught by the handler -> HANDLER_ERROR
         assert excinfo.value.code in ("IMPORT_ERROR", "HANDLER_ERROR")
 
-    def test_validation_schema_not_in_registry_skips_validation(
-        self, sample_csv_path: str
-    ) -> None:
+    def test_validation_schema_not_in_registry_skips_validation(self, sample_csv_path: str) -> None:
         """If schema name is not in SCHEMA_REGISTRY, validation is skipped (graceful)."""
         job = Job(
             tenant_id="T1",

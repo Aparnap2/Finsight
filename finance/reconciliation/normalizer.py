@@ -59,20 +59,14 @@ _MONEY_COMPONENTS = ("gross", "fee", "refund")
 def _normalize_currency(value: Any) -> str:
     """Uppercase and validate an ISO 4217 currency code."""
     if not isinstance(value, str):
-        raise InvariantViolation(
-            f"Field 'currency' must be a string, got {type(value).__name__}."
-        )
+        raise InvariantViolation(f"Field 'currency' must be a string, got {type(value).__name__}.")
     code = value.strip().upper()
     if _CURRENCY_PATTERN.fullmatch(code) is None:
-        raise InvariantViolation(
-            f"Field 'currency' must be an ISO 4217 code, got {value!r}."
-        )
+        raise InvariantViolation(f"Field 'currency' must be an ISO 4217 code, got {value!r}.")
     return code
 
 
-def _resolve_exponent(
-    currency: str, raw: Mapping[str, Any], override: int | None
-) -> int:
+def _resolve_exponent(currency: str, raw: Mapping[str, Any], override: int | None) -> int:
     """Resolve the minor-unit exponent: override, payload, table, default."""
     if override is not None:
         candidate: Any = override
@@ -122,8 +116,7 @@ def _to_decimal(value: Any, *, field_name: str, minor: bool, exponent: int) -> D
             ) from exc
     else:
         raise InvariantViolation(
-            f"Field '{field_name}' must be Decimal, int, or str, "
-            f"got {type(value).__name__}."
+            f"Field '{field_name}' must be Decimal, int, or str, got {type(value).__name__}."
         )
     if not result.is_finite():
         raise InvariantViolation(f"Field '{field_name}' must be finite, got {result}.")
@@ -141,9 +134,7 @@ def _parse_occurred_at(value: Any) -> datetime:
         try:
             parsed = datetime.fromisoformat(text)
         except ValueError as exc:
-            raise InvariantViolation(
-                f"Field 'occurred_at' is not ISO-8601: {value!r}."
-            ) from exc
+            raise InvariantViolation(f"Field 'occurred_at' is not ISO-8601: {value!r}.") from exc
     else:
         raise InvariantViolation(
             "Field 'occurred_at' must be a tz-aware datetime or ISO-8601 string, "
@@ -165,8 +156,7 @@ def _parse_status(value: Any) -> PaymentStatus:
         except ValueError as exc:
             raise InvariantViolation(f"Unknown payment status {value!r}.") from exc
     raise InvariantViolation(
-        f"Field 'status' must be a PaymentStatus or status name, "
-        f"got {type(value).__name__}."
+        f"Field 'status' must be a PaymentStatus or status name, got {type(value).__name__}."
     )
 
 
@@ -215,9 +205,7 @@ def normalize(
             f"normalize requires a mapping payload, got {type(raw_value).__name__}."
         )
     if amount_unit not in ("major", "minor"):
-        raise InvariantViolation(
-            f"amount_unit must be 'major' or 'minor', got {amount_unit!r}."
-        )
+        raise InvariantViolation(f"amount_unit must be 'major' or 'minor', got {amount_unit!r}.")
     currency = _normalize_currency(raw.get("currency"))
     resolved_exponent = _resolve_exponent(currency, raw, exponent)
     minor_default = amount_unit == "minor"
@@ -233,7 +221,9 @@ def normalize(
             )
         elif name in raw:
             amounts[name] = _to_decimal(
-                raw[name], field_name=name, minor=minor_default,
+                raw[name],
+                field_name=name,
+                minor=minor_default,
                 exponent=resolved_exponent,
             )
         elif name == "gross":
@@ -242,12 +232,16 @@ def normalize(
             amounts[name] = Decimal("0")
     if "net_minor" in raw:
         net = _to_decimal(
-            raw["net_minor"], field_name="net_minor", minor=True,
+            raw["net_minor"],
+            field_name="net_minor",
+            minor=True,
             exponent=resolved_exponent,
         )
     elif "net" in raw:
         net = _to_decimal(
-            raw["net"], field_name="net", minor=minor_default,
+            raw["net"],
+            field_name="net",
+            minor=minor_default,
             exponent=resolved_exponent,
         )
     else:

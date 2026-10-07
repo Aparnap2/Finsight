@@ -413,9 +413,7 @@ def decide(
         )
     # G5 — proposal validation binding (A13).
     if len(proposal.evidence_refs) < 1:
-        raise _refuse(
-            RefusalCode.UNVALIDATED_PROPOSAL, "G5", "Proposal cites no evidence refs."
-        )
+        raise _refuse(RefusalCode.UNVALIDATED_PROPOSAL, "G5", "Proposal cites no evidence refs.")
     recomputed = compute_proposal_hash(
         situation_id=proposal.situation_id,
         action=proposal.action,
