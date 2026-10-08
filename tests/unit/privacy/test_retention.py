@@ -60,9 +60,9 @@ class TestPolicyCompleteness:
             assert isinstance(rule.disposition, RetentionDisposition)
 
     def test_unknown_surface_refused(self) -> None:
-        from shared.privacy.retention import RetentionRefused, disposition_for
+        from shared.privacy.retention import RetentionRefusedError, disposition_for
 
-        with pytest.raises(RetentionRefused):
+        with pytest.raises(RetentionRefusedError):
             disposition_for("nope")
 
     def test_authoritative_surfaces_keep_forever(self) -> None:
@@ -77,10 +77,10 @@ class TestPolicyCompleteness:
 
 class TestKeepRefusal:
     def test_purge_refuses_authoritative_tables(self) -> None:
-        from shared.privacy.retention import RetentionRefused, disposition_for, purge_expired
         from sqlalchemy.orm import Session
 
         from finance.exceptions.models import Base as ExceptionBase
+        from shared.privacy.retention import RetentionRefusedError, disposition_for, purge_expired
 
         engine = _engine()
         ExceptionBase.metadata.create_all(engine)
@@ -101,7 +101,7 @@ class TestKeepRefusal:
                 )
             )
             session.commit()
-        with Session(engine) as session, pytest.raises(RetentionRefused):
+        with Session(engine) as session, pytest.raises(RetentionRefusedError):
             purge_expired(session, disposition_for("exceptions"), NOW)
         with Session(engine) as session:
             from finance.exceptions.models import ExceptionRow
@@ -111,9 +111,9 @@ class TestKeepRefusal:
 
 class TestExpiryBoundaries:
     def test_old_idempotency_binding_expires_fresh_survives(self) -> None:
-        from shared.privacy.retention import disposition_for, purge_expired
         from sqlalchemy.orm import Session
 
+        from shared.privacy.retention import disposition_for, purge_expired
         from shared.safety.idempotency import IdempotencyStore
 
         engine = _engine()
@@ -135,9 +135,9 @@ class TestExpiryBoundaries:
         assert store.payload_hash_for("tenant-acme", "fresh-key") == "hash-fresh"
 
     def test_purge_is_idempotent(self) -> None:
-        from shared.privacy.retention import disposition_for, purge_expired
         from sqlalchemy.orm import Session
 
+        from shared.privacy.retention import disposition_for, purge_expired
         from shared.safety.idempotency import IdempotencyStore
 
         engine = _engine()
@@ -155,9 +155,9 @@ class TestExpiryBoundaries:
             assert purge_expired(session, rule, NOW) == 0
 
     def test_tenant_scoped_purge(self) -> None:
-        from shared.privacy.retention import disposition_for, purge_expired
         from sqlalchemy.orm import Session
 
+        from shared.privacy.retention import disposition_for, purge_expired
         from shared.safety.idempotency import IdempotencyStore
 
         engine = _engine()
@@ -176,9 +176,9 @@ class TestExpiryBoundaries:
         assert store.payload_hash_for("tenant-b", "k") == "h"
 
     def test_find_expired_is_dry_run(self) -> None:
-        from shared.privacy.retention import disposition_for, find_expired
         from sqlalchemy.orm import Session
 
+        from shared.privacy.retention import disposition_for, find_expired
         from shared.safety.idempotency import IdempotencyStore
 
         engine = _engine()
@@ -198,10 +198,10 @@ class TestExpiryBoundaries:
 
 class TestAnonymize:
     def test_old_raw_tombstoned_envelope_kept(self) -> None:
-        from shared.privacy.retention import anonymize_expired, disposition_for
         from sqlalchemy.orm import Session
 
         from shared.models.database import Base as SharedBase
+        from shared.privacy.retention import anonymize_expired, disposition_for
 
         engine = _engine()
         SharedBase.metadata.create_all(engine)
@@ -258,18 +258,19 @@ class TestAnonymize:
             assert anonymize_expired(session, rule, NOW) == 0
 
     def test_wrong_disposition_refused(self) -> None:
+        from sqlalchemy.orm import Session
+
         from shared.privacy.retention import (
-            RetentionRefused,
+            RetentionRefusedError,
             anonymize_expired,
             disposition_for,
             purge_expired,
         )
-        from sqlalchemy.orm import Session
 
         engine = _engine()
-        with Session(engine) as session, pytest.raises(RetentionRefused):
+        with Session(engine) as session, pytest.raises(RetentionRefusedError):
             purge_expired(session, disposition_for("webhook_events"), NOW)
-        with Session(engine) as session, pytest.raises(RetentionRefused):
+        with Session(engine) as session, pytest.raises(RetentionRefusedError):
             anonymize_expired(session, disposition_for("idempotency_keys"), NOW)
 
 
