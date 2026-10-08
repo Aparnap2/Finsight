@@ -26,6 +26,7 @@ dependencies = [
     "openai>=2.45.0",
     "litellm>=1.60.0,<2.0",
     "python-multipart>=0.0.32",
+    "nicegui>=3.18.0",
 ]
 
 [project.optional-dependencies]
