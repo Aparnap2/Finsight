@@ -56,8 +56,10 @@ from finance.accounting.errors import (
     ValidationError,
 )
 from finance.reconciliation.models import ExceptionCode
+from shared.safety.secrets import ScrubLogFilter
 
 logger = logging.getLogger(__name__)
+logger.addFilter(ScrubLogFilter())
 
 #: Sandbox chart of accounts: the only accounts the mock accepts.
 SANDBOX_CHART_OF_ACCOUNTS = frozenset(

@@ -29,6 +29,7 @@ from finance.exceptions.errors import ConcurrencyConflictError, IllegalTransitio
 from finance.exceptions.models import Base, ExceptionAuditRow, ExceptionRow
 from finance.exceptions.states import ExceptionState
 from shared.safety.errors import persist_guarded
+from shared.safety.secrets import scrub_text
 
 logger = logging.getLogger(__name__)
 
@@ -298,7 +299,12 @@ class ExceptionRepository:
         *,
         actual_version: int | None = None,
     ) -> None:
-        """Append a rejection audit row without mutating the aggregate row."""
+        """Append a rejection audit row without mutating the aggregate row.
+
+        The free-text reason is scrubbed (secrets/PII masked, amounts and
+        structure preserved); the actor id is accountability data and is
+        kept verbatim.
+        """
         with Session(self._engine) as session:
             session.add(
                 ExceptionAuditRow(
@@ -312,7 +318,7 @@ class ExceptionRepository:
                         actual_version if actual_version is not None else snapshot.state_version
                     ),
                     outcome="REJECTED",
-                    reason=reason,
+                    reason=scrub_text(reason),
                     created_at=_utcnow(),
                 )
             )

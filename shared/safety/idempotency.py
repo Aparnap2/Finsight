@@ -26,8 +26,10 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
 from sqlalchemy.pool import StaticPool
 
 from shared.safety.errors import PersistenceError
+from shared.safety.secrets import ScrubLogFilter, scrub_text
 
 logger = logging.getLogger(__name__)
+logger.addFilter(ScrubLogFilter())
 
 
 def _utcnow() -> datetime:
@@ -104,7 +106,7 @@ class IdempotencyStore:
             with Session(self._engine) as session:
                 return session.get(IdempotencyRow, (tenant_id, key)) is not None
         except (OperationalError, InterfaceError) as exc:
-            raise PersistenceError(f"idempotency seen({key!r}) failed: {exc}") from exc
+            raise PersistenceError(f"idempotency seen({scrub_text(key)!r}) failed: {exc}") from exc
 
     def payload_hash_for(self, tenant_id: str, key: str) -> str | None:
         """Return the hash first recorded for ``key``, or None if unseen.
@@ -120,7 +122,9 @@ class IdempotencyStore:
                 row = session.get(IdempotencyRow, (tenant_id, key))
                 return row.payload_hash if row is not None else None
         except (OperationalError, InterfaceError) as exc:
-            raise PersistenceError(f"idempotency payload_hash_for({key!r}) failed: {exc}") from exc
+            raise PersistenceError(
+                f"idempotency payload_hash_for({scrub_text(key)!r}) failed: {exc}"
+            ) from exc
 
     def record(self, tenant_id: str, key: str, payload_hash: str) -> None:
         """Bind ``key`` to ``payload_hash``, refreshing an identical binding.
@@ -169,7 +173,9 @@ class IdempotencyStore:
                 else:
                     raise
         except (OperationalError, InterfaceError) as exc:
-            raise PersistenceError(f"idempotency record({key!r}) failed: {exc}") from exc
+            raise PersistenceError(
+                f"idempotency record({scrub_text(key)!r}) failed: {exc}"
+            ) from exc
         logger.info("idempotency recorded key=%s", key)
 
     def claim(self, tenant_id: str, key: str, payload_hash: str) -> ClaimOutcome:
@@ -222,4 +228,4 @@ class IdempotencyStore:
                     return ClaimOutcome.REPLAY
                 return ClaimOutcome.CONFLICT
         except (OperationalError, InterfaceError) as exc:
-            raise PersistenceError(f"idempotency claim({key!r}) failed: {exc}") from exc
+            raise PersistenceError(f"idempotency claim({scrub_text(key)!r}) failed: {exc}") from exc

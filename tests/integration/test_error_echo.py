@@ -28,7 +28,7 @@ def _body() -> dict[str, object]:
         "exception_id": "exc-echo-1",
         "proposal_id": "prop-echo-1",
         "proposal_version": 1,
-        "proposal_content_hash": "a" * 16,
+        "proposal_content_hash": "b" * 64,
         "approver_id": "approver-1",
         "decision": "APPROVED",
         "idempotency_key": "key-echo-1",
@@ -40,12 +40,15 @@ def _build_app(engine: Any, tenant_id: str | None) -> FastAPI:
     """Mount approvals + observations routers with a fixed actor."""
     from collections.abc import Iterator
 
-    from apps.api.approvals import get_db_session
+    from fastapi.exceptions import RequestValidationError
+
+    from apps.api.approvals import get_db_session, validation_error_handler
     from apps.api.approvals import router as approvals_router
     from apps.api.observations import get_observation_session
     from apps.api.observations import router as observations_router
 
     app = FastAPI()
+    app.add_exception_handler(RequestValidationError, validation_error_handler)
     app.include_router(approvals_router)
     app.include_router(observations_router)
 
@@ -97,11 +100,14 @@ class TestDomainErrorEcho:
 
 class TestObservationReadLegacy:
     def test_raw_legacy_audit_row_not_served(self) -> None:
-
+        from finance.exceptions.models import Base as ExceptionBase
         from finance.exceptions.models import ExceptionAuditRow
+        from finance.execution.models import Base as ExecutionBase
         from tests.unit.execution.test_executor import _engine
 
         engine = _engine()
+        ExceptionBase.metadata.create_all(engine)
+        ExecutionBase.metadata.create_all(engine)
         with Session(engine) as session:
             session.add(
                 ExceptionAuditRow(

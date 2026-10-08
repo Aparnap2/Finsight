@@ -21,6 +21,7 @@ from decimal import Decimal
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import Engine, create_engine, text
@@ -36,12 +37,48 @@ from finance.exceptions.errors import (
 )
 from finance.exceptions.repository import ExceptionRepository
 from shared.config import get_settings
+from shared.privacy.sanitize import sanitize_for_log
+from shared.safety.secrets import scrub_text
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
 DECISION_FORM = Literal["APPROVED", "REJECTED"]
+
+
+def _error_tenant(request: Request) -> str:
+    """Actor tenant for error scrubbing, or the unscoped sentinel.
+
+    Error responses are not joined across tenants, so the sentinel only
+    loses token joinability, never safety: secret/email patterns are
+    still scrubbed regardless of tenant scope.
+    """
+    actor: dict[str, Any] | None = getattr(request.state, "actor", None)
+    tenant = (actor or {}).get("tenant_id") if isinstance(actor, dict) else None
+    return str(tenant) if tenant else "unscoped"
+
+
+async def validation_error_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+    """Return FastAPI's 422 shape with submitted values scrubbed.
+
+    Registered on the application (APIRouter in this Starlette version
+    has no exception_handler); both ``main.py`` and tests register it
+    explicitly. Structure (status, error list with loc/msg/type) is
+    unchanged; only secret/PII-shaped submitted values are redacted.
+    """
+    tenant_id = _error_tenant(request)
+    clean_errors: list[Any] = []
+    for error in exc.errors():
+        entry = dict(error)
+        if "input" in entry:
+            entry["input"] = sanitize_for_log(
+                {"value": entry["input"]}, tenant_id=tenant_id, unknown="preserve"
+            )["value"]
+        if "ctx" in entry and isinstance(entry["ctx"], dict):
+            entry["ctx"] = sanitize_for_log(entry["ctx"], tenant_id=tenant_id, unknown="preserve")
+        clean_errors.append(entry)
+    return JSONResponse(status_code=422, content={"detail": clean_errors})
 
 
 class DecideRequest(BaseModel):
@@ -144,10 +181,10 @@ async def decide_approval(
         record = service.decide(cmd, repo, proposals)
     except (IllegalTransitionError, ApprovalSkewError) as exc:
         logger.warning("Approval rejected exception=%s: %s.", body.exception_id, exc)
-        return JSONResponse(status_code=422, content={"detail": str(exc)})
+        return JSONResponse(status_code=422, content={"detail": scrub_text(str(exc))})
     except ConcurrencyConflictError as exc:
         logger.warning("Approval conflict exception=%s: %s.", body.exception_id, exc)
-        return JSONResponse(status_code=409, content={"detail": str(exc)})
+        return JSONResponse(status_code=409, content={"detail": scrub_text(str(exc))})
     except (ValueError, TypeError, SQLAlchemyError) as exc:
         logger.exception("Approval failed exception=%s.", body.exception_id)
         return JSONResponse(status_code=400, content={"detail": str(exc)})
@@ -174,4 +211,5 @@ __all__ = [
     "get_db_session",
     "get_proposal_lookup",
     "router",
+    "validation_error_handler",
 ]

@@ -6,6 +6,23 @@ from pathlib import Path
 from typing import Any
 
 from finance.cognition.state.models import ReasoningState
+from shared.safety.secrets import redact_mapping, scrub_text
+
+
+def _scrub_trace(node: Any) -> Any:
+    """Scrub secrets/PII from a trace structure, preserving shape and amounts.
+
+    Secret-named keys collapse, secret-shaped and email values are masked
+    inline, everything else (ids, amounts, states, counts) passes through
+    so traces stay debuggable. Uses only the approved secrets primitives.
+    """
+    if isinstance(node, dict):
+        return {key: _scrub_trace(value) for key, value in redact_mapping(node).items()}
+    if isinstance(node, list):
+        return [_scrub_trace(item) for item in node]
+    if isinstance(node, str):
+        return scrub_text(node)
+    return node
 
 
 class ReasoningTelemetry:
@@ -43,5 +60,5 @@ class ReasoningTelemetry:
             ),
         }
         path = self._dir / f"{run_id}.json"
-        path.write_text(json.dumps(trace, indent=2, default=str))
+        path.write_text(json.dumps(_scrub_trace(trace), indent=2, default=str))
         return path
