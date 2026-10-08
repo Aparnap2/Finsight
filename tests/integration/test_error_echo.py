@@ -60,7 +60,7 @@ def _build_app(engine: Any, tenant_id: str | None) -> FastAPI:
     app.middleware("http")(_actor)
 
     def _session_override() -> Iterator[Session]:
-        with Session(engine) as session:  # type: ignore[arg-type]
+        with Session(engine) as session:
             yield session
 
     app.dependency_overrides[get_db_session] = _session_override

@@ -59,7 +59,7 @@ def _error_tenant(request: Request) -> str:
     return str(tenant) if tenant else "unscoped"
 
 
-async def validation_error_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+async def validation_error_handler(request: Request, exc: Exception) -> JSONResponse:
     """Return FastAPI's 422 shape with submitted values scrubbed.
 
     Registered on the application (APIRouter in this Starlette version
@@ -67,6 +67,7 @@ async def validation_error_handler(request: Request, exc: RequestValidationError
     explicitly. Structure (status, error list with loc/msg/type) is
     unchanged; only secret/PII-shaped submitted values are redacted.
     """
+    assert isinstance(exc, RequestValidationError)
     tenant_id = _error_tenant(request)
     clean_errors: list[Any] = []
     for error in exc.errors():
