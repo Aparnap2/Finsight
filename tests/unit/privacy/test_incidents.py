@@ -145,15 +145,16 @@ class TestRejectedTransitionsChangeNothing:
         closed = incident.close(actor="owner-1", outcome="RESOLVED")
         frozen_state = closed.state
         frozen_timeline = closed.timeline
-        for attempt in (
-            lambda: closed.triage(actor="owner-1"),
-            lambda: closed.contain(actor="owner-1", action="x"),
-            lambda: closed.investigate(actor="owner-1"),
-            lambda: closed.recover(actor="owner-1"),
-            lambda: closed.close(actor="owner-1", outcome="RESOLVED"),
-        ):
+        attempts = (
+            ("triage", {"actor": "owner-1"}),
+            ("contain", {"actor": "owner-1", "action": "x"}),
+            ("investigate", {"actor": "owner-1"}),
+            ("recover", {"actor": "owner-1"}),
+            ("close", {"actor": "owner-1", "outcome": "RESOLVED"}),
+        )
+        for method, kwargs in attempts:
             with pytest.raises(IncidentTransitionError):
-                attempt()
+                getattr(closed, method)(**kwargs)
         assert closed.state is frozen_state
         assert closed.timeline == frozen_timeline
 
