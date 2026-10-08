@@ -49,7 +49,7 @@ def _pii_request() -> Any:
         exception_type="I-REFUND-LAG",
         tenant_id="tenant-001",
         actor="user-001",
-        evidence_ids=["ev-ledger-001"],
+        evidence_ids=("ev-ledger-001",),
         context_window=_malicious_context(),
         round_budget=1,
     )
