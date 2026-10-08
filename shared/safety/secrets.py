@@ -18,6 +18,7 @@ or ``finance/``. Every redactor is total (never raises on odd input).
 from __future__ import annotations
 
 import hashlib
+import logging
 import re
 from typing import Any
 
@@ -127,3 +128,25 @@ def contains_secret_literal(text: str) -> bool:
     if ("sk-" in lowered or "sk_" in lowered) and _SK_VALUE_RE.search(text):
         return True
     return bool(_BEARER_VALUE_RE.search(text) and "redacted" not in lowered)
+
+
+class ScrubLogFilter(logging.Filter):
+    """Scrub secret/email shapes from one logger's record args.
+
+    Keys and exception strings are caller-supplied and may carry
+    secret-shaped or email-shaped values. Scrubbing at the record level
+    covers every current and future emission site on the logger.
+    Amounts/ids/states pass through (amount masking lives at the
+    specific call sites that emit financial values).
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        args = record.args
+        if isinstance(args, dict):
+            record.args = {
+                key: scrub_text(value) if isinstance(value, str) else value
+                for key, value in args.items()
+            }
+        elif isinstance(args, tuple):
+            record.args = tuple(scrub_text(arg) if isinstance(arg, str) else arg for arg in args)
+        return True

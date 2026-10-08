@@ -77,6 +77,7 @@ from finance.reconciliation.errors import (
 )
 from finance.reconciliation.models import PaymentRecord, PaymentStatus
 from finance.reconciliation.normalizer import normalize
+from shared.privacy.sanitize import FINANCIAL_MARKER
 
 logger = logging.getLogger(__name__)
 
@@ -566,7 +567,7 @@ def stripe_to_normalized(event: Mapping[str, Any], *, tenant_id: str) -> StripeN
         logger.info(
             "Stripe charge normalized payment_id=%s gross=%s %s fee=%s",
             payment_id,
-            gross,
+            FINANCIAL_MARKER,
             currency,
             fee.state.value,
         )
@@ -605,7 +606,7 @@ def stripe_to_normalized(event: Mapping[str, Any], *, tenant_id: str) -> StripeN
             "Stripe refund normalized payment_id=%s refund_id=%s delta=%s %s",
             payment_id,
             refund_id,
-            delta,
+            FINANCIAL_MARKER,
             currency,
         )
         return StripeNormalized(record=record, fee=fee, refund=refund)

@@ -58,8 +58,10 @@ from finance.reconciliation.tolerances import ReconciliationTolerance
 from shared.safety.errors import PersistenceError, persist_guarded
 from shared.safety.execution_guard import ExecutionCommand, ExecutionGuard
 from shared.safety.idempotency import ClaimOutcome, IdempotencyStore
+from shared.safety.secrets import ScrubLogFilter
 
 logger = logging.getLogger(__name__)
+logger.addFilter(ScrubLogFilter())
 
 #: Zero in exact Decimal arithmetic for the post-verify tolerance default.
 _ZERO = Decimal("0")

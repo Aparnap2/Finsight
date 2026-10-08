@@ -40,6 +40,7 @@ from finance.exceptions.repository import ExceptionRepository
 from finance.execution.models import ExecutionRow
 from shared.config import get_settings
 from shared.safety.errors import PersistenceError
+from shared.safety.secrets import scrub_text
 
 logger = logging.getLogger(__name__)
 
@@ -210,7 +211,7 @@ async def get_audit(
                 "previous_state": a.from_state,
                 "new_state": a.attempted_state,
                 "operation": a.outcome,
-                "reason": a.reason,
+                "reason": scrub_text(a.reason) if a.reason else a.reason,
                 "expected_version": a.expected_version,
                 "actual_version": a.actual_version,
                 "tenant_id": a.tenant_id,
@@ -249,7 +250,7 @@ async def get_timeline(
                 "new_state": a.attempted_state,
                 "actor": a.actor,
                 "operation": a.outcome,
-                "reason": a.reason,
+                "reason": scrub_text(a.reason) if a.reason else a.reason,
                 "tenant_id": a.tenant_id,
             }
             for a in entries

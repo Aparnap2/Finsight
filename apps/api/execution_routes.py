@@ -75,6 +75,7 @@ from finance.verification.orchestrator import (
 from finance.verification.replay import ReplayStore
 from shared.config import get_settings
 from shared.safety.idempotency import IdempotencyStore
+from shared.safety.secrets import scrub_text
 
 logger = logging.getLogger(__name__)
 
@@ -421,16 +422,16 @@ async def execute_controlled(
                 expected_state_version=body.expected_state_version,
             )
         except (ValueError, TypeError) as exc:
-            return _refused(400, "MALFORMED_COMMAND", str(exc))
+            return _refused(400, "MALFORMED_COMMAND", scrub_text(str(exc)))
         try:
             record = service.decide(cmd, repo, proposals)
         except (IllegalTransitionError, ApprovalSkewError) as exc:
             code = "POLICY_DENIED" if "policy denied" in str(exc).lower() else "APPROVAL_SKEW"
-            return _refused(422, code, str(exc))
+            return _refused(422, code, scrub_text(str(exc)))
         except ConcurrencyConflictError as exc:
-            return _refused(409, "VERSION_CONFLICT", str(exc))
+            return _refused(409, "VERSION_CONFLICT", scrub_text(str(exc)))
         except (ValueError, TypeError, SQLAlchemyError) as exc:
-            return _refused(400, "DECISION_MALFORMED", str(exc))
+            return _refused(400, "DECISION_MALFORMED", scrub_text(str(exc)))
     stages.append("approval")
 
     if str(getattr(record.decision, "value", record.decision)).upper() != "APPROVED":
@@ -452,7 +453,7 @@ async def execute_controlled(
             authorization_id=authorization_id,
         )
     except AuthorizationRefusedError as exc:
-        return _refused(422, "AUTHORIZATION_REFUSED", str(exc))
+        return _refused(422, "AUTHORIZATION_REFUSED", scrub_text(str(exc)))
     stages.append("authorization")
 
     # Execution: guarded, idempotent, single-effect per key.
@@ -477,13 +478,13 @@ async def execute_controlled(
             now=now,
         )
     except (ValueError, TypeError) as exc:
-        return _refused(400, "HANDOFF_MALFORMED", str(exc))
+        return _refused(400, "HANDOFF_MALFORMED", scrub_text(str(exc)))
     try:
         report, audit_code = _run_verification(
             handoff=handoff, situation_id=body.situation_id, bundle=bundle, now=now
         )
     except VerificationRefused as exc:
-        return _refused(422, str(exc.code or "VERIFY_REFUSED"), str(exc))
+        return _refused(422, str(exc.code or "VERIFY_REFUSED"), scrub_text(str(exc)))
     stages.append("verification")
     if report.verdict is not VerificationVerdict.VERIFIED:
         return _refused(422, str(audit_code or "VERIFY_FAILED"), "Verification failed")
@@ -549,13 +550,13 @@ async def verify_handoff(
             recorded_at=now,
         )
     except (ValueError, TypeError) as exc:
-        return _refused(400, "HANDOFF_MALFORMED", str(exc))
+        return _refused(400, "HANDOFF_MALFORMED", scrub_text(str(exc)))
     try:
         report, audit_code = _run_verification(
             handoff=handoff, situation_id=body.situation_id, bundle=bundle, now=now
         )
     except VerificationRefused as exc:
-        return _refused(422, str(exc.code or "VERIFY_REFUSED"), str(exc))
+        return _refused(422, str(exc.code or "VERIFY_REFUSED"), scrub_text(str(exc)))
     if report.verdict is not VerificationVerdict.VERIFIED:
         return _refused(422, str(audit_code or "VERIFY_FAILED"), "Verification failed")
     return JSONResponse(
