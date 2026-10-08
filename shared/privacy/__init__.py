@@ -13,6 +13,18 @@ from shared.privacy.inventory import (
     SourceEntry,
     completeness_gaps,
 )
+from shared.privacy.retention import (
+    PERSISTED_SURFACES,
+    RETENTION_POLICIES,
+    RetentionDisposition,
+    RetentionRefusedError,
+    RetentionRule,
+    anonymize_expired,
+    disposition_for,
+    find_expired,
+    purge_expired,
+    purge_files,
+)
 from shared.privacy.sanitize import (
     sanitize_for_eval,
     sanitize_for_llm,
@@ -22,14 +34,24 @@ from shared.privacy.sanitize import (
 
 __all__ = [
     "FINANCIAL_PURPOSES",
+    "PERSISTED_SURFACES",
     "PolicyDeniedError",
     "Purpose",
+    "RETENTION_POLICIES",
+    "RetentionDisposition",
+    "RetentionRefusedError",
+    "RetentionRule",
     "SOURCE_REGISTRY",
+    "anonymize_expired",
     "authorize_llm_context",
     "DataClassification",
     "InventoryRow",
     "SourceEntry",
     "completeness_gaps",
+    "disposition_for",
+    "find_expired",
+    "purge_expired",
+    "purge_files",
     "sanitize_for_eval",
     "sanitize_for_llm",
     "sanitize_for_log",
