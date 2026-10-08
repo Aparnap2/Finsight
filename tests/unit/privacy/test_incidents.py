@@ -26,22 +26,30 @@ from __future__ import annotations
 
 import pytest
 
+from shared.privacy.incidents import Incident
 
-def _report(**overrides):  # type: ignore[no-untyped-def]
-    """Report one incident through the (missing) registry factory."""
+
+def _report(
+    incident_id: str = "inc-001",
+    tenant_id: str = "tenant-acme",
+    category: str = "DATA_LEAK",
+    severity: str = "HIGH",
+    title: str = "test incident",
+    owner: str = "owner-1",
+    reporter: str = "detector-1",
+) -> Incident:
+    """Report one incident through the registry factory."""
     from shared.privacy.incidents import IncidentRegistry
 
-    kwargs = {
-        "incident_id": "inc-001",
-        "tenant_id": "tenant-acme",
-        "category": "DATA_LEAK",
-        "severity": "HIGH",
-        "title": "test incident",
-        "owner": "owner-1",
-        "reporter": "detector-1",
-    }
-    kwargs.update(overrides)
-    return IncidentRegistry().report(**kwargs)
+    return IncidentRegistry().report(
+        incident_id=incident_id,
+        tenant_id=tenant_id,
+        category=category,
+        severity=severity,
+        title=title,
+        owner=owner,
+        reporter=reporter,
+    )
 
 
 class TestTaxonomy:
