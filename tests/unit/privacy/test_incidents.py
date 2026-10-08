@@ -113,6 +113,42 @@ class TestLifecycle:
         with pytest.raises(IncidentTransitionError):
             incident.close(actor="owner-1", outcome="")
 
+
+class TestRejectedTransitionsChangeNothing:
+    def test_illegal_move_preserves_state_and_audit(self) -> None:
+        from shared.privacy.incidents import IncidentTransitionError
+
+        incident = _report()
+        before_state = incident.state
+        before_timeline = incident.timeline
+        with pytest.raises(IncidentTransitionError):
+            incident.contain(actor="owner-1", action="x")
+        assert incident.state is before_state
+        assert incident.timeline == before_timeline
+
+    def test_closed_rejects_everything_unchanged(self) -> None:
+        from shared.privacy.incidents import IncidentTransitionError
+
+        incident = _report()
+        incident = incident.triage(actor="owner-1")
+        incident = incident.contain(actor="owner-1", action="x")
+        incident = incident.investigate(actor="owner-1")
+        incident = incident.recover(actor="owner-1")
+        closed = incident.close(actor="owner-1", outcome="RESOLVED")
+        frozen_state = closed.state
+        frozen_timeline = closed.timeline
+        for attempt in (
+            lambda: closed.triage(actor="owner-1"),
+            lambda: closed.contain(actor="owner-1", action="x"),
+            lambda: closed.investigate(actor="owner-1"),
+            lambda: closed.recover(actor="owner-1"),
+            lambda: closed.close(actor="owner-1", outcome="RESOLVED"),
+        ):
+            with pytest.raises(IncidentTransitionError):
+                attempt()
+        assert closed.state is frozen_state
+        assert closed.timeline == frozen_timeline
+
     def test_audit_trail_appends_in_order(self) -> None:
         incident = _report()
         before = list(incident.timeline)

@@ -6,6 +6,18 @@ from shared.privacy.boundary import (
     Purpose,
     authorize_llm_context,
 )
+from shared.privacy.incidents import (
+    Incident,
+    IncidentCategory,
+    IncidentEvent,
+    IncidentOutcome,
+    IncidentRegistry,
+    IncidentSeverity,
+    IncidentState,
+    IncidentTransitionError,
+    NotificationDecision,
+    notification_decision,
+)
 from shared.privacy.inventory import (
     SOURCE_REGISTRY,
     DataClassification,
@@ -34,6 +46,16 @@ from shared.privacy.sanitize import (
 
 __all__ = [
     "FINANCIAL_PURPOSES",
+    "Incident",
+    "IncidentCategory",
+    "IncidentEvent",
+    "IncidentOutcome",
+    "IncidentRegistry",
+    "IncidentSeverity",
+    "IncidentState",
+    "IncidentTransitionError",
+    "NotificationDecision",
+    "notification_decision",
     "PERSISTED_SURFACES",
     "PolicyDeniedError",
     "Purpose",
