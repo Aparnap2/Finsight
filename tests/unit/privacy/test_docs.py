@@ -58,7 +58,7 @@ class TestPolicySync:
         expectations = {
             "webhook_events": policy.WEBHOOK_ANONYMIZE_DAYS,
             "idempotency_keys": policy.IDEMPOTENCY_EXPIRE_DAYS,
-            "telemetry": policy.TRACE_EXPIRE_DAYS,
+            "telemetry_files": policy.TRACE_EXPIRE_DAYS,
             "eval_reports": policy.EVAL_REPORT_EXPIRE_DAYS,
         }
         for surface, days in expectations.items():
