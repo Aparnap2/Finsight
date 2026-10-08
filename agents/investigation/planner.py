@@ -36,6 +36,58 @@ from agents.investigation.request import MAX_CONTEXT_CHARS, InvestigationRequest
 from shared.llm.errors import ProviderError
 from shared.llm.provider import LLMProvider
 from shared.llm.types import InvestigationPrompt
+from shared.privacy import boundary as privacy_boundary
+from shared.privacy.boundary import Purpose
+from shared.privacy.inventory import DataClassification
+
+_PROMPT_CLASSIFICATIONS: dict[str, DataClassification] = {
+    "tenant_id": DataClassification.INTERNAL,
+    "actor": DataClassification.INTERNAL,
+    "exception_id": DataClassification.INTERNAL,
+    "exception_type": DataClassification.INTERNAL,
+    "evidence_ids": DataClassification.INTERNAL,
+    "context_window": DataClassification.PERSONAL,
+    "round_budget": DataClassification.INTERNAL,
+    "capability_allowlist": DataClassification.INTERNAL,
+    "context_truncated": DataClassification.INTERNAL,
+}
+
+
+def _authorize_request(request: InvestigationRequest) -> InvestigationRequest:
+    """Gate prompt data through the privacy boundary (P10-03).
+
+    Returns an equivalent request whose free-text window is scrubbed;
+    all identifier fields pass through unchanged (INTERNAL, scrubbed
+    inline for embedded PII shapes). Raises PolicyDenied on secrets,
+    unclassified data, or tenant mismatch instead of letting raw
+    source data reach prompt construction.
+    """
+    safe = privacy_boundary.authorize_llm_context(
+        {
+            "tenant_id": request.tenant_id,
+            "actor": request.actor,
+            "exception_id": request.exception_id,
+            "exception_type": request.exception_type,
+            "evidence_ids": list(request.evidence_ids),
+            "context_window": request.context_window,
+            "round_budget": request.round_budget,
+            "capability_allowlist": list(request.capability_allowlist),
+            "context_truncated": request.context_truncated,
+        },
+        purpose=Purpose.INVESTIGATION,
+        tenant_id=request.tenant_id,
+        data_tenant_id=request.tenant_id,
+        classifications=_PROMPT_CLASSIFICATIONS,
+        free_text_fields=frozenset({"context_window"}),
+    )
+    return request.model_copy(
+        update={
+            "evidence_ids": tuple(safe["evidence_ids"]),
+            "context_window": safe["context_window"],
+            "capability_allowlist": tuple(safe["capability_allowlist"]),
+        }
+    )
+
 
 logger = logging.getLogger(__name__)
 
@@ -202,6 +254,7 @@ class Planner:
                 f"request must be an InvestigationRequest, got {type(request).__name__}."
             )
         self._require_request_invariants(request)
+        request = _authorize_request(request)
         prompt = render_investigation_prompt(request)
         logger.debug(
             "planning exception=%s evidence=%d allowlist=%d",

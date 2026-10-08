@@ -69,7 +69,7 @@ def _compliant_payload() -> dict[str, Any]:
 class TestStructuredOutputCompliance:
     def test_compliant_payload_is_validated_and_serialized(self) -> None:
         llm = FakeLLMClient(json.dumps(_compliant_payload()))
-        provider = StructuredCommentaryProvider(llm_client=llm)
+        provider = StructuredCommentaryProvider(llm_client=llm, tenant_id="tenant-001")
         text = provider.generate(_assertions())
 
         assert provider.degraded is False
@@ -79,7 +79,7 @@ class TestStructuredOutputCompliance:
     def test_missing_required_field_degrades(self) -> None:
         payload = {"sections": [{"heading": "H", "content": "C"}]}  # no summary
         llm = FakeLLMClient(json.dumps(payload))
-        provider = StructuredCommentaryProvider(llm_client=llm)
+        provider = StructuredCommentaryProvider(llm_client=llm, tenant_id="tenant-001")
 
         text = provider.generate(_assertions())
 
@@ -89,7 +89,7 @@ class TestStructuredOutputCompliance:
     def test_wrong_type_degrades(self) -> None:
         payload = {"summary": 42, "sections": []}  # summary must be str
         llm = FakeLLMClient(json.dumps(payload))
-        provider = StructuredCommentaryProvider(llm_client=llm)
+        provider = StructuredCommentaryProvider(llm_client=llm, tenant_id="tenant-001")
 
         text = provider.generate(_assertions())
 
@@ -99,7 +99,7 @@ class TestStructuredOutputCompliance:
     def test_malformed_section_degrades(self) -> None:
         payload = {"summary": "s", "sections": [{"heading": "Missing content"}]}
         llm = FakeLLMClient(json.dumps(payload))
-        provider = StructuredCommentaryProvider(llm_client=llm)
+        provider = StructuredCommentaryProvider(llm_client=llm, tenant_id="tenant-001")
 
         text = provider.generate(_assertions())
 
@@ -110,7 +110,7 @@ class TestStructuredOutputCompliance:
         payload = _compliant_payload()
         payload["extra_unexpected_key"] = "ignored"
         llm = FakeLLMClient(json.dumps(payload))
-        provider = StructuredCommentaryProvider(llm_client=llm)
+        provider = StructuredCommentaryProvider(llm_client=llm, tenant_id="tenant-001")
 
         text = provider.generate(_assertions())
 
@@ -119,7 +119,7 @@ class TestStructuredOutputCompliance:
 
     def test_non_json_response_degrades(self) -> None:
         llm = FakeLLMClient("this is not json")
-        provider = StructuredCommentaryProvider(llm_client=llm)
+        provider = StructuredCommentaryProvider(llm_client=llm, tenant_id="tenant-001")
         text = provider.generate(_assertions())
         assert provider.degraded is True
         assert "Deterministic Commentary" in text
@@ -127,14 +127,14 @@ class TestStructuredOutputCompliance:
     def test_fenced_json_is_tolerated(self) -> None:
         payload = json.dumps(_compliant_payload())
         llm = FakeLLMClient(f"```json\n{payload}\n```")
-        provider = StructuredCommentaryProvider(llm_client=llm)
+        provider = StructuredCommentaryProvider(llm_client=llm, tenant_id="tenant-001")
         text = provider.generate(_assertions())
         assert provider.degraded is False
         assert "Revenue exceeded budget." in text
 
     def test_recovery_after_degredation_clears_flag(self) -> None:
         llm = FakeLLMClient("not json")
-        provider = StructuredCommentaryProvider(llm_client=llm)
+        provider = StructuredCommentaryProvider(llm_client=llm, tenant_id="tenant-001")
         provider.generate(_assertions())
         assert provider.degraded is True
 
@@ -163,7 +163,7 @@ class TestExtractJson:
 class TestPromptSafety:
     def test_prompt_contains_only_assertion_truth(self) -> None:
         llm = FakeLLMClient(json.dumps(_compliant_payload()))
-        provider = StructuredCommentaryProvider(llm_client=llm)
+        provider = StructuredCommentaryProvider(llm_client=llm, tenant_id="tenant-001")
         provider.generate(_assertions())
 
         prompt = llm.prompts[-1]
@@ -172,7 +172,7 @@ class TestPromptSafety:
 
     def test_prompt_never_leaks_raw_evidence_fields(self) -> None:
         llm = FakeLLMClient(json.dumps(_compliant_payload()))
-        provider = StructuredCommentaryProvider(llm_client=llm)
+        provider = StructuredCommentaryProvider(llm_client=llm, tenant_id="tenant-001")
         provider.generate(_assertions())
 
         prompt = llm.prompts[-1]
@@ -184,7 +184,7 @@ class TestPromptSafety:
 
     def test_prompt_contains_anti_hallucination_rules(self) -> None:
         llm = FakeLLMClient(json.dumps(_compliant_payload()))
-        provider = StructuredCommentaryProvider(llm_client=llm)
+        provider = StructuredCommentaryProvider(llm_client=llm, tenant_id="tenant-001")
         provider.generate(_assertions())
 
         prompt = llm.prompts[-1]
@@ -194,7 +194,7 @@ class TestPromptSafety:
 
     def test_empty_assertions_render_safely(self) -> None:
         llm = FakeLLMClient(json.dumps(_compliant_payload()))
-        provider = StructuredCommentaryProvider(llm_client=llm)
+        provider = StructuredCommentaryProvider(llm_client=llm, tenant_id="tenant-001")
         provider.generate([])
 
         prompt = llm.prompts[-1]

@@ -100,10 +100,10 @@ async def trigger_pipeline(
         llm_client = LLMClient()
 
         material = [v for v in state["variances"] if v.is_material]
-        findings = investigate_root_causes(material, llm_client=llm_client)
+        findings = investigate_root_causes(material, llm_client=llm_client, tenant_id=req.tenant_id)
         state["root_causes"] = findings
 
-        draft = generate_commentary(findings, [], llm_client=llm_client)
+        draft = generate_commentary(findings, [], llm_client=llm_client, tenant_id=req.tenant_id)
         state["commentary_draft"] = draft
 
         variance_data = [
@@ -342,7 +342,7 @@ def _run_full_pipeline(period: str, tenant_id: str) -> dict[str, Any]:
     # 3. Root cause investigation
     llm_client = LLMClient()
     material = [v for v in state["variances"] if v.is_material]
-    findings = investigate_root_causes(material, llm_client=llm_client)
+    findings = investigate_root_causes(material, llm_client=llm_client, tenant_id=tenant_id)
     state["root_causes"] = findings
 
     # 4. Build assertions from variance data
@@ -401,7 +401,7 @@ def _run_full_pipeline(period: str, tenant_id: str) -> dict[str, Any]:
         period=period,
         entity_name=tenant_id,
     )
-    commentary_text = render_commentary(render_input, llm_client=llm_client)
+    commentary_text = render_commentary(render_input, llm_client=llm_client, tenant_id=tenant_id)
 
     # Parse commentary into sections
     from agents.commentary.commentary_agent import _parse_sections_from_text
