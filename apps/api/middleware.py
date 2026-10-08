@@ -75,6 +75,14 @@ class TenantAuthMiddleware(BaseHTTPMiddleware):
         path = request.url.path
         if path == "/health" or path.endswith("/health"):
             return await call_next(request)
+        if path == "/gui" or path.startswith("/gui/"):
+            # UI-1: operator console page chrome is a page-loading
+            # concern only. Browser navigations cannot carry tenant
+            # headers, so the mount prefix (pages, websocket, static)
+            # bypasses the header gate. Data authorization is unchanged:
+            # every observation handler still denies anonymous callers,
+            # and console data calls carry explicit server-side headers.
+            return await call_next(request)
         if path == "/webhooks/stripe" or path.startswith("/webhooks/"):
             # Commit 2: Stripe webhook ingest authenticates via HMAC-SHA256
             # over the raw body in apps/api/webhooks.py, not via user

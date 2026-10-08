@@ -33,6 +33,12 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     stripe_webhook_secret: str = ""
     stripe_tenant_map: str = ""
+    #: UI-1 demo-only console identity (environment only, never committed).
+    #: Empty means the operator console renders unconfigured instead of
+    #: guessing headers. Production must never set these.
+    operator_console_demo_tenant_id: str = ""
+    operator_console_demo_role: str = ""
+    operator_console_demo_user_id: str = ""
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
