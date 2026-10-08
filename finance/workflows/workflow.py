@@ -6,6 +6,10 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
+from shared.privacy import boundary as privacy_boundary
+from shared.privacy.boundary import Purpose
+from shared.privacy.inventory import DataClassification
+
 
 @dataclass
 class StepResult:
@@ -118,7 +122,9 @@ class FinanceAnalysisWorkflow:
             ),
             WorkflowStep(
                 name="generate_commentary",
-                fn=lambda **kw: self._do_generate_commentary(kw.get("company_id")),
+                fn=lambda **kw: self._do_generate_commentary(
+                    kw.get("company_id"), tenant_id=kw.get("tenant_id")
+                ),
             ),
             WorkflowStep(
                 name="validate",
@@ -162,11 +168,20 @@ class FinanceAnalysisWorkflow:
     def _do_ingest(self, adapter: Any, spreadsheet_id: str | None) -> None:
         adapter.sync(spreadsheet_id=spreadsheet_id)
 
-    def _do_generate_commentary(self, company_id: str | None) -> None:
+    def _do_generate_commentary(
+        self, company_id: str | None, *, tenant_id: str | None = None
+    ) -> None:
         with contextlib.suppress(Exception):
+            safe = privacy_boundary.authorize_llm_context(
+                {"company_id": company_id or ""},
+                purpose=Purpose.WORKFLOW,
+                tenant_id=tenant_id or "",
+                data_tenant_id=tenant_id or "",
+                classifications={"company_id": DataClassification.INTERNAL},
+            )
             self._llm_client.generate(
                 system_prompt="Analyze the financial data.",
-                user_prompt=f"Analyze company {company_id}.",
+                user_prompt=f"Analyze company {safe['company_id']}.",
                 response_model=None,
             )
 

@@ -24,6 +24,9 @@ from finance.prompts.registry import PromptRegistry
 from finance.prompts.renderer import PromptRenderer
 from finance.prompts.templates import reasoning_commentary
 from shared.models.assertions import Assertion, SupportLevel
+from shared.privacy import boundary as privacy_boundary
+from shared.privacy.boundary import Purpose
+from shared.privacy.inventory import DataClassification
 
 PROMPT_NAME = reasoning_commentary.NAME
 
@@ -102,10 +105,13 @@ class StructuredCommentaryProvider:
         llm_client: Any,
         registry: PromptRegistry | None = None,
         context: dict[str, str] | None = None,
+        *,
+        tenant_id: str,
     ) -> None:
         self._llm_client = llm_client
         self._registry = registry
         self._context = context or {}
+        self._tenant_id = tenant_id
         self._degraded = False
 
     def _ensure_registry(self) -> PromptRegistry:
@@ -124,16 +130,43 @@ class StructuredCommentaryProvider:
 
     def _prompt(self, assertions: list[Assertion]) -> str:
         """Build the prompt from the registry template — assertions only."""
+        safe_assertions = [self._authorize_assertion(a) for a in assertions]
+        safe_context = privacy_boundary.authorize_llm_context(
+            {
+                "entity_name": self._context.get("entity_name", "the company"),
+                "period": self._context.get("period", ""),
+                "audience": self._context.get("audience", "analyst"),
+            },
+            purpose=Purpose.REASONING,
+            tenant_id=self._tenant_id,
+            data_tenant_id=self._tenant_id,
+            classifications={
+                "entity_name": DataClassification.INTERNAL,
+                "period": DataClassification.INTERNAL,
+                "audience": DataClassification.INTERNAL,
+            },
+        )
         template = self._ensure_registry().get(PROMPT_NAME).template
         return PromptRenderer().render(
             template,
             variables={
-                "entity_name": self._context.get("entity_name", "the company"),
-                "period": self._context.get("period", ""),
-                "audience": self._context.get("audience", "analyst"),
-                "assertions": _render_assertions(assertions),
+                "entity_name": safe_context["entity_name"],
+                "period": safe_context["period"],
+                "audience": safe_context["audience"],
+                "assertions": _render_assertions(safe_assertions),
             },
         )
+
+    def _authorize_assertion(self, assertion: Assertion) -> Assertion:
+        """Gate one assertion's text (P10-03); validated-domain INTERNAL."""
+        safe = privacy_boundary.authorize_llm_context(
+            {"text": assertion.text},
+            purpose=Purpose.REASONING,
+            tenant_id=self._tenant_id,
+            data_tenant_id=self._tenant_id,
+            classifications={"text": DataClassification.INTERNAL},
+        )
+        return assertion.model_copy(update={"text": safe["text"]})
 
     def generate(self, assertions: list[Assertion]) -> str:
         """Generate commentary for the given assertions (never raw data)."""

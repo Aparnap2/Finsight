@@ -4,7 +4,46 @@ import contextlib
 from typing import Any
 
 from shared.models.state import EvidenceItem, PipelineState, RootCauseFinding, Variance
+from shared.privacy import boundary as privacy_boundary
+from shared.privacy.boundary import Purpose
+from shared.privacy.inventory import DataClassification
 from shared.utils.llm_client import LLMClient
+
+_VARIANCE_CLASSIFICATIONS: dict[str, DataClassification] = {
+    "account_id": DataClassification.INTERNAL,
+    "account_name": DataClassification.INTERNAL,
+    "department": DataClassification.INTERNAL,
+    "actual_amount": DataClassification.FINANCIAL_SENSITIVE,
+    "budget_amount": DataClassification.FINANCIAL_SENSITIVE,
+    "variance_amount": DataClassification.FINANCIAL_SENSITIVE,
+    "variance_pct": DataClassification.FINANCIAL_SENSITIVE,
+    "is_material": DataClassification.INTERNAL,
+    "classification": DataClassification.INTERNAL,
+    "confidence_score": DataClassification.INTERNAL,
+}
+
+
+def _authorize_variance(variance: Variance, tenant_id: str) -> Variance:
+    """Gate variance prompt data (P10-03); amounts allowed for ROOT_CAUSE."""
+    safe = privacy_boundary.authorize_llm_context(
+        {
+            "account_id": variance.account_id,
+            "account_name": variance.account_name,
+            "department": variance.department,
+            "actual_amount": variance.actual_amount,
+            "budget_amount": variance.budget_amount,
+            "variance_amount": variance.variance_amount,
+            "variance_pct": variance.variance_pct,
+            "is_material": variance.is_material,
+            "classification": variance.classification,
+            "confidence_score": variance.confidence_score,
+        },
+        purpose=Purpose.ROOT_CAUSE,
+        tenant_id=tenant_id,
+        data_tenant_id=tenant_id,
+        classifications=_VARIANCE_CLASSIFICATIONS,
+    )
+    return variance.model_copy(update=safe)
 
 
 def _build_prompt(variance: Variance) -> str:
@@ -67,11 +106,14 @@ def _parse_llm_response(text: str) -> dict[str, Any]:
 def investigate_root_causes(
     variances: list[Variance],
     llm_client: LLMClient | None = None,
+    *,
+    tenant_id: str,
 ) -> list[RootCauseFinding]:
     findings = []
     for v in variances:
         if llm_client:
-            prompt = _build_prompt(v)
+            safe_variance = _authorize_variance(v, tenant_id)
+            prompt = _build_prompt(safe_variance)
             text = llm_client.generate(prompt, max_tokens=512)
             parsed = _parse_llm_response(text)
             finding = RootCauseFinding(

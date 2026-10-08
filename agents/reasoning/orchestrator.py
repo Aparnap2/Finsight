@@ -30,6 +30,8 @@ def run_reasoning_commentary(
     evidence: list[EvidenceItem],
     context: ReasoningContext,
     llm_client: object | None = None,
+    *,
+    tenant_id: str,
 ) -> CommentaryDraft:
     """Run the reasoning pipeline and return a ``CommentaryDraft``.
 
@@ -48,6 +50,7 @@ def run_reasoning_commentary(
     else:
         provider = StructuredCommentaryProvider(
             llm_client=llm_client,
+            tenant_id=tenant_id,
             context={
                 "entity_name": context.entity_name,
                 "period": context.period,

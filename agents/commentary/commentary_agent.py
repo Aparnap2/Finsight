@@ -22,6 +22,9 @@ from shared.models.state import (
     PipelineState,
     RootCauseFinding,
 )
+from shared.privacy import boundary as privacy_boundary
+from shared.privacy.boundary import Purpose
+from shared.privacy.inventory import DataClassification
 from shared.utils.llm_client import LLMClient
 
 
@@ -168,17 +171,21 @@ def _format_degraded_modes(modes: list[str]) -> str:
 def render_commentary(
     render_input: CommentaryRenderInput,
     llm_client: LLMClient | None = None,
+    *,
+    tenant_id: str,
 ) -> str:
     """Render commentary from validated assertions.
 
     Accepts CommentaryRenderInput, produces rendered text.
     The rendering is validated post-hoc to ensure no new claims were introduced.
+    Prompt data is authorized through the privacy boundary (P10-03) before
+    prompt construction; degraded/fallback paths never touch an LLM.
     """
-    prompt = build_render_prompt(render_input)
-
     if not llm_client or not render_input.all_assertions:
         # Fallback: produce a structured rendering without LLM
         return _fallback_render(render_input)
+    render_input = _authorize_render_input(render_input, tenant_id)
+    prompt = build_render_prompt(render_input)
 
     try:
         response = llm_client.generate(prompt, max_tokens=2048)
@@ -187,6 +194,47 @@ def render_commentary(
         text = _fallback_render(render_input)
 
     return text
+
+
+def _authorize_render_input(
+    render_input: CommentaryRenderInput, tenant_id: str
+) -> CommentaryRenderInput:
+    """Gate prompt data: INTERNAL assertions/scalars, scrubbed inline."""
+    groups = [
+        list(render_input.verified_assertions),
+        list(render_input.probable_assertions),
+        list(render_input.weak_assertions),
+    ]
+    texts = [assertion.text for group in groups for assertion in group]
+    payload = {
+        "texts": texts,
+        "entity_name": render_input.entity_name,
+        "period": render_input.period,
+        "audience": render_input.audience,
+        "degraded_modes": list(render_input.degraded_modes or []),
+        "required_sections": list(render_input.required_sections or []),
+    }
+    safe = privacy_boundary.authorize_llm_context(
+        payload,
+        purpose=Purpose.COMMENTARY,
+        tenant_id=tenant_id,
+        data_tenant_id=tenant_id,
+        classifications={key: DataClassification.INTERNAL for key in payload},
+    )
+    rebuilt: list[list[Assertion]] = []
+    cursor = iter(safe["texts"])
+    for group in groups:
+        rebuilt.append([a.model_copy(update={"text": next(cursor)}) for a in group])
+    return CommentaryRenderInput(
+        verified_assertions=rebuilt[0],
+        probable_assertions=rebuilt[1],
+        weak_assertions=rebuilt[2],
+        degraded_modes=list(safe["degraded_modes"]),
+        required_sections=list(safe["required_sections"]),
+        audience=str(safe["audience"]),
+        period=str(safe["period"]),
+        entity_name=str(safe["entity_name"]),
+    )
 
 
 def _fallback_render(render_input: CommentaryRenderInput) -> str:

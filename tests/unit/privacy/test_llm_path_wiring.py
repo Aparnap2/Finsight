@@ -84,39 +84,40 @@ def test_commentary_routes_through_boundary(monkeypatch: Any) -> None:
         confidence=0.9,
         support_level=SupportLevel.VERIFIED,
     )
-    render_input = CommentaryRenderInput(verified_assertions=[assertion], probable_assertions=[])
+    render_input = CommentaryRenderInput(
+        verified_assertions=[assertion], probable_assertions=[], weak_assertions=[]
+    )
     fake = _CapturingLLMClient()
     with contextlib.suppress(RuntimeError):
-        render_commentary(render_input, fake)
+        render_commentary(render_input, fake, tenant_id="tenant-001")
     assert len(spy.calls) == 1
     assert spy.calls[0]["purpose"] == "commentary"
     assert spy.calls[0]["tenant_id"]
 
 
 def test_root_cause_routes_through_boundary(monkeypatch: Any) -> None:
+    from decimal import Decimal
+
     from agents.driver import root_cause_agent as mod
     from agents.driver.root_cause_agent import investigate_root_causes
-    from finance.domain._types import MoneyDecimal
-    from finance.domain.variance import Variance, VarianceDirection
+    from shared.models.state import Variance
 
     spy = _SpyBoundary()
     monkeypatch.setattr(mod, "privacy_boundary", spy)
     variance = Variance(
-        id="v1",
         account_id="acc-1",
         account_name="refunds rahul@example.com",
-        actual_amount=MoneyDecimal("100.00"),
-        budget_amount=MoneyDecimal("80.00"),
-        variance_amount=MoneyDecimal("20.00"),
-        variance_pct=MoneyDecimal("25.00"),
-        direction=VarianceDirection.ADVERSE,
-        period_id="2026-09",
+        department="Sales",
+        actual_amount=Decimal("100.00"),
+        budget_amount=Decimal("80.00"),
+        variance_amount=Decimal("20.00"),
+        variance_pct=Decimal("25.00"),
     )
     fake = _CapturingLLMClient(
         canned="SUMMARY: lag\nEVIDENCE: books\nCONFIDENCE: 0.9\nACTION: review"
     )
     with contextlib.suppress(RuntimeError):
-        investigate_root_causes([variance], fake)
+        investigate_root_causes([variance], fake, tenant_id="tenant-001")
     assert len(spy.calls) == 1
     assert spy.calls[0]["purpose"] == "root_cause"
     assert spy.calls[0]["tenant_id"]
@@ -135,7 +136,9 @@ def test_llm_boundary_routes_through_boundary(monkeypatch: Any) -> None:
         confidence=0.8,
         support_level=SupportLevel.PROBABLE,
     )
-    provider = StructuredCommentaryProvider(llm_client=_CapturingLLMClient())
+    provider = StructuredCommentaryProvider(
+        llm_client=_CapturingLLMClient(), tenant_id="tenant-001"
+    )
     with contextlib.suppress(RuntimeError):
         provider.generate([assertion])
     assert len(spy.calls) == 1
@@ -168,10 +171,10 @@ def test_workflow_routes_through_boundary(monkeypatch: Any) -> None:
             )
             return "{}"
 
-    bound = mod.Workflow._do_generate_commentary.__get__(
-        SimpleNamespace(_llm_client=_FakeWorkflowClient()), mod.Workflow
+    bound = mod.FinanceAnalysisWorkflow._do_generate_commentary.__get__(
+        SimpleNamespace(_llm_client=_FakeWorkflowClient()), mod.FinanceAnalysisWorkflow
     )
-    bound("acme")
+    bound("acme", tenant_id="tenant-001")
     assert len(spy.calls) == 1
     assert spy.calls[0]["purpose"] == "workflow"
     assert spy.calls[0]["tenant_id"]

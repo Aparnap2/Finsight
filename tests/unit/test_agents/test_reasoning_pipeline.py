@@ -94,7 +94,7 @@ class TestStructuredCommentaryProvider:
             "sections": [{"heading": "Variance Analysis", "content": "Revenue is up $80,000."}],
         }
         llm = FakeLLMClient(json.dumps(payload))
-        provider = StructuredCommentaryProvider(llm_client=llm)
+        provider = StructuredCommentaryProvider(llm_client=llm, tenant_id="tenant-001")
 
         text = provider.generate(_assertions())
 
@@ -104,7 +104,7 @@ class TestStructuredCommentaryProvider:
 
     def test_invalid_json_degrades_to_deterministic_summary(self) -> None:
         llm = FakeLLMClient("this is not json")
-        provider = StructuredCommentaryProvider(llm_client=llm)
+        provider = StructuredCommentaryProvider(llm_client=llm, tenant_id="tenant-001")
 
         text = provider.generate(_assertions())
 
@@ -115,7 +115,7 @@ class TestStructuredCommentaryProvider:
     def test_prompt_contains_assertions_but_no_raw_evidence_fields(self) -> None:
         payload = {"summary": "s", "sections": []}
         llm = FakeLLMClient(json.dumps(payload))
-        provider = StructuredCommentaryProvider(llm_client=llm)
+        provider = StructuredCommentaryProvider(llm_client=llm, tenant_id="tenant-001")
 
         provider.generate(_assertions())
 
@@ -142,7 +142,7 @@ class TestPipelineViaAgents:
 
     def test_run_reasoning_commentary_returns_draft_without_llm(self) -> None:
         context = ReasoningContext(period="2026-07", entity_name="Acme Corp")
-        draft = run_reasoning_commentary(_evidence(), context)
+        draft = run_reasoning_commentary(_evidence(), context, tenant_id="tenant-001")
 
         assert isinstance(draft, CommentaryDraft)
         assert draft.sections
@@ -158,7 +158,9 @@ class TestPipelineViaAgents:
         llm = FakeLLMClient(json.dumps(payload))
         context = ReasoningContext(period="2026-07", entity_name="Acme Corp")
 
-        draft = run_reasoning_commentary(_evidence(), context, llm_client=llm)
+        draft = run_reasoning_commentary(
+            _evidence(), context, llm_client=llm, tenant_id="tenant-001"
+        )
 
         assert isinstance(draft, CommentaryDraft)
         section_types = {section.section_type for section in draft.sections}

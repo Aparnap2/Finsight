@@ -1,5 +1,11 @@
 """Privacy governance surface (P10): classification before enforcement."""
 
+from shared.privacy.boundary import (
+    FINANCIAL_PURPOSES,
+    PolicyDeniedError,
+    Purpose,
+    authorize_llm_context,
+)
 from shared.privacy.inventory import (
     SOURCE_REGISTRY,
     DataClassification,
@@ -15,7 +21,11 @@ from shared.privacy.sanitize import (
 )
 
 __all__ = [
+    "FINANCIAL_PURPOSES",
+    "PolicyDeniedError",
+    "Purpose",
     "SOURCE_REGISTRY",
+    "authorize_llm_context",
     "DataClassification",
     "InventoryRow",
     "SourceEntry",
