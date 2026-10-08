@@ -25,13 +25,14 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
+from sqlalchemy import Engine
 
 OLD = datetime(2020, 1, 1, tzinfo=UTC)
 FRESH = datetime(2026, 10, 1, tzinfo=UTC)
 NOW = datetime(2026, 10, 8, tzinfo=UTC)
 
 
-def _engine():
+def _engine() -> Engine:
     from tests.unit.execution.test_executor import _engine as make
 
     return make()

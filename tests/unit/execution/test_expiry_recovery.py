@@ -131,7 +131,7 @@ class TestExpiredIntentRecovers:
         def _fail_once(*args: Any, **kwargs: Any) -> Any:
             raise PersistenceError("simulated local persist failure")
 
-        executor._update_row = _fail_once  # type: ignore[assignment]
+        executor._update_row = _fail_once
         crashed = executor.run(seed.approved, seed.proposal, seed.approval, "key-exp-4")
         assert str(crashed.result) == "REJECTED"
         assert _creates(adapter) == 1
