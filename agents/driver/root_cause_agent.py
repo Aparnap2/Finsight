@@ -142,5 +142,7 @@ def root_cause_node(state: PipelineState, llm_client: LLMClient | None = None) -
     if llm_client is None:
         llm_client = LLMClient()
     material_variances = [v for v in state.get("variances", []) if v.is_material]
-    findings = investigate_root_causes(material_variances, llm_client=llm_client)
+    findings = investigate_root_causes(
+        material_variances, llm_client=llm_client, tenant_id=str(state.get("tenant_id", ""))
+    )
     return {"root_causes": findings, "current_step": "root_cause_complete"}

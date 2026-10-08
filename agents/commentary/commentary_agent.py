@@ -309,6 +309,8 @@ def generate_commentary(
     root_causes: list[RootCauseFinding],
     variances: list[dict[str, Any]],
     llm_client: LLMClient | None = None,
+    *,
+    tenant_id: str,
 ) -> CommentaryDraft:
     """Generate commentary from root causes and variances.
 
@@ -348,7 +350,7 @@ def generate_commentary(
         entity_name="",
     )
 
-    text = render_commentary(render_input, llm_client=llm_client)
+    text = render_commentary(render_input, llm_client=llm_client, tenant_id=tenant_id)
 
     sections = _parse_sections_from_text(text)
     if not sections:
@@ -411,7 +413,9 @@ def commentary_node(state: PipelineState, llm_client: LLMClient | None = None) -
         entity_name=entity_id,
     )
 
-    text = render_commentary(render_input, llm_client=llm_client)
+    text = render_commentary(
+        render_input, llm_client=llm_client, tenant_id=str(state.get("tenant_id", ""))
+    )
 
     sections = _parse_sections_from_text(text)
     if not sections:

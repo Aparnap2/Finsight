@@ -103,7 +103,7 @@ async def trigger_pipeline(
         findings = investigate_root_causes(material, llm_client=llm_client, tenant_id=req.tenant_id)
         state["root_causes"] = findings
 
-        draft = generate_commentary(findings, [], llm_client=llm_client)
+        draft = generate_commentary(findings, [], llm_client=llm_client, tenant_id=req.tenant_id)
         state["commentary_draft"] = draft
 
         variance_data = [

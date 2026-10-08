@@ -27,6 +27,7 @@ import pytest
 
 from shared.llm.fake import FakeLLM
 from shared.models.assertions import Assertion, AssertionType, SupportLevel
+from shared.utils.llm_client import LLMClient
 
 
 class _SpyBoundary:
@@ -40,8 +41,8 @@ class _SpyBoundary:
         raise RuntimeError("privacy boundary deny (test spy)")
 
 
-class _CapturingLLMClient:
-    """LLMClient-shaped fake: records generate() prompts, returns canned text."""
+class _CapturingLLMClient(LLMClient):
+    """LLMClient fake: records generate() prompts, returns canned text."""
 
     def __init__(self, canned: str = "{}") -> None:
         self.prompts: list[str] = []
@@ -192,7 +193,7 @@ def test_planner_routes_through_boundary(monkeypatch: Any) -> None:
         exception_type="I-REFUND-LAG",
         tenant_id="tenant-001",
         actor="user-001",
-        evidence_ids=["ev-ledger-001"],
+        evidence_ids=("ev-ledger-001",),
         context_window="refund posting lag probe",
         round_budget=1,
     )
@@ -223,7 +224,7 @@ class TestPlannerOutputCleanliness:
             exception_type="I-REFUND-LAG",
             tenant_id="tenant-001",
             actor="user-001",
-            evidence_ids=["ev-ledger-001"],
+            evidence_ids=("ev-ledger-001",),
             context_window="contact rahul@example.com, key sk-live-abc123xyz",
             round_budget=1,
         )
@@ -243,7 +244,7 @@ class TestPlannerOutputCleanliness:
             exception_type="I-REFUND-LAG",
             tenant_id="tenant-001",
             actor="user-001",
-            evidence_ids=["ev-ledger-001"],
+            evidence_ids=("ev-ledger-001",),
             context_window="contact rahul@example.com",
             round_budget=1,
         )
