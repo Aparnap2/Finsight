@@ -18,8 +18,8 @@ from collections.abc import Generator
 from pathlib import Path
 from typing import Any
 
-import pytest
 import psycopg
+import pytest
 import sqlalchemy
 from alembic.config import Config
 from sqlalchemy import create_engine, text
@@ -75,14 +75,22 @@ def engine() -> Generator[sqlalchemy.Engine, None, None]:
         results.extend(MigrationRunner(conn).apply(post))
     logger.info("applied %d SQL migrations", len(results))
     with engine.connect() as conn:
-        conn.execute(text(f"DROP ROLE IF EXISTS {LIMITED_ROLE}"))
-        conn.execute(text(f"CREATE ROLE {LIMITED_ROLE} NOLOGIN"))
-        conn.execute(text(f"GRANT CONNECT ON DATABASE {conn.engine.url.database} TO {LIMITED_ROLE}"))
+        conn.execute(
+            text(
+                "DO $$ BEGIN "
+                "IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '"
+                + LIMITED_ROLE
+                + "') THEN CREATE ROLE "
+                + LIMITED_ROLE
+                + " NOLOGIN; END IF; END $$"
+            )
+        )
+        conn.execute(
+            text(f"GRANT CONNECT ON DATABASE {conn.engine.url.database} TO {LIMITED_ROLE}")
+        )
         conn.execute(text("GRANT USAGE ON SCHEMA public TO " + LIMITED_ROLE))
         for table in ("execution_records", "idempotency_keys"):
-            conn.execute(
-                text(f"GRANT SELECT, INSERT ON {table} TO {LIMITED_ROLE}")
-            )
+            conn.execute(text(f"GRANT SELECT, INSERT ON {table} TO {LIMITED_ROLE}"))
         conn.execute(
             text(
                 "INSERT INTO execution_records "
@@ -122,14 +130,15 @@ def _as_role(engine: sqlalchemy.Engine, role: str, tenant: str | None) -> list[A
 class TestLedgerRls:
     def test_rls_enabled_on_ledger(self, engine: sqlalchemy.Engine) -> None:
         with engine.connect() as conn:
-            flags = dict(
-                conn.execute(
+            flags: dict[str, bool] = {
+                row[0]: row[1]
+                for row in conn.execute(
                     text(
                         "SELECT relname, relrowsecurity FROM pg_class "
                         "WHERE relname IN ('execution_records', 'idempotency_keys')"
                     )
                 ).all()
-            )
+            }
         assert flags.get("execution_records") is True
         assert flags.get("idempotency_keys") is True
 
