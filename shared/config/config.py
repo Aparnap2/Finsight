@@ -11,6 +11,15 @@ logger = logging.getLogger(__name__)
 
 class Settings(BaseSettings):
     postgres_uri: str = "postgresql://finsight:finsight@localhost:5432/finsight"
+    #: Separate migration URI (Slice 3: migration role != runtime role).
+    #: Empty means migrations use ``postgres_uri`` (dev default).
+    migration_postgres_uri: str = ""
+    #: Bounded pool (Slice 3: connection-pool sizing is a reliability control).
+    db_pool_size: int = 5
+    db_pool_max_overflow: int = 5
+    db_pool_timeout_s: float = 10.0
+    #: Statement timeout applied per connection (milliseconds, 0 = unset).
+    db_statement_timeout_ms: int = 30_000
     qdrant_url: str = "http://localhost:6333"
     qdrant_api_key: str | None = None
     redis_url: str = "redis://localhost:6380/0"

@@ -39,14 +39,29 @@ def _default_session_factory() -> Any:
 
     The engine is created lazily on first use and cached module-wide. Imported
     lazily so importing the middleware never requires DB configuration.
+
+    Slice 3: bounded pool (pool_size + max_overflow + checkout timeout) and a
+    per-connection statement timeout, so a hung database fails requests
+    instead of exhausting the service.
     """
     global _default_engine
     if _default_engine is None:
         from sqlalchemy import create_engine
+        from sqlalchemy.pool import QueuePool
 
         from shared.config import get_settings
 
-        _default_engine = create_engine(get_settings().postgres_uri)
+        settings = get_settings()
+        options = f"-c statement_timeout={settings.db_statement_timeout_ms}"
+        _default_engine = create_engine(
+            settings.postgres_uri,
+            poolclass=QueuePool,
+            pool_size=settings.db_pool_size,
+            max_overflow=settings.db_pool_max_overflow,
+            pool_timeout=settings.db_pool_timeout_s,
+            pool_pre_ping=True,
+            connect_args={"options": options} if settings.db_statement_timeout_ms else {},
+        )
     from sqlalchemy.orm import Session
 
     return Session(_default_engine)

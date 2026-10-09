@@ -31,13 +31,21 @@ WORKDIR /app
 # Copy virtual environment from builder
 COPY --from=builder /app/.venv /app/.venv
 
-# Copy application code
+# Copy application code (every importable package the runtime needs)
 COPY python_runtime/ ./python_runtime/
 COPY apps/ ./apps/
+COPY agents/ ./agents/
+COPY finance/ ./finance/
+COPY finplatform/ ./finplatform/
 COPY shared/ ./shared/
 COPY alembic/ ./alembic/
 COPY alembic.ini ./
 COPY pyproject.toml ./
+
+# Run as a non-root user (Slice 3: least privilege in managed runtime)
+RUN useradd --create-home --uid 10001 finsight \
+    && chown -R finsight:finsight /app
+USER finsight
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
