@@ -1,0 +1,45 @@
+name: Deploy staging (APA-80 R5)
+
+# Staging deployment path shape (no live cloud wiring yet — see below).
+# Triggers automatically on main. Requires the R1/R2/R3 gates green on the
+# same SHA before promotion semantics mean anything (enforced via `needs`
+# when branch protection lists those checks; see R1).
+#
+# PLACEHOLDERS (reviewer-supplied before first use; never commit values):
+# - OIDC role: repo/CI variable AWS_STAGING_ROLE_ARN (env-scoped sub:
+#   repo:Aparnap2/Finsight:environment:staging). The configure-aws-credentials
+#   step below needs a pinned SHA — left commented until reviewed.
+# - Image registry/repository: repo variables AWS_REGISTRY, AWS_IMAGE_REPO.
+
+on:
+  push:
+    branches: [main]
+
+permissions: {}
+
+jobs:
+  deploy-staging:
+    name: deploy verified SHA to staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: staging
+    permissions:
+      contents: read
+      id-token: write # OIDC only; scoped to this job
+    steps:
+      - name: Checkout verified SHA
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      # REVIEWER: pin aws-actions/configure-aws-credentials to a full SHA
+      # before first use, e.g.:
+      # - name: Configure AWS credentials (OIDC)
+      #   uses: aws-actions/configure-aws-credentials@<40-char-SHA>
+      #   with:
+      #     role-to-assume: ${{ vars.AWS_STAGING_ROLE_ARN }}
+      #     aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Smoke check placeholder
+        run: |
+          echo "staging deploy path shape only: no cloud target wired yet."
+          echo "When wired: deploy image digest built from $GITHUB_SHA, then"
+          echo "curl -fsS $SERVICE_URL/live and $SERVICE_URL/ready."
