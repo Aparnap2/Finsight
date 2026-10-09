@@ -51,12 +51,31 @@ jobs:
       - name: Ruff format check
         run: uv run ruff format --check .
 
-      - name: Secret leak gate (rg)
+      - name: Secret leak gate (rg, fail-closed)
+        # Fail-closed scan: rg exit 0 (match) and exit 2 (error) both fail;
+        # only exit 1 (no match) passes. High-signal shapes are scanned
+        # repo-wide; sk_live/sk-live/Bearer shapes exclude tests/ (their
+        # canary fixtures are intentional — see test_secret_leak.py) and
+        # the repo-root .env (live credential store, owned by APA-79).
         run: |
-          ! rg -n "sk_live|sk-live|Bearer [A-Za-z0-9._~+/=-]{8}" --glob '!*.pyc' --glob '!.venv/**' --glob '!.git/**' prompts traces tests/fixtures 2>/dev/null || (echo "secret literal found in prompts/traces/fixtures" && exit 1)
+          set -o pipefail
+          rg -n "AKIA[0-9A-Z]{16}|BEGIN (RSA |OPENSSH |EC )?PRIVATE KEY|ghp_[A-Za-z0-9]{20,}|gho_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9]{20,}|sk-ant-[A-Za-z0-9-]{10,}|xoxb-[A-Za-z0-9-]{10,}|sk-or-v1-[A-Za-z0-9]{10,}|gsk_[A-Za-z0-9]{10,}" --glob '!*.pyc' --glob '!.venv*/**' --glob '!.git/**' --glob '!volume/**' . > /tmp/scan_high.out; code=$?
+          if [ $code -eq 0 ]; then echo "secret literal found:"; cat /tmp/scan_high.out; exit 1; fi
+          if [ $code -ne 1 ]; then echo "secret scan errored"; exit 1; fi
+          rg -n "sk_live|sk-live|Bearer [A-Za-z0-9._~+/=-]{8}" --glob '!*.pyc' --glob '!.venv*/**' --glob '!.git/**' --glob '!volume/**' --glob '!tests/**' apps agents finance shared scripts docs frontend openspec > /tmp/scan_canary.out; code=$?
+          if [ $code -eq 0 ]; then echo "secret literal found:"; cat /tmp/scan_canary.out; exit 1; fi
+          if [ $code -ne 1 ]; then echo "secret scan errored"; exit 1; fi
+          found=$(find . -path ./.git -prune -o -path './.venv*' -prune -o -path ./volume -prune -o -type f \( -name '*.pem' -o -name 'id_rsa*' -o -name '.env.*' \) -print); if [ -n "$found" ]; then echo "blocked secret filename:"; echo "$found"; exit 1; fi
+          echo "secret gate: clean"
 
       - name: Mypy (strict, report for ratchet gate)
         run: uv run mypy . > mypy-report.txt 2>&1 || true
+
+      - name: Mypy report guard (fail-closed against crashes/truncation)
+        # The || true above is intentional (raw mypy exits non-zero on the
+        # recorded baseline); this guard ensures the report is complete so
+        # the ratchet below can never pass vacuously on a missing marker.
+        run: 'grep -qE "^(Found [0-9]+ error|Success: no issues found)" mypy-report.txt || (echo "mypy report missing/truncated" && exit 1)'
 
       - name: Mypy baseline ratchet (no new errors vs recorded baseline)
         run: uv run python scripts/mypy_baseline_check.py --baseline scripts/mypy-baseline.txt --report mypy-report.txt
