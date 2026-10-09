@@ -116,3 +116,11 @@ class TestOrphanVisibility:
     def test_legacy_orphan_detail_is_404(self, tmp_path: Path) -> None:
         client = TestClient(_build_app(_seed(), tmp_path))
         assert client.get("/api/v1/observations/executions/exec-legacy").status_code == 404
+
+    def test_legacy_orphan_audit_is_404(self, tmp_path: Path) -> None:
+        client = TestClient(_build_app(_seed(), tmp_path))
+        assert client.get("/api/v1/observations/executions/exec-legacy/audit").status_code == 404
+
+    def test_legacy_orphan_timeline_is_404(self, tmp_path: Path) -> None:
+        client = TestClient(_build_app(_seed(), tmp_path))
+        assert client.get("/api/v1/observations/executions/exec-legacy/timeline").status_code == 404
