@@ -19,7 +19,6 @@ from collections.abc import Callable, Iterator
 from typing import Any
 from uuid import uuid4
 
-import boto3
 import pytest
 from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
@@ -65,7 +64,8 @@ needs_stack = pytest.mark.skipif(not _stack_available(), reason="needs PostgreSQ
 
 
 def _sqs() -> Any:
-    """Boto3 SQS client bound to the emulator."""
+    """Boto3 SQS client bound to the emulator (lazy: ministack group only)."""
+    boto3 = pytest.importorskip("boto3", reason="ministack group not installed")
     return boto3.client(
         "sqs",
         endpoint_url=SQS_ENDPOINT,
