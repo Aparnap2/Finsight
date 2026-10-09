@@ -95,6 +95,10 @@ jobs:
           echo '--- skip reasons ---'
           grep -E '^SKIPPED' pytest-integration.log | tail -n 20 || true
 
+      - name: Completeness gate (fail green-but-incomplete runs)
+        if: always()
+        run: uv run python scripts/ci_gate.py pytest-integration.log --max-skips 10
+
       - name: Upload integration logs
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -206,6 +210,10 @@ jobs:
           echo '=== ministack summary ==='
           tail -n 20 pytest-ministack.log || true
           grep -E '^SKIPPED' pytest-ministack.log | tail -n 20 || true
+
+      - name: Completeness gate (fail green-but-incomplete runs)
+        if: always()
+        run: uv run python scripts/ci_gate.py pytest-ministack.log --max-skips 0
 
       - name: Upload ministack logs
         if: always()
