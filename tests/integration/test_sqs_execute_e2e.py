@@ -14,9 +14,10 @@ from __future__ import annotations
 
 import json
 import socket
-from collections.abc import Iterator
-from decimal import Decimal
-from typing import Any, Callable
+import time
+from collections.abc import Callable, Iterator
+from typing import Any
+from uuid import uuid4
 
 import boto3
 import pytest
@@ -25,10 +26,8 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
-import tests.integration.test_p6_executable_slice as p6s
 from apps.api import execution_routes as ex
 from apps.api.execution_routes import (
-    get_amount_threshold,
     get_db_session,
     get_executor_factory,
     get_proposal_lookup,
@@ -37,7 +36,6 @@ from apps.api.execution_routes import (
 )
 from apps.workers.sqs_execute import poll_once
 from finance.accounting.mock import MockQuickBooksAdapter
-from finance.approvals.service import ApprovalService
 from finance.exceptions.repository import ExceptionRepository
 from finance.execution.executor import Executor
 from tests.unit.execution.test_executor import _awaiting
@@ -63,9 +61,7 @@ def _stack_available() -> bool:
         return False
 
 
-needs_stack = pytest.mark.skipif(
-    not _stack_available(), reason="needs PostgreSQL + SQS emulator"
-)
+needs_stack = pytest.mark.skipif(not _stack_available(), reason="needs PostgreSQL + SQS emulator")
 
 
 def _sqs() -> Any:
@@ -85,39 +81,43 @@ class _Stack:
     def __init__(self, sqs: Any, tenant: str = TENANT_A) -> None:
         from finance.exceptions.models import Base as ExceptionsBase
 
+        self.run_id = uuid4().hex[:8]
         self.engine = create_engine(PG_DSN)
         ExceptionsBase.metadata.create_all(self.engine)
-        self.repo = ExceptionRepository(self.engine)  # type: ignore[arg-type]
-        self.exc_id = f"exc-e2e-{tenant}"
-        self.approved, self.proposal = _awaiting(
-            self.repo, self.exc_id, tenant_id=tenant
-        )
+        self.repo = ExceptionRepository(self.engine)
+        self.exc_id = f"exc-e2e-{tenant}-{self.run_id}"
+        self.approved, self.proposal = _awaiting(self.repo, self.exc_id, tenant_id=tenant)
         # Second tenant seeded for the cross-tenant pointer scenario.
-        self.exc_id_b = f"exc-e2e-{TENANT_B}"
+        self.exc_id_b = f"exc-e2e-{TENANT_B}-{self.run_id}"
         _awaiting(self.repo, self.exc_id_b, tenant_id=TENANT_B)
         self.adapter = MockQuickBooksAdapter()
-        self.executor = Executor(self.adapter, self.engine)  # type: ignore[arg-type]
+        self.executor = Executor(self.adapter, self.engine)
         self.lookup = {self.proposal.proposal_id: self.proposal}
         self.client = TestClient(self._build_app(tenant))
         self.work_url = sqs.create_queue(
-            QueueName="finsight-e2e-work",
+            QueueName=f"finsight-e2e-work-{self.run_id}",
             Attributes={
                 "VisibilityTimeout": "2",
                 "RedrivePolicy": (
                     '{"deadLetterTargetArn":'
-                    '"arn:aws:sqs:us-east-1:000000000000:finsight-e2e-work-dlq",'
+                    f'"arn:aws:sqs:us-east-1:000000000000:finsight-e2e-work-dlq-{self.run_id}",'
                     '"maxReceiveCount":"2"}'
                 ),
             },
         )["QueueUrl"]
-        sqs.create_queue(QueueName="finsight-e2e-work-dlq")
+        sqs.create_queue(QueueName=f"finsight-e2e-work-dlq-{self.run_id}")
         self.dlq_url = (
             "http://sqs.us-east-1.localhost.localstack.cloud:4566"
-            "/000000000000/finsight-e2e-work-dlq"
+            f"/000000000000/finsight-e2e-work-dlq-{self.run_id}"
         )
-        self.quarantine_url = sqs.create_queue(QueueName="finsight-e2e-quarantine")[
+        self.quarantine_url = sqs.create_queue(QueueName=f"finsight-e2e-quarantine-{self.run_id}")[
             "QueueUrl"
         ]
+        self.queue_names = (
+            f"finsight-e2e-work-{self.run_id}",
+            f"finsight-e2e-work-dlq-{self.run_id}",
+            f"finsight-e2e-quarantine-{self.run_id}",
+        )
 
     def _build_app(self, tenant: str) -> FastAPI:
         """Execution router with fixed actor, seeded lookup, spy executor."""
@@ -130,7 +130,7 @@ class _Stack:
             return await call_next(request)
 
         def _session_override() -> Iterator[Session]:
-            with Session(self.engine) as session:  # type: ignore[arg-type]
+            with Session(self.engine) as session:
                 yield session
 
         bundle = ex._default_readers()
@@ -154,6 +154,7 @@ class _Stack:
 
     def message(self, tenant: str, key: str, **over: Any) -> dict[str, Any]:
         """ExecuteRequest-shaped SQS body (coordinates only, no money)."""
+        run_key = f"{key}-{self.run_id}"
         body = {
             "tenant_id": tenant,
             "exception_id": self.exc_id,
@@ -162,8 +163,8 @@ class _Stack:
             "proposal_content_hash": self.proposal.content_hash,
             "approver_id": "approver-1",
             "decision": "APPROVED",
-            "idempotency_key": f"{key}-approval",
-            "execution_idempotency_key": key,
+            "idempotency_key": f"{run_key}-approval",
+            "execution_idempotency_key": run_key,
             "expected_state_version": self.approved.state_version,
             "situation_id": _SIT,
             "company_id": "meridian",
@@ -189,7 +190,7 @@ def stack() -> Iterator[_Stack]:
     pending = _Stack(sqs)
     yield pending
     pending.engine.dispose()
-    for name in ("finsight-e2e-work", "finsight-e2e-work-dlq", "finsight-e2e-quarantine"):
+    for name in pending.queue_names:
         try:
             url = sqs.get_queue_url(QueueName=name)["QueueUrl"]
             sqs.delete_queue(QueueUrl=url)
@@ -231,16 +232,15 @@ class TestSqsExecuteE2E:
         received = sqs.receive_message(QueueUrl=stack.work_url)["Messages"][0]
         first = process_message(_make_post(stack), json.loads(received["Body"]))
         assert first.action == "delete"  # worker would delete here; it crashes instead
+        time.sleep(3)  # visibility expiry redelivers the unacknowledged message
         second = poll_once(sqs, stack.work_url, stack.quarantine_url, _make_post(stack))
         assert second.execution_id == first.execution_id
         assert stack.financial_actions() == 1
 
-    def test_cross_tenant_pointer_quarantined_without_mutation(
-        self, stack: _Stack
-    ) -> None:
+    def test_cross_tenant_pointer_quarantined_without_mutation(self, stack: _Stack) -> None:
         sqs = _sqs()
         forged = stack.message(TENANT_A, "e2e-key-4")
-        forged["exception_id"] = "exc-e2e-" + TENANT_B  # B's exception, A's claim
+        forged["exception_id"] = stack.exc_id_b  # B's exception, A's claim
         stack.enqueue(sqs, forged)
         result = poll_once(sqs, stack.work_url, stack.quarantine_url, _make_post(stack))
         assert result.kind == "QUARANTINED"
@@ -259,7 +259,7 @@ class TestSqsExecuteE2E:
         stack.enqueue(sqs, stack.message(TENANT_A, "e2e-key-6"))
         result = poll_once(sqs, stack.work_url, stack.quarantine_url, _make_post(stack))
         assert result.kind == "DELETED"
-        with Session(stack.engine) as session:  # type: ignore[arg-type]
+        with Session(stack.engine) as session:
             states = [
                 r[0]
                 for r in session.execute(
