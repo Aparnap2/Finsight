@@ -1,0 +1,40 @@
+name: Rollback (APA-80 R5)
+
+# Rollback is redeploy of a prior known-good artifact SHA — never an
+# automatic data rollback. Database rollback stays a human-approved
+# `alembic downgrade` plus restore-from-backup per the staging runbook;
+# it is referenced here, not executed. Fails unless the target SHA has
+# a green staging + golden record (checked by the operator before dispatch).
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_sha:
+        description: "Prior known-good commit SHA to redeploy"
+        required: true
+      reason:
+        description: "Why rollback is needed (recorded in the run log)"
+        required: true
+
+permissions: {}
+
+jobs:
+  rollback:
+    name: redeploy prior artifact SHA
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: staging
+    permissions:
+      contents: read
+      id-token: write # OIDC only; scoped to this job
+    steps:
+      - name: Checkout target SHA
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.target_sha }}
+
+      - name: Record rollback intent
+        run: |
+          echo "rollback to ${{ inputs.target_sha }}: ${{ inputs.reason }}"
+          echo "Redeploy path shape only. DB rollback (if needed) is a"
+          echo "separate human-approved alembic downgrade + restore."
