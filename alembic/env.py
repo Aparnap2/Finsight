@@ -9,7 +9,10 @@ from shared.models.database import Base
 config = context.config
 
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # disable_existing_loggers=False: migration logging must never silence
+    # application loggers (Slice 3: a suite running upgrade before other
+    # tests broke log capture for finsight.request).
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 # Slice 3: the migration role is separate from the runtime role. Setting
 # MIGRATION_POSTGRES_URI (empty by default, meaning "same as runtime")
