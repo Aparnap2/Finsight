@@ -1,12 +1,11 @@
 """Unit tests for scripts/ci_gate.py (APA-80 R1).
 
-Failing until GREEN: the gate script does not exist. Contract:
+Contract:
 
 - FAIL (exit 2) when the log has no passing tests (zero passed or no
   summary line at all: collection error, empty run, stub echo).
 - FAIL (exit 2) when pytest itself errored (exit 5, interruptions).
-- WARN (exit 0 + warning line) when skips exceed budget (calibration
-  phase; budgets flip to hard fail separately).
+- FAIL (exit 2) when skips exceed the per-job budget.
 - PASS (exit 0) otherwise, echoing counts for the job summary.
 """
 
