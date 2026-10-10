@@ -105,6 +105,13 @@ jobs:
 
   ministack:
     name: ministack S3 contract (LocalStack)
+    # EMULATOR BOUNDARY (APA-80 R4): this job proves the S3 contract
+    # against a LocalStack emulator (SERVICES=s3, pinned image) plus real
+    # PostgreSQL only. It does NOT prove SQS/SNS/EventBridge/Lambda/
+    # StepFunctions/DynamoDB behaviour, real-AWS credential rejection
+    # (the emulator is permissive), IAM enforcement, cross-region,
+    # or performance. The SQS E2E skips here by design;
+    # managed AWS behaviour is a staging gate, not a CI claim.
     runs-on: ubuntu-latest
     timeout-minutes: 20
     # Skipped when change does not touch object-store or ministack — still runs on
@@ -203,7 +210,7 @@ jobs:
       - name: Report ministack counts
         if: always()
         run: |
-          echo '=== ministack summary ==='
+          echo '=== ministack summary (LocalStack SERVICES=s3, image localstack/localstack:3.8) ==='
           tail -n 20 pytest-ministack.log || true
           grep -E '^SKIPPED' pytest-ministack.log | tail -n 20 || true
 
