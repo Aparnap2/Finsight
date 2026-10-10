@@ -51,12 +51,21 @@ jobs:
       - name: Ruff format check
         run: uv run ruff format --check .
 
-      - name: Secret leak gate (rg)
-        run: |
-          ! rg -n "sk_live|sk-live|Bearer [A-Za-z0-9._~+/=-]{8}" --glob '!*.pyc' --glob '!.venv/**' --glob '!.git/**' prompts traces tests/fixtures 2>/dev/null || (echo "secret literal found in prompts/traces/fixtures" && exit 1)
+      - name: Secret leak gate (fail-closed, dependency-free)
+        # scripts/secret_gate.py (stdlib only): exit 1 on any leak or
+        # blocked filename, exit 2 on scan errors — never silently green.
+        # Carve-outs are documented in the script: tests/ canaries,
+        # repo-root .env (live store, owned by APA-79), .env.example.
+        run: uv run python scripts/secret_gate.py .
 
       - name: Mypy (strict, report for ratchet gate)
         run: uv run mypy . > mypy-report.txt 2>&1 || true
+
+      - name: Mypy report guard (fail-closed against crashes/truncation)
+        # The || true above is intentional (raw mypy exits non-zero on the
+        # recorded baseline); this guard ensures the report is complete so
+        # the ratchet below can never pass vacuously on a missing marker.
+        run: 'grep -qE "^(Found [0-9]+ error|Success: no issues found)" mypy-report.txt || (echo "mypy report missing/truncated" && exit 1)'
 
       - name: Mypy baseline ratchet (no new errors vs recorded baseline)
         run: uv run python scripts/mypy_baseline_check.py --baseline scripts/mypy-baseline.txt --report mypy-report.txt
