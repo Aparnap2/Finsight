@@ -127,10 +127,25 @@ class TestSecretGate:
         assert proc.returncode == 0
 
     def test_undecodable_text_fails_closed(self, tmp_path: Path) -> None:
-        target = tmp_path / "apps" / "odd.txt"
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(b"caf\xe9key sk-live-abc123 \x92special")
-        proc = _run(tmp_path)
+        root = _tree(tmp_path, {"apps/odd.txt": b"caf\xe9key sk-live-abc123 \x92special"})
+        proc = _run(root)
+        assert proc.returncode == 2
+        assert "undecodable" in proc.stdout
+
+    def test_git_missing_fails_closed(self, tmp_path: Path) -> None:
+        import os
+
+        root = _tree(tmp_path, {"apps/a.py": "x = 1\n"})
+        empty_path = tmp_path / "emptybin"
+        empty_path.mkdir(exist_ok=True)
+        env = {**os.environ, "PATH": str(empty_path)}
+        proc = subprocess.run(
+            [sys.executable, str(GATE), str(root)],
+            capture_output=True,
+            text=True,
+            check=False,
+            env=env,
+        )
         assert proc.returncode == 2
         assert "SCAN_ERROR" in proc.stdout
 
