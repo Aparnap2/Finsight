@@ -120,10 +120,16 @@ def _classify(status: int, response: Any) -> Action:
     """Map the route's actual response contract to a routing action."""
     payload = response if isinstance(response, dict) else {}
     if status in (200, 201) and payload.get("status") == "VERIFIED":
+        execution_id = payload.get("execution_id")
+        if not isinstance(execution_id, str) or not execution_id:
+            # Incomplete success payload: never acknowledge a VERIFIED
+            # claim that names no execution (defensive contract gap).
+            logger.warning("verified response without execution_id; quarantining")
+            return Action(action="quarantine", code="CONTRACT_VIOLATION")
         return Action(
             action="delete",
             code="VERIFIED",
-            execution_id=payload.get("execution_id"),
+            execution_id=execution_id,
             verified=True,
             deduplicated=bool(payload.get("deduplicated", False)),
         )
