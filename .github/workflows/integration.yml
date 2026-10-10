@@ -18,6 +18,8 @@ jobs:
     name: postgres-gated integration
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
     services:
       postgres:
         image: postgres:17-alpine
@@ -107,6 +109,8 @@ jobs:
     name: ministack S3 contract (LocalStack)
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    permissions:
+      contents: read
     # Skipped when change does not touch object-store or ministack — still runs on
     # main and on PRs that touch the contract to prove failure-matrix.
     services:

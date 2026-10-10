@@ -17,6 +17,8 @@ jobs:
   unit:
     name: lint / typecheck / unit+contract
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     timeout-minutes: 15
     steps:
       - name: Check out repository
