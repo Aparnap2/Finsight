@@ -5,8 +5,9 @@ Parses a teed ``pytest -q`` log and enforces:
 - FAIL (exit 2, ``NO_PASSING_TESTS``) when zero tests passed.
 - FAIL (exit 2, ``NO_SUMMARY``) when no summary line exists
   (collection error, empty run, stub output).
-- WARN (exit 0, ``SKIP_BUDGET_EXCEEDED``) when skips exceed budget
-  (calibration phase; budgets become hard fails separately).
+- FAIL (exit 2, ``SKIP_BUDGET_EXCEEDED``) when skips exceed budget.
+  Budgets are per-job and documented in the workflows; expected
+  environment-gated skips (e.g. SQS E2E in CI) fit inside them.
 - PASS (exit 0) otherwise, echoing ``passed=``/``failed=``/``skipped=``
   for the job summary.
 
@@ -65,7 +66,8 @@ def main(argv: list[str] | None = None) -> int:
         print("NO_PASSING_TESTS zero tests passed")
         return 2
     if skipped > args.max_skips:
-        print(f"SKIP_BUDGET_EXCEEDED skipped={skipped} budget={args.max_skips} (warn-only)")
+        print(f"SKIP_BUDGET_EXCEEDED skipped={skipped} budget={args.max_skips}")
+        return 2
     return 0
 
 

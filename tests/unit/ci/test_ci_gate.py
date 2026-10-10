@@ -56,9 +56,9 @@ class TestCiGate:
         proc = _run("")
         assert proc.returncode == 2
 
-    def test_over_budget_skips_warn_only(self) -> None:
+    def test_over_budget_skips_fail(self) -> None:
         proc = _run("100 passed, 11 skipped in 5s\n", "--max-skips", "10")
-        assert proc.returncode == 0
+        assert proc.returncode == 2
         assert "SKIP_BUDGET_EXCEEDED" in proc.stdout
 
     def test_within_budget_passes_quietly(self) -> None:
