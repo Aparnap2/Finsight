@@ -9,6 +9,7 @@ for the workflow file itself. No network required.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 WORKFLOW = Path(__file__).resolve().parents[3] / ".github" / "workflows" / "integration.yml"
@@ -20,23 +21,30 @@ _BOUNDARY_MARKERS = (
     "managed AWS",
 )
 
+_ALLOWED_SERVICES = frozenset({"s3"})
+_SERVICES_LINE = re.compile(r"^\s*SERVICES:\s*(.+?)\s*$")
+
+
+def _emulator_services() -> set[str]:
+    """Parse effective LocalStack SERVICES values (no yaml dependency).
+
+    Catches comma-joined widening (``SERVICES: s3,sqs``) that substring
+    greps miss. Comment lines are excluded.
+    """
+    services: set[str] = set()
+    for line in WORKFLOW.read_text(encoding="utf-8").splitlines():
+        if line.strip().startswith("#"):
+            continue
+        match = _SERVICES_LINE.match(line)
+        if match:
+            services.update(part.strip().lower() for part in match.group(1).split(","))
+    return services
+
 
 class TestWorkflowEmulatorBoundary:
     def test_services_restricted_to_s3(self) -> None:
-        """The emulated surface stays S3-only unless explicitly reviewed."""
-        text = WORKFLOW.read_text(encoding="utf-8")
-        code = "\n".join(line for line in text.splitlines() if not line.strip().startswith("#"))
-        assert "SERVICES: s3" in code or "SERVICES=s3" in code
-        lowered = code.lower()
-        for forbidden in (
-            "services=sqs",
-            "services=sns",
-            "services=lambda",
-            "eventbridge",
-            "dynamodb",
-            "stepfunctions",
-        ):
-            assert forbidden not in lowered, f"emulator surface widened: {forbidden}"
+        """The effective emulated surface is exactly S3 (parsed, not grepped)."""
+        assert _emulator_services() == _ALLOWED_SERVICES
 
     def test_localstack_image_pinned(self) -> None:
         """No floating :latest emulator image."""
