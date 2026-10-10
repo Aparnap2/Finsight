@@ -92,10 +92,20 @@ class TestSecretGate:
         assert proc.returncode == 2
         assert "SCAN_ERROR" in proc.stdout
 
-    def test_binary_file_skipped_not_failed(self, tmp_path: Path) -> None:
+    def test_nul_padded_secret_still_detected(self, tmp_path: Path) -> None:
         target = tmp_path / "apps" / "blob.bin"
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(b"\x00\x01\x02binary\xff\xfe")
+        target.write_bytes(b"\x00" + b"AKIA" + b"X" * 16 + b"\x00")
+        proc = _run(tmp_path)
+        assert proc.returncode == 1
+        assert "LEAK" in proc.stdout
+
+    def test_venv_by_marker_skipped(self, tmp_path: Path) -> None:
+        (tmp_path / "customenv").mkdir(parents=True, exist_ok=True)
+        (tmp_path / "customenv" / "pyvenv.cfg").write_text("home = /x\n")
+        blob = tmp_path / "customenv" / "bin" / "python"
+        blob.parent.mkdir(parents=True, exist_ok=True)
+        blob.write_bytes(b"\xff\xfe\x00binary")
         proc = _run(tmp_path)
         assert proc.returncode == 0
 
