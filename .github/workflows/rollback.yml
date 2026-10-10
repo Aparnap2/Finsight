@@ -3,8 +3,9 @@ name: Rollback (APA-80 R5)
 # Rollback is redeploy of a prior known-good artifact SHA — never an
 # automatic data rollback. Database rollback stays a human-approved
 # `alembic downgrade` plus restore-from-backup per the staging runbook;
-# it is referenced here, not executed. Fails unless the target SHA has
-# a green staging + golden record (checked by the operator before dispatch).
+# it is referenced here, not executed. FAILS CLOSED until wired: the
+# operator must confirm the target SHA has a green staging + golden
+# record before dispatch.
 
 on:
   workflow_dispatch:
@@ -33,8 +34,24 @@ jobs:
         with:
           ref: ${{ inputs.target_sha }}
 
-      - name: Record rollback intent
+      - name: Validate inputs (no shell interpolation of inputs)
+        env:
+          TARGET_SHA: ${{ inputs.target_sha }}
+          ROLLBACK_REASON: ${{ inputs.reason }}
         run: |
-          echo "rollback to ${{ inputs.target_sha }}: ${{ inputs.reason }}"
+          set -euo pipefail
+          if ! [[ "$TARGET_SHA" =~ ^[a-f0-9]{40}$ ]]; then
+            echo "invalid target SHA: must be a 40-char commit hash"
+            exit 1
+          fi
+          if [ -z "$ROLLBACK_REASON" ]; then
+            echo "rollback reason is required"
+            exit 1
+          fi
+          echo "rollback intent recorded."
+
+      - name: Redeploy (not yet wired — fail closed)
+        run: |
           echo "Redeploy path shape only. DB rollback (if needed) is a"
           echo "separate human-approved alembic downgrade + restore."
+          exit 1

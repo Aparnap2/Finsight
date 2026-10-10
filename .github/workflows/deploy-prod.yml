@@ -1,18 +1,16 @@
 name: Deploy production (APA-80 R5)
 
-# Production deployment: tag-gated + protected environment. The `prod`
-# environment MUST have required reviewers (non-author) and
+# Production deployment: manual dispatch only, protected environment.
+# The `prod` environment MUST have required reviewers (non-author) and
 # prevent-self-review enabled in repo settings — that approval lives
 # outside this file and is the actual release gate. Promotes the exact
 # image digest verified in staging (build-once-promote-same-artifact;
-# never rebuild between environments).
+# never rebuild between environments). FAILS CLOSED until wired.
 #
 # PLACEHOLDERS: same OIDC/image variables as deploy-staging.yml, with
 # `environment: prod` in the role's subject condition. See that file.
 
 on:
-  push:
-    tags: ["release-*"]
   workflow_dispatch:
     inputs:
       image_digest:
@@ -37,11 +35,18 @@ jobs:
       # REVIEWER: same pinned configure-aws-credentials step as staging,
       # with role-to-assume bound to the prod environment subject.
 
-      - name: Verify promotion inputs
+      - name: Validate promotion input (no shell interpolation of inputs)
+        env:
+          IMAGE_DIGEST: ${{ inputs.image_digest }}
         run: |
-          echo "digest=${{ inputs.image_digest }}"
-          test -n "${{ inputs.image_digest }}" || {
-            echo "refusing prod deploy without a staging-verified digest";
-            exit 1;
-          }
-          echo "prod deploy path shape only: approval + digest check only."
+          set -euo pipefail
+          if ! [[ "$IMAGE_DIGEST" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+            echo "invalid image digest: must be sha256:<64 hex> and staging-verified"
+            exit 1
+          fi
+          echo "digest shape valid; provenance check belongs to the wiring step."
+
+      - name: Promote (not yet wired — fail closed)
+        run: |
+          echo "prod deploy path shape only: verify staging provenance, then promote."
+          exit 1
