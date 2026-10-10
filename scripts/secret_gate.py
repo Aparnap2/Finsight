@@ -16,11 +16,16 @@ Scope (documented carve-outs, see ci.yml):
   the repo-root ``.env`` (live credential store owned by APA-79).
 - Blocked filenames (``*.pem``, ``id_rsa*``, ``.env.*``) excluding
   dependency directories. The repo-root ``.env`` itself is APA-79's.
+- Tracked dotenv guard: any ``.env`` / ``.env.*`` in the git index
+  (except ``.env.example``) fails, paths only, never contents — so the
+  content-scan carve-out for the untracked live ``.env`` cannot hide a
+  committed dotenv file.
 """
 
 from __future__ import annotations
 
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -131,9 +136,43 @@ def _iter_files(root: Path) -> list[Path]:
     return collected
 
 
+def tracked_env_files(root: Path) -> list[str]:
+    """Return git-tracked dotenv files that must never be committed.
+
+    The content scan carves out the untracked repo-root ``.env`` (live
+    credential store, APA-79). That carve-out must not extend to TRACKED
+    files: any ``.env`` / ``.env.*`` in the git index — except the
+    conventional safe template ``.env.example`` — fails the gate.
+    Only paths are reported, never file contents.
+    """
+    try:
+        proc = subprocess.run(
+            ["git", "-C", str(root), "ls-files"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError as exc:
+        print(f"TRACKED_CHECK_WARNING git unavailable: {exc}")
+        return []
+    if proc.returncode != 0:
+        print("TRACKED_CHECK_WARNING not a git checkout; skipping tracked check")
+        return []
+    offenders: list[str] = []
+    for line in proc.stdout.splitlines():
+        name = line.strip().rsplit("/", 1)[-1]
+        if name == ".env.example":
+            continue
+        if name == ".env" or name.startswith(".env."):
+            offenders.append(line.strip())
+    return sorted(offenders)
+
+
 def scan(root: Path) -> list[str]:
     """Return human-readable findings (empty means clean)."""
     findings: list[str] = []
+    for offender in tracked_env_files(root):
+        findings.append(f"{offender}: tracked dotenv file must not be committed")
     try:
         files = _iter_files(root)
     except OSError as exc:

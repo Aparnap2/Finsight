@@ -116,3 +116,48 @@ class TestSecretGate:
         proc = _run(tmp_path)
         assert proc.returncode == 2
         assert "SCAN_ERROR" in proc.stdout
+
+    def _git_repo(self, tmp_path: Path, tracked: dict[str, str]) -> Path:
+        """Init a git repo with the given tracked files (content irrelevant)."""
+        subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+        subprocess.run(
+            ["git", "-C", str(tmp_path), "config", "user.email", "t@t"],
+            check=True,
+        )
+        subprocess.run(["git", "-C", str(tmp_path), "config", "user.name", "t"], check=True)
+        for name, content in tracked.items():
+            target = tmp_path / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(content)
+            subprocess.run(["git", "-C", str(tmp_path), "add", name], check=True)
+        return tmp_path
+
+    def test_tracked_dotenv_fails_paths_only(self, tmp_path: Path) -> None:
+        repo = self._git_repo(
+            tmp_path,
+            {
+                ".env.staging": "SUPER_SEKRET_VALUE_12345\n",
+                "apps/a.py": "x = 1\n",
+            },
+        )
+        proc = _run(repo)
+        assert proc.returncode == 1
+        assert ".env.staging" in proc.stdout
+        assert "SUPER_SEKRET_VALUE_12345" not in proc.stdout
+
+    def test_tracked_root_dotenv_fails(self, tmp_path: Path) -> None:
+        repo = self._git_repo(tmp_path, {".env": "K=v\n"})
+        proc = _run(repo)
+        assert proc.returncode == 1
+        assert "tracked dotenv" in proc.stdout
+
+    def test_tracked_env_example_allowed(self, tmp_path: Path) -> None:
+        repo = self._git_repo(tmp_path, {".env.example": "K=placeholder\n"})
+        proc = _run(repo)
+        assert proc.returncode == 0
+
+    def test_untracked_live_dotenv_still_skipped(self, tmp_path: Path) -> None:
+        repo = self._git_repo(tmp_path, {"apps/a.py": "x = 1\n"})
+        (tmp_path / ".env").write_text("LIVE_KEY=abc\n")  # untracked: APA-79
+        proc = _run(repo)
+        assert proc.returncode == 0
