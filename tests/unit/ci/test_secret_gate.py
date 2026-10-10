@@ -91,3 +91,18 @@ class TestSecretGate:
         proc = _run(tmp_path / "does-not-exist")
         assert proc.returncode == 2
         assert "SCAN_ERROR" in proc.stdout
+
+    def test_binary_file_skipped_not_failed(self, tmp_path: Path) -> None:
+        target = tmp_path / "apps" / "blob.bin"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(b"\x00\x01\x02binary\xff\xfe")
+        proc = _run(tmp_path)
+        assert proc.returncode == 0
+
+    def test_undecodable_text_fails_closed(self, tmp_path: Path) -> None:
+        target = tmp_path / "apps" / "odd.txt"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(b"caf\xe9key sk-live-abc123 \x92special")
+        proc = _run(tmp_path)
+        assert proc.returncode == 2
+        assert "SCAN_ERROR" in proc.stdout

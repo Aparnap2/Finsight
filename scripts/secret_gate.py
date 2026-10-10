@@ -109,9 +109,19 @@ def scan(root: Path) -> list[str]:
         if rel == ".env":
             continue  # live credential store; owned by APA-79
         try:
-            text = path.read_text(encoding="utf-8", errors="strict")
-        except (OSError, UnicodeDecodeError):
-            continue  # binary/unreadable: not a literal-secret carrier
+            raw = path.read_bytes()
+        except OSError as exc:
+            # A file that should be scanned but cannot be read must fail
+            # the gate — never silently skipped (review finding on R3).
+            print(f"SCAN_ERROR unreadable file {rel}: {exc}")
+            raise SystemExit(2) from exc
+        if b"\x00" in raw:
+            continue  # binary object: not a literal-secret carrier
+        try:
+            text = raw.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            print(f"SCAN_ERROR undecodable text file {rel}: {exc}")
+            raise SystemExit(2) from exc
         if HIGH_SIGNAL.search(text):
             findings.append(f"{rel}: high-signal secret shape")
         elif rel.startswith("tests/"):
