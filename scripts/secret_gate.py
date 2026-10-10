@@ -47,6 +47,9 @@ SKIP_DIRS = {
     "volume",
     "__pycache__",
     ".pytest_cache",
+    ".ruff_cache",
+    ".mypy_cache",
+    ".hypothesis",
     "node_modules",
     "dist",
     "build",
@@ -56,6 +59,35 @@ BLOCKED_NAMES = (".pem", "id_rsa")
 
 #: Well-known placeholder tokens that are never real secrets.
 PLACEHOLDERS = frozenset({"redacted", "example", "placeholder", "changeme", "yourkey", "testkey"})
+
+#: Known-binary asset suffixes skipped by extension (auditable list).
+#: Everything else is decoded after NUL-stripping and scanned; undecodable
+#: remainder fails closed. Unknown binaries (e.g. `.bin`) are scanned,
+#: not skipped — a NUL-padded secret in one still flags.
+BINARY_SUFFIXES = frozenset(
+    {
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".gif",
+        ".ico",
+        ".webp",
+        ".woff",
+        ".woff2",
+        ".ttf",
+        ".eot",
+        ".otf",
+        ".pdf",
+        ".zip",
+        ".gz",
+        ".tar",
+        ".whl",
+        ".so",
+        ".dylib",
+        ".dll",
+        ".exe",
+    }
+)
 
 
 def _is_placeholder(token: str) -> bool:
@@ -75,16 +107,23 @@ def _canary_hit(text: str) -> bool:
     return False
 
 
+def _venv_roots(root: Path) -> list[Path]:
+    """Directories containing pyvenv.cfg (virtualenvs by marker, not name)."""
+    return [p.parent for p in root.glob("*/pyvenv.cfg")]
+
+
 def _iter_files(root: Path) -> list[Path]:
     """Collect scannable files, skipping dependency and cache trees."""
     collected: list[Path] = []
+    venv_tops = {str(v.relative_to(root)) for v in _venv_roots(root)}
     for path in root.rglob("*"):
         if not path.is_file():
             continue
-        parts = set(path.relative_to(root).parts[:-1])
-        if parts & SKIP_DIRS or any(
-            part.startswith(".venv") for part in path.relative_to(root).parts
-        ):
+        rel_parts = path.relative_to(root).parts
+        if rel_parts[0] in venv_tops:
+            continue  # virtualenv tree (pyvenv.cfg marker)
+        parts = set(rel_parts[:-1])
+        if parts & SKIP_DIRS or any(part.startswith(".venv") for part in rel_parts):
             continue
         if path.suffix == ".pyc":
             continue
@@ -108,6 +147,8 @@ def scan(root: Path) -> list[str]:
             continue
         if rel == ".env":
             continue  # live credential store; owned by APA-79
+        if path.suffix.lower() in BINARY_SUFFIXES:
+            continue  # known-binary asset, not a literal carrier
         try:
             raw = path.read_bytes()
         except OSError as exc:
@@ -115,10 +156,10 @@ def scan(root: Path) -> list[str]:
             # the gate — never silently skipped (review finding on R3).
             print(f"SCAN_ERROR unreadable file {rel}: {exc}")
             raise SystemExit(2) from exc
-        if b"\x00" in raw:
-            continue  # binary object: not a literal-secret carrier
+        # NUL bytes are stripped before decoding so a NUL-padded secret
+        # cannot evade the scan; undecodable remainder still fails closed.
         try:
-            text = raw.decode("utf-8")
+            text = raw.replace(b"\x00", b"").decode("utf-8")
         except UnicodeDecodeError as exc:
             print(f"SCAN_ERROR undecodable text file {rel}: {exc}")
             raise SystemExit(2) from exc
