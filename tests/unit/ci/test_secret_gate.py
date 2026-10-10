@@ -28,12 +28,22 @@ def _key() -> str:
     return "AKIA" + "X" * 16
 
 
-def _tree(tmp_path: Path, files: dict[str, str]) -> Path:
-    """Build a fixture tree from name -> content."""
+def _tree(tmp_path: Path, files: dict[str, str | bytes]) -> Path:
+    """Build a fixture tree from name -> content (always a git repo).
+
+    The tracked-dotenv guard is fail-closed: it requires a readable git
+    index, so every fixture tree is initialized as one.
+    """
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    subprocess.run(["git", "-C", str(tmp_path), "config", "user.email", "t@t"], check=True)
+    subprocess.run(["git", "-C", str(tmp_path), "config", "user.name", "t"], check=True)
     for name, content in files.items():
         target = tmp_path / name
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(content)
+        if isinstance(content, bytes):
+            target.write_bytes(content)
+        else:
+            target.write_text(content)
     return tmp_path
 
 
@@ -92,21 +102,28 @@ class TestSecretGate:
         assert proc.returncode == 2
         assert "SCAN_ERROR" in proc.stdout
 
+    def test_non_repo_root_fails_closed(self, tmp_path: Path) -> None:
+        (tmp_path / "apps").mkdir(parents=True, exist_ok=True)
+        (tmp_path / "apps" / "a.py").write_text("x = 1\n")
+        proc = _run(tmp_path)  # no git init: index absence unprovable
+        assert proc.returncode == 2
+        assert "SCAN_ERROR" in proc.stdout
+
     def test_nul_padded_secret_still_detected(self, tmp_path: Path) -> None:
-        target = tmp_path / "apps" / "blob.bin"
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(b"\x00" + b"AKIA" + b"X" * 16 + b"\x00")
-        proc = _run(tmp_path)
+        root = _tree(tmp_path, {"apps/blob.bin": b"\x00" + _key().encode() + b"\x00"})
+        proc = _run(root)
         assert proc.returncode == 1
         assert "LEAK" in proc.stdout
 
     def test_venv_by_marker_skipped(self, tmp_path: Path) -> None:
-        (tmp_path / "customenv").mkdir(parents=True, exist_ok=True)
-        (tmp_path / "customenv" / "pyvenv.cfg").write_text("home = /x\n")
-        blob = tmp_path / "customenv" / "bin" / "python"
-        blob.parent.mkdir(parents=True, exist_ok=True)
-        blob.write_bytes(b"\xff\xfe\x00binary")
-        proc = _run(tmp_path)
+        root = _tree(
+            tmp_path,
+            {
+                "customenv/pyvenv.cfg": "home = /x\n",
+                "customenv/bin/python": b"\xff\xfe\x00binary",
+            },
+        )
+        proc = _run(root)
         assert proc.returncode == 0
 
     def test_undecodable_text_fails_closed(self, tmp_path: Path) -> None:

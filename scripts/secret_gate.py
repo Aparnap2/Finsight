@@ -153,11 +153,13 @@ def tracked_env_files(root: Path) -> list[str]:
             check=False,
         )
     except OSError as exc:
-        print(f"TRACKED_CHECK_WARNING git unavailable: {exc}")
-        return []
+        print(f"SCAN_ERROR git unavailable: {exc}")
+        raise SystemExit(2) from exc
     if proc.returncode != 0:
-        print("TRACKED_CHECK_WARNING not a git checkout; skipping tracked check")
-        return []
+        # Not a git checkout or index unreadable: the tracked check cannot
+        # establish absence, so the gate fails rather than reporting clean.
+        print("SCAN_ERROR cannot inspect git index (not a repository?)")
+        raise SystemExit(2)
     offenders: list[str] = []
     for line in proc.stdout.splitlines():
         name = line.strip().rsplit("/", 1)[-1]
