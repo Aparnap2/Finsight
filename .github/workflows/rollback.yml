@@ -29,12 +29,7 @@ jobs:
       contents: read
       id-token: write # OIDC only; scoped to this job
     steps:
-      - name: Checkout target SHA
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          ref: ${{ inputs.target_sha }}
-
-      - name: Validate inputs (no shell interpolation of inputs)
+      - name: Validate inputs (before checkout — fail closed first)
         env:
           TARGET_SHA: ${{ inputs.target_sha }}
           ROLLBACK_REASON: ${{ inputs.reason }}
@@ -49,6 +44,11 @@ jobs:
             exit 1
           fi
           echo "rollback intent recorded."
+
+      - name: Checkout target SHA
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.target_sha }}
 
       - name: Redeploy (not yet wired — fail closed)
         run: |
