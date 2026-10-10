@@ -61,6 +61,9 @@ jobs:
 
   llm-evals:
     name: controlled LLM eval gate (manual only)
+    # Defense in depth: even though this job makes no provider calls
+    # today, it must never run on push/PR — only manual dispatch.
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
