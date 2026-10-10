@@ -22,9 +22,13 @@ from pathlib import Path
 GATE = Path(__file__).resolve().parents[3] / "scripts" / "ci_gate.py"
 
 
-def _run(log: str, *args: str, tmp_path: Path | None = None) -> subprocess.CompletedProcess[str]:
-    """Run the gate against an inline log file (isolated per test)."""
-    path = (tmp_path or Path("/tmp")) / "ci_gate_probe.log"
+def _run(log: str, *args: str, tmp_path: Path) -> subprocess.CompletedProcess[str]:
+    """Run the gate against an inline log file (isolated per test).
+
+    ``tmp_path`` is required: there is no shared fallback path, so a
+    future caller cannot reintroduce cross-test collisions.
+    """
+    path = tmp_path / "ci_gate_probe.log"
     path.write_text(log)
     return subprocess.run(
         [sys.executable, str(GATE), str(path), *args],
