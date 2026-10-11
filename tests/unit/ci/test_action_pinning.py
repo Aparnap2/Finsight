@@ -13,7 +13,7 @@ from pathlib import Path
 
 WORKFLOWS = Path(__file__).resolve().parents[3] / ".github" / "workflows"
 
-_PINNED_USES = re.compile(r"^[^@\s]+@[0-9a-f]{40}(?:\s+#\s*\S+)?\s*$")
+_PINNED_USES = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[0-9a-f]{40}(?:\s+#\s*\S+)?\s*$")
 
 
 def _unpinned_refs(text: str) -> list[str]:
@@ -95,6 +95,15 @@ class TestWorkflowSupplyChain:
         """Negative fixture: abbreviated SHAs must fail the guard."""
         text = "      - uses: actions/checkout@11d5960\n"
         assert _unpinned_refs(text) != []
+
+    def test_malformed_prefix_detected(self) -> None:
+        """Negative fixture: missing owner/repo shape must fail the guard."""
+        for bad in (
+            "      - uses: checkout@11d5960a326750d5838078e36cf38b85af677262\n",
+            "      - uses: @11d5960a326750d5838078e36cf38b85af677262\n",
+            "      - uses: actions//checkout@11d5960a326750d5838078e36cf38b85af677262\n",
+        ):
+            assert _unpinned_refs(bad) != [], bad
 
     def test_pinned_ref_with_comment_passes(self) -> None:
         """Negative control: full SHA plus readability comment is fine."""
