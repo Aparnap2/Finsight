@@ -19,14 +19,26 @@ _SEGMENT = r"(?:[A-Za-z0-9_-](?:[A-Za-z0-9_.-]*[A-Za-z0-9_-])?)"
 _PINNED_USES = re.compile(rf"^{_SEGMENT}/{_SEGMENT}@[0-9a-f]{{40}}(?:\s+#\s*\S+)?\s*$")
 
 
+_USES_LINE = re.compile(r"uses\s*:\s*(.+?)\s*$")
+
+
+def _strip_comment(line: str) -> str:
+    """Remove a trailing # comment (job headers never contain # otherwise)."""
+    cut = line.find(" #")
+    return line[:cut] if cut != -1 else line
+
+
 def _unpinned_refs(text: str) -> list[str]:
     """Return non-SHA-pinned uses: refs found in workflow text."""
     offenders: list[str] = []
     for lineno, line in enumerate(text.splitlines(), 1):
         stripped = line.strip()
-        if stripped.startswith("#") or "uses:" not in stripped:
+        if stripped.startswith("#"):
             continue
-        ref = stripped.split("uses:", 1)[1].strip()
+        match = _USES_LINE.search(_strip_comment(line))
+        if not match:
+            continue
+        ref = match.group(1).strip()
         if not _PINNED_USES.match(ref):
             offenders.append(f"{lineno}:{ref}")
     return offenders
@@ -40,8 +52,8 @@ def _jobs_with_permissions(text: str) -> tuple[set[str], set[str]]:
     in_jobs = False
     depth_jobs = 0
     for line in text.splitlines():
-        stripped = line.strip()
-        if re.match(r"^jobs:\s*$", line):
+        stripped = _strip_comment(line).strip()
+        if re.match(r"^jobs:\s*$", stripped):
             in_jobs = True
             depth_jobs = len(line) - len(line.lstrip())
             continue
@@ -119,6 +131,17 @@ class TestWorkflowSupplyChain:
     def test_job_without_permissions_detected(self) -> None:
         """Negative fixture: a permission-less job must fail the guard."""
         text = "jobs:\n  unit:\n    runs-on: ubuntu-latest\n"
+        jobs, with_permissions = _jobs_with_permissions(text)
+        assert jobs - with_permissions == {"unit"}
+
+    def test_spaced_uses_detected(self) -> None:
+        """Negative fixture: `uses :` with a space must not bypass the scan."""
+        text = "      - uses : actions/checkout@v4\n"
+        assert _unpinned_refs(text) != []
+
+    def test_commented_job_header_checked(self) -> None:
+        """Negative fixture: `unit: # comment` must still be permission-checked."""
+        text = "jobs:\n  unit: # job comment\n    runs-on: ubuntu-latest\n"
         jobs, with_permissions = _jobs_with_permissions(text)
         assert jobs - with_permissions == {"unit"}
 
