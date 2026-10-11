@@ -11,6 +11,7 @@ jobs:
   llm-evals:
     name: controlled LLM eval gate (stub)
     runs-on: ubuntu-latest
+    permissions: {}
     timeout-minutes: 5
     steps:
       - name: Controlled eval gate (no provider calls)
