@@ -67,7 +67,10 @@ def _jobs_with_permissions(text: str) -> tuple[set[str], set[str]]:
         if indent == depth_jobs + 2 and stripped.endswith(":"):
             current = stripped[:-1]
             jobs.add(current)
-        elif current is not None and indent > depth_jobs + 2:
+        elif current is not None and indent == depth_jobs + 4:
+            # Direct job children only: a permissions block nested inside
+            # a step (deeper indent) must NOT count as job-level least
+            # privilege.
             if re.match(r"^permissions:\s*", stripped):
                 with_permissions.add(current)
     return jobs, with_permissions
@@ -156,3 +159,12 @@ class TestWorkflowSupplyChain:
         text = "jobs:\n  unit:\n    runs-on: ubuntu-latest\n    permissions: {}\n"
         jobs, with_permissions = _jobs_with_permissions(text)
         assert jobs - with_permissions == set()
+
+    def test_step_level_permissions_do_not_count(self) -> None:
+        """Negative fixture: step-nested permissions are not job-level."""
+        text = (
+            "jobs:\n  unit:\n    runs-on: ubuntu-latest\n"
+            "    steps:\n      - name: x\n        permissions:\n          contents: read\n"
+        )
+        jobs, with_permissions = _jobs_with_permissions(text)
+        assert jobs - with_permissions == {"unit"}
