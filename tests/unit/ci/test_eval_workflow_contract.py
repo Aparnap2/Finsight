@@ -36,10 +36,14 @@ class TestEvalWorkflowContract:
         blocks = _job_blocks(WORKFLOW.read_text(encoding="utf-8"))
         assert "llm-evals" in blocks, "llm-evals job missing"
         conditions = [
-            line.strip() for line in blocks["llm-evals"] if line.strip().startswith("if:")
+            line.strip().removeprefix("if:").strip()
+            for line in blocks["llm-evals"]
+            if line.strip().startswith("if:")
         ]
-        assert any(_MANUAL_ONLY in cond for cond in conditions), (
-            "llm-evals must carry an explicit workflow_dispatch-only condition"
+        # Exact match (normalized): a broadened condition such as
+        # "... == 'workflow_dispatch' || always()" must NOT pass.
+        assert conditions == [_MANUAL_ONLY], (
+            f"llm-evals must carry exactly the workflow_dispatch-only condition, got {conditions}"
         )
 
     def test_deterministic_gate_exists_for_push_pr(self) -> None:
@@ -49,3 +53,18 @@ class TestEvalWorkflowContract:
         golden = "\n".join(blocks["golden-dataset"])
         assert "finance.evaluation.runner" in golden
         assert "total" in golden and "failed" in golden
+
+    def test_broadened_condition_rejected(self) -> None:
+        """Negative control: an || always() disjunct must not satisfy the gate."""
+        text = (
+            "  llm-evals:\n"
+            "    if: github.event_name == 'workflow_dispatch' || always()\n"
+            "    runs-on: ubuntu-latest\n"
+        )
+        blocks = _job_blocks(text)
+        conditions = [
+            line.strip().removeprefix("if:").strip()
+            for line in blocks["llm-evals"]
+            if line.strip().startswith("if:")
+        ]
+        assert conditions != [_MANUAL_ONLY]
