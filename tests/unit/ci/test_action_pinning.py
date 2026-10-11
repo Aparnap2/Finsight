@@ -24,8 +24,8 @@ _USES_LINE = re.compile(r"uses\s*:\s*(.+?)\s*$")
 
 def _strip_comment(line: str) -> str:
     """Remove a trailing # comment (job headers never contain # otherwise)."""
-    cut = line.find(" #")
-    return line[:cut] if cut != -1 else line
+    match = re.search(r"\s+#", line)
+    return line[: match.start()] if match else line
 
 
 def _unpinned_refs(text: str) -> list[str]:
@@ -142,6 +142,12 @@ class TestWorkflowSupplyChain:
     def test_commented_job_header_checked(self) -> None:
         """Negative fixture: `unit: # comment` must still be permission-checked."""
         text = "jobs:\n  unit: # job comment\n    runs-on: ubuntu-latest\n"
+        jobs, with_permissions = _jobs_with_permissions(text)
+        assert jobs - with_permissions == {"unit"}
+
+    def test_tab_commented_job_header_checked(self) -> None:
+        """Negative fixture: tab-separated comment must not evade the guard."""
+        text = "jobs:\n  unit:\t# job comment\n    runs-on: ubuntu-latest\n"
         jobs, with_permissions = _jobs_with_permissions(text)
         assert jobs - with_permissions == {"unit"}
 
