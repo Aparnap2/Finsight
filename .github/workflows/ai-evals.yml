@@ -1,15 +1,69 @@
-name: AI evals (manual only)
+name: AI evals
 
-# Manual ONLY: workflow_dispatch. Never push / pull_request — LLM evals are
-# controlled and must never run implicitly or call providers from CI.
+# Two-track eval policy (APA-80 R2):
+# - golden-dataset: deterministic, no provider calls, runs on push/PR as a
+#   required-quality gate over a FROZEN dataset set. Fails loudly on any
+#   regression AND on zero-datasets/zero-reports/empty-metrics (anti-stub).
+# - llm-evals: live-LLM smoke, manual ONLY via workflow_dispatch. Never
+#   push/PR, never a required check, never implicit provider calls.
+
 on:
+  push:
+    branches: [main]
+  pull_request:
   workflow_dispatch:
 
 permissions: {}
 
 jobs:
+  golden-dataset:
+    name: deterministic golden-dataset eval gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Sync dependencies (frozen lockfile, all extras)
+        run: uv sync --all-extras --frozen
+
+      - name: Run frozen golden regression set (no provider calls)
+        run: |
+          set -o pipefail
+          uv run python -m finance.evaluation.runner \
+            --dataset-id regression_forecast_naive \
+            --dataset-id regression_anomaly_materiality \
+            --dataset-id regression_duplicate_rows > golden-summary.json
+          cat golden-summary.json
+
+      - name: Anti-stub tripwire (evals must actually have run)
+        run: |
+          uv run python - <<'EOF'
+          import json, sys
+          summary = json.load(open("golden-summary.json"))
+          reports = summary.get("reports", [])
+          assert summary.get("status") == "ok", f"runner status: {summary}"
+          assert summary.get("total") == 3, f"frozen set must be 3 datasets, got {summary.get('total')}"
+          assert summary.get("failed", 1) == 0, f"regressions: {summary}"
+          assert len(reports) == 3 and all(
+              len(report.get("metrics", {})) > 0 for report in reports
+          ), "every report must carry non-empty metrics"
+          print("golden gate: 3/3 datasets, all metrics present")
+          EOF
+
   llm-evals:
-    name: controlled LLM eval gate (stub)
+    name: controlled LLM eval gate (manual only)
+    # Defense in depth: even though this job makes no provider calls
+    # today, it must never run on push/PR — only manual dispatch.
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
