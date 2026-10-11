@@ -13,7 +13,10 @@ from pathlib import Path
 
 WORKFLOWS = Path(__file__).resolve().parents[3] / ".github" / "workflows"
 
-_PINNED_USES = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[0-9a-f]{40}(?:\s+#\s*\S+)?\s*$")
+# Path segments must not start/end with a dot and must not be ./.. :
+# rejects ../repo@sha, owner/..@sha, .hidden/repo@sha.
+_SEGMENT = r"(?:[A-Za-z0-9_-](?:[A-Za-z0-9_.-]*[A-Za-z0-9_-])?)"
+_PINNED_USES = re.compile(rf"^{_SEGMENT}/{_SEGMENT}@[0-9a-f]{{40}}(?:\s+#\s*\S+)?\s*$")
 
 
 def _unpinned_refs(text: str) -> list[str]:
@@ -102,6 +105,9 @@ class TestWorkflowSupplyChain:
             "      - uses: checkout@11d5960a326750d5838078e36cf38b85af677262\n",
             "      - uses: @11d5960a326750d5838078e36cf38b85af677262\n",
             "      - uses: actions//checkout@11d5960a326750d5838078e36cf38b85af677262\n",
+            "      - uses: ../repo@11d5960a326750d5838078e36cf38b85af677262\n",
+            "      - uses: owner/..@11d5960a326750d5838078e36cf38b85af677262\n",
+            "      - uses: .hidden/repo@11d5960a326750d5838078e36cf38b85af677262\n",
         ):
             assert _unpinned_refs(bad) != [], bad
 
