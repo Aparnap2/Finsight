@@ -34,6 +34,15 @@ logger = logging.getLogger(__name__)
 #: Terminal state: attempts exhausted, awaiting operator — never auto-retried.
 STATUS_TERMINAL = "TERMINAL"
 
+#: Backoff base/cap for redelivery after failure (seconds).
+_BACKOFF_BASE_S = 30
+_BACKOFF_CAP_S = 3600
+
+
+def _backoff_seconds(attempts: int) -> int:
+    """Bounded exponential backoff: 30s, 60s, ... capped at 1h."""
+    return int(min(_BACKOFF_BASE_S * (2**max(attempts - 1, 0)), _BACKOFF_CAP_S))
+
 
 class Publisher:
     """Claim due outbox rows and publish them through an injected sender."""
@@ -54,7 +63,12 @@ class Publisher:
         self._max_attempts = max_attempts
 
     def claim_due(self, limit: int = 10) -> list[OutboxRow]:
-        """Atomically claim due rows; retire exhausted ones to TERMINAL."""
+        """Atomically claim due rows; retire exhausted ones to TERMINAL.
+
+        Claims PENDING rows and expired publisher CLAIMs (never another
+        owner's active claim, never CONSUM*. Backoff-gated via
+        ``next_eligible_at`` so failures cannot hot-loop.
+        """
         now = datetime.now(UTC).replace(tzinfo=None)
         with Session(self._engine) as session:
             session.execute(
@@ -70,9 +84,11 @@ class Publisher:
                 session.execute(
                     select(OutboxRow.id)
                     .where(
-                        OutboxRow.status.in_(["PENDING", "CLAIMED"]),
+                        (OutboxRow.status == "PENDING")
+                        | ((OutboxRow.status == "CLAIMED") & (OutboxRow.claimed_by == "publisher")),
                         OutboxRow.attempts < self._max_attempts,
                         (OutboxRow.leased_until.is_(None)) | (OutboxRow.leased_until < now),
+                        (OutboxRow.next_eligible_at.is_(None)) | (OutboxRow.next_eligible_at < now),
                     )
                     .order_by(OutboxRow.created_at)
                     .limit(limit)
@@ -84,15 +100,17 @@ class Publisher:
             if not ids:
                 session.commit()
                 return []
-            token = f"claim_{uuid.uuid4().hex[:16]}"
+            token = f"pub_{uuid.uuid4().hex[:16]}"
             leased_until = now + timedelta(seconds=self._lease_seconds)
             session.execute(
                 update(OutboxRow)
                 .where(OutboxRow.id.in_(ids))
                 .values(
                     status="CLAIMED",
+                    claimed_by="publisher",
                     claim_token=token,
                     leased_until=leased_until,
+                    next_eligible_at=None,
                     attempts=OutboxRow.attempts + 1,
                 )
             )
@@ -115,6 +133,7 @@ class Publisher:
                 .where(
                     OutboxRow.id == row.id,
                     OutboxRow.status == "CLAIMED",
+                    OutboxRow.claimed_by == "publisher",
                     OutboxRow.claim_token == str(row.claim_token),
                 )
                 .values(
@@ -122,6 +141,7 @@ class Publisher:
                     published_at=datetime.now(UTC).replace(tzinfo=None),
                     leased_until=None,
                     claim_token=None,
+                    claimed_by=None,
                     last_error=None,
                 )
             ).rowcount  # type: ignore[attr-defined]  # SQLAlchemy returns CursorResult at runtime
@@ -131,13 +151,22 @@ class Publisher:
             return bool(won)
 
     def fail(self, row: OutboxRow, error: str) -> bool:
-        """Record a sanitized failure; release the lease for redelivery.
+        """Record a sanitized failure; backoff-gated redelivery within budget.
 
         Fenced on the claim token like publish. Returns False when this
         worker no longer owns the claim.
         """
         with Session(self._engine) as session:
-            won = session.execute(
+            current = session.execute(
+                select(OutboxRow.attempts).where(
+                    OutboxRow.id == row.id,
+                    OutboxRow.status == "CLAIMED",
+                    OutboxRow.claim_token == str(row.claim_token),
+                )
+            ).scalar_one_or_none()
+            if current is None:
+                return False
+            session.execute(
                 update(OutboxRow)
                 .where(
                     OutboxRow.id == row.id,
@@ -146,10 +175,13 @@ class Publisher:
                 )
                 .values(
                     status="PENDING",
+                    claimed_by=None,
                     last_error=redact_pii(error)[:500],
                     leased_until=None,
                     claim_token=None,
+                    next_eligible_at=datetime.now(UTC).replace(tzinfo=None)
+                    + timedelta(seconds=_backoff_seconds(int(current))),
                 )
-            ).rowcount  # type: ignore[attr-defined]  # SQLAlchemy returns CursorResult at runtime
+            )
             session.commit()
-            return bool(won)
+            return True
