@@ -32,13 +32,18 @@ def persist_inbox_and_outbox(
     envelope: dict[str, Any],
     raw: bytes,
     status: str = "RECEIVED",
-) -> tuple[WebhookEvent, OutboxRow, bool]:
+) -> tuple[WebhookEvent, OutboxRow | None, bool]:
     """Persist inbox + outbox atomically; return ``(event, outbox, created)``.
 
     Commits on success (the function owns the transaction). On replay
     the existing rows are returned with ``created=False`` and no second
     outbox row is created. ``raw`` feeds the payload hash only; the
     inbox stores the parsed envelope per existing behavior.
+
+    Finding 1 (review): quarantined/unroutable events (any ``status``
+    other than ``RECEIVED``) persist the inbox row for audit but NEVER
+    create a dispatch row — the publisher only selects PENDING outbox
+    rows, so quarantined events can never be published for processing.
     """
     payload_hash = hashlib.sha256(raw).hexdigest()
     event, created = insert_or_get_duplicate(
@@ -52,7 +57,11 @@ def persist_inbox_and_outbox(
         status=status,
         _commit=False,
     )
-    if created:
+    # Only routable events dispatch. Quarantined/unroutable inbox rows
+    # persist for audit while outbox stays empty for them — permanently.
+    dispatchable = status == "RECEIVED"
+    outbox: OutboxRow | None = None
+    if created and dispatchable:
         outbox = OutboxRow(
             id=f"wh_ob_{uuid.uuid4().hex[:16]}",
             tenant_id=event.tenant_id,
@@ -64,11 +73,11 @@ def persist_inbox_and_outbox(
             attempts=0,
         )
         session.add(outbox)
-    else:
-        existing = session.execute(
+    elif not created:
+        outbox = session.execute(
             select(OutboxRow).where(OutboxRow.webhook_event_id == event.id)
         ).scalar_one_or_none()
-        if existing is None:  # pragma: no cover - defensive; unique guards it
+        if outbox is None and dispatchable:  # pragma: no cover - defensive
             outbox = OutboxRow(
                 id=f"wh_ob_{uuid.uuid4().hex[:16]}",
                 tenant_id=event.tenant_id,
@@ -80,8 +89,6 @@ def persist_inbox_and_outbox(
                 attempts=0,
             )
             session.add(outbox)
-        else:
-            outbox = existing
     try:
         session.commit()
     except IntegrityError:
@@ -94,11 +101,12 @@ def persist_inbox_and_outbox(
         ).scalar_one()
         outbox = session.execute(
             select(OutboxRow).where(OutboxRow.webhook_event_id == event.id)
-        ).scalar_one()
+        ).scalar_one_or_none()
         return event, outbox, False
     except Exception:
         session.rollback()
         raise
     session.refresh(event)
-    session.refresh(outbox)
+    if outbox is not None:
+        session.refresh(outbox)
     return event, outbox, created
