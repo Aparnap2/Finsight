@@ -434,6 +434,7 @@ class OutboxRow(Base):
     payload_hash = Column(String, nullable=False)
     attempts = Column(Integer, nullable=False, default=0)
     leased_until = Column(DateTime, nullable=True)
+    claim_token = Column(String, nullable=True)
     last_error = Column(Text, nullable=True)
     execution_id = Column(String, nullable=True)
     created_at = Column(DateTime, default=_utcnow)

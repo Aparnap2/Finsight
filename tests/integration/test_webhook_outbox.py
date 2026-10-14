@@ -16,6 +16,7 @@ Proven here, against PostgreSQL rows — never mocks of the seam:
 
 from __future__ import annotations
 
+import os
 import socket
 from collections.abc import Iterator
 from typing import Any
@@ -24,13 +25,26 @@ import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
-PG_DSN = "postgresql+psycopg://finsight:finsight@localhost:5432/finsight"
+PG_DSN = os.environ.get(
+    "FINSIGHT_TEST_DSN",
+    "postgresql+psycopg://finsight:finsight@localhost:5432/finsight",
+)
+_PG_HOST = "localhost"
+_PG_PORT = 5432
+try:
+    from urllib.parse import urlparse
+
+    _parsed = urlparse(PG_DSN.replace("postgresql+psycopg://", "postgresql://"))
+    _PG_HOST = _parsed.hostname or _PG_HOST
+    _PG_PORT = _parsed.port or _PG_PORT
+except Exception:  # noqa: BLE001 - fall back to defaults
+    pass
 
 
 def _pg_reachable() -> bool:
     """Return True when PostgreSQL answers."""
     try:
-        socket.create_connection(("localhost", 5432), timeout=2).close()
+        socket.create_connection((_PG_HOST, _PG_PORT), timeout=2).close()
         return True
     except OSError:
         return False
@@ -45,13 +59,17 @@ def engine() -> Iterator[Any]:
     from pathlib import Path
 
     from alembic.config import Config
+    from sqlalchemy.exc import OperationalError
 
     from alembic import command
 
     repo_root = Path(__file__).resolve().parents[2]
     cfg = Config(str(repo_root / "alembic.ini"))
     cfg.set_main_option("sqlalchemy.url", PG_DSN)
-    command.upgrade(cfg, "head")
+    try:
+        command.upgrade(cfg, "head")
+    except OperationalError:
+        pytest.skip("integration database not usable")
     engine = create_engine(PG_DSN)
     yield engine
     engine.dispose()
@@ -138,6 +156,27 @@ class TestAtomicInboxOutbox:
             outbox = session.execute(text("SELECT COUNT(*) FROM webhook_outbox")).scalar()
         assert inbox == 0
         assert outbox == 0
+
+    def test_quarantined_event_never_dispatches(self, engine: Any) -> None:
+        from finance.ingestion.outbox import persist_inbox_and_outbox
+        from finance.ingestion.publisher import Publisher
+
+        with Session(engine) as session:
+            event, outbox, created = persist_inbox_and_outbox(
+                session,
+                tenant_id="UNROUTABLE",
+                provider="stripe",
+                envelope=_envelope("evt_quarantined_1"),
+                raw=b"{}",
+                status="IGNORED",
+            )
+        assert created is True
+        assert outbox is None  # inbox persists for audit; no dispatch row ever
+        pub = Publisher(engine, lambda row: None)
+        assert pub.claim_due(limit=10) == []
+        with Session(engine) as session:
+            rows = session.execute(text("SELECT COUNT(*) FROM webhook_outbox")).scalar()
+        assert rows == 0
 
     def test_duplicate_delivery_replays_without_second_outbox(self, engine: Any) -> None:
         from finance.ingestion.outbox import persist_inbox_and_outbox
@@ -263,6 +302,100 @@ class TestPublisher:
         pub = Publisher(engine, lambda row: None, lease_seconds=1)
         assert len(pub.claim_due(limit=10)) >= 1
 
+    def test_stale_worker_cannot_mutate_reclaimed_claim(self, engine: Any) -> None:
+        from finance.ingestion.outbox import persist_inbox_and_outbox
+        from finance.ingestion.publisher import Publisher
+
+        with Session(engine) as session:
+            event, _, _ = persist_inbox_and_outbox(
+                session,
+                tenant_id="tenant-a",
+                provider="stripe",
+                envelope=_envelope("evt_pub_stale"),
+                raw=b"{}",
+            )
+        sent: list[str] = []
+        worker_a = Publisher(engine, lambda row: sent.append(str(row.id)))
+        (stale_claim,) = worker_a.claim_due(limit=10)
+        # Lease expires; worker B reclaims the row with a fresh token.
+        with Session(engine) as session:
+            session.execute(
+                text(
+                    "UPDATE webhook_outbox SET leased_until = now() - interval '1 hour' "
+                    "WHERE webhook_event_id = :id"
+                ),
+                {"id": event.id},
+            )
+            session.commit()
+        worker_b = Publisher(engine, lambda row: sent.append(str(row.id)))
+        (fresh_claim,) = worker_b.claim_due(limit=10)
+        assert str(fresh_claim.claim_token) != str(stale_claim.claim_token)
+        # Stale worker A's publish/fail must not touch B's claim.
+        assert worker_a.publish(stale_claim) is False
+        assert worker_a.fail(stale_claim, "late error") is False
+        with Session(engine) as session:
+            status = session.execute(
+                text("SELECT status FROM webhook_outbox WHERE webhook_event_id = :id"),
+                {"id": event.id},
+            ).scalar()
+        assert status == "CLAIMED"
+        assert worker_b.publish(fresh_claim) is True
+
+    def test_attempts_bounded_then_terminal(self, engine: Any) -> None:
+        from finance.ingestion.outbox import persist_inbox_and_outbox
+        from finance.ingestion.publisher import Publisher
+
+        with Session(engine) as session:
+            persist_inbox_and_outbox(
+                session,
+                tenant_id="tenant-a",
+                provider="stripe",
+                envelope=_envelope("evt_pub_bound"),
+                raw=b"{}",
+            )
+            session.execute(text("UPDATE webhook_outbox SET attempts = 5 WHERE status = 'PENDING'"))
+            session.commit()
+        pub = Publisher(engine, lambda row: None, max_attempts=5)
+        assert pub.claim_due(limit=10) == []
+        with Session(engine) as session:
+            status = session.execute(
+                text("SELECT status FROM webhook_outbox WHERE event_id = :e"),
+                {"e": "evt_pub_bound"},
+            ).scalar()
+        assert status == "TERMINAL"
+
+    def test_fail_sanitizes_and_releases(self, engine: Any) -> None:
+        from finance.ingestion.outbox import persist_inbox_and_outbox
+        from finance.ingestion.publisher import Publisher
+
+        with Session(engine) as session:
+            persist_inbox_and_outbox(
+                session,
+                tenant_id="tenant-a",
+                provider="stripe",
+                envelope=_envelope("evt_pub_fail"),
+                raw=b"{}",
+            )
+        pub = Publisher(engine, lambda row: None)
+        (claimed,) = pub.claim_due(limit=10)
+        assert pub.fail(claimed, "timeout for user alice@example.com ssn 123") is True
+        with Session(engine) as session:
+            stored, status = session.execute(
+                text("SELECT last_error, status FROM webhook_outbox WHERE event_id = :e"),
+                {"e": "evt_pub_fail"},
+            ).one()
+        assert "alice@example.com" not in (stored or "")
+        assert status == "PENDING"
+
+    def test_production_composition_requires_engines(self, engine: Any) -> None:
+        from finance.ingestion.consumer import consume_once
+        from finance.ingestion.publisher import Publisher
+
+        with pytest.raises(ValueError, match="durable engine"):
+            Publisher(None, lambda row: None)
+        with pytest.raises(ValueError, match="durable engine"):
+            consume_once(None, "wh_ob_x", lambda: None)
+
 
 @needs_pg
 class TestConsumer:
@@ -284,12 +417,83 @@ class TestConsumer:
                 envelope=_envelope("evt_cons_1"),
                 raw=b"{}",
             )
-        first = consume_once(engine, str(outbox.id), _execute)
-        second = consume_once(engine, str(outbox.id), _execute)
+            assert outbox is not None
+            outbox_id = str(outbox.id)
+        first = consume_once(engine, outbox_id, _execute)
+        second = consume_once(engine, outbox_id, _execute)
         assert first.consumed is True
         assert second.deduplicated is True
         assert second.execution_id == first.execution_id == "exec-1"
         assert effects == [str(event.id)]
+
+    def test_live_claim_is_busy_never_double_executes(self, engine: Any) -> None:
+        from finance.ingestion.consumer import consume_once
+        from finance.ingestion.outbox import persist_inbox_and_outbox
+        from finance.ingestion.publisher import Publisher
+
+        calls: list[str] = []
+        with Session(engine) as session:
+            _, outbox, _ = persist_inbox_and_outbox(
+                session,
+                tenant_id="tenant-a",
+                provider="stripe",
+                envelope=_envelope("evt_cons_busy"),
+                raw=b"{}",
+            )
+            assert outbox is not None
+            outbox_id = str(outbox.id)
+        Publisher(engine, lambda row: None).claim_due(limit=10)
+
+        def _noop() -> str:
+            calls.append("ran")
+            return "exec-x"
+
+        result = consume_once(engine, outbox_id, _noop)
+        assert result.busy is True
+        assert result.consumed is False
+        assert calls == []
+
+    def test_crashed_claim_needs_reconciliation_not_reexecution(self, engine: Any) -> None:
+        from finance.ingestion.consumer import consume_once
+        from finance.ingestion.outbox import persist_inbox_and_outbox
+        from finance.ingestion.publisher import Publisher
+
+        calls: list[str] = []
+        with Session(engine) as session:
+            _, outbox, _ = persist_inbox_and_outbox(
+                session,
+                tenant_id="tenant-a",
+                provider="stripe",
+                envelope=_envelope("evt_cons_crash"),
+                raw=b"{}",
+            )
+            assert outbox is not None
+            outbox_id = str(outbox.id)
+        Publisher(engine, lambda row: None).claim_due(limit=10)
+        # Crash: lease expires with no execution recorded (effect may
+        # or may not have run — outcome UNKNOWN).
+        with Session(engine) as session:
+            session.execute(
+                text(
+                    "UPDATE webhook_outbox SET leased_until = now() - interval '1 hour' "
+                    "WHERE id = :id"
+                ),
+                {"id": outbox_id},
+            )
+            session.commit()
+
+        def _execute() -> str:
+            calls.append("ran")
+            return "exec-x"
+
+        result = consume_once(engine, outbox_id, _execute)
+        assert result.needs_reconciliation is True
+        assert calls == []  # never blindly re-executed
+        recovered = consume_once(engine, outbox_id, _execute, reconcile=lambda: "exec-x")
+        assert recovered.consumed is True
+        assert recovered.deduplicated is True
+        assert recovered.execution_id == "exec-x"
+        assert calls == []
 
 
 @needs_pg
