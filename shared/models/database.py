@@ -409,3 +409,33 @@ class WebhookEvent(Base):
     raw = Column(JSON, nullable=False)
     received_at = Column(DateTime, default=_utcnow)
     created_at = Column(DateTime, default=_utcnow)
+
+
+class OutboxRow(Base):
+    """Durable dispatch record bridging inbox commit and queue publish.
+
+    Issue #113: closes the committed-but-never-dispatched window. The
+    inbox row and this row commit in ONE transaction (see
+    ``finance.ingestion.outbox.persist_inbox_and_outbox``); a leased
+    publisher (``finance.ingestion.publisher``) posts PENDING rows to
+    SQS. One outbox row per webhook event (unique on
+    ``webhook_event_id``); redelivery after publish-crash is absorbed
+    by consumer idempotency, never by a second row.
+    """
+
+    __tablename__ = "webhook_outbox"
+    __table_args__ = (UniqueConstraint("webhook_event_id", name="uq_webhook_outbox_event"),)
+    id = Column(String, primary_key=True)
+    tenant_id = Column(String, nullable=False, index=True)
+    webhook_event_id = Column(String, ForeignKey("webhook_events.id"), nullable=False)
+    provider = Column(String, nullable=False)
+    event_id = Column(String, nullable=False)
+    status = Column(String, nullable=False, default="PENDING")
+    payload_hash = Column(String, nullable=False)
+    attempts = Column(Integer, nullable=False, default=0)
+    leased_until = Column(DateTime, nullable=True)
+    last_error = Column(Text, nullable=True)
+    execution_id = Column(String, nullable=True)
+    created_at = Column(DateTime, default=_utcnow)
+    published_at = Column(DateTime, nullable=True)
+    consumed_at = Column(DateTime, nullable=True)
