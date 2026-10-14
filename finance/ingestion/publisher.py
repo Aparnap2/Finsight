@@ -46,8 +46,7 @@ class Publisher:
                     select(OutboxRow.id)
                     .where(
                         OutboxRow.status == "PENDING",
-                        (OutboxRow.leased_until.is_(None))
-                        | (OutboxRow.leased_until < now),
+                        (OutboxRow.leased_until.is_(None)) | (OutboxRow.leased_until < now),
                     )
                     .order_by(OutboxRow.created_at)
                     .limit(limit)
@@ -65,11 +64,7 @@ class Publisher:
                 .values(leased_until=leased_until, attempts=OutboxRow.attempts + 1)
             )
             session.commit()
-            rows = (
-                session.execute(select(OutboxRow).where(OutboxRow.id.in_(ids)))
-                .scalars()
-                .all()
-            )
+            rows = session.execute(select(OutboxRow).where(OutboxRow.id.in_(ids))).scalars().all()
             for row in rows:
                 session.expunge(row)
             return list(rows)
