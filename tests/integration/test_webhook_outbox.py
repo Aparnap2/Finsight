@@ -399,50 +399,92 @@ class TestPublisher:
 
 @needs_pg
 class TestConsumer:
-    def test_redelivery_single_effect(self, engine: Any) -> None:
-        from finance.ingestion.consumer import consume_once
-        from finance.ingestion.outbox import persist_inbox_and_outbox
-
-        effects: list[str] = []
-
-        def _execute() -> str:
-            effects.append(str(event.id))
-            return "exec-1"
-
-        with Session(engine) as session:
-            event, outbox, _ = persist_inbox_and_outbox(
-                session,
-                tenant_id="tenant-a",
-                provider="stripe",
-                envelope=_envelope("evt_cons_1"),
-                raw=b"{}",
-            )
-            assert outbox is not None
-            outbox_id = str(outbox.id)
-        first = consume_once(engine, outbox_id, _execute)
-        second = consume_once(engine, outbox_id, _execute)
-        assert first.consumed is True
-        assert second.deduplicated is True
-        assert second.execution_id == first.execution_id == "exec-1"
-        assert effects == [str(event.id)]
-
-    def test_live_claim_is_busy_never_double_executes(self, engine: Any) -> None:
-        from finance.ingestion.consumer import consume_once
+    def _published_id(self, engine: Any, event_key: str) -> str:
+        """Drive PENDING -> publisher claim -> PUBLISHED; return outbox id."""
         from finance.ingestion.outbox import persist_inbox_and_outbox
         from finance.ingestion.publisher import Publisher
 
-        calls: list[str] = []
         with Session(engine) as session:
             _, outbox, _ = persist_inbox_and_outbox(
                 session,
                 tenant_id="tenant-a",
                 provider="stripe",
-                envelope=_envelope("evt_cons_busy"),
+                envelope=_envelope(event_key),
                 raw=b"{}",
             )
             assert outbox is not None
             outbox_id = str(outbox.id)
-        Publisher(engine, lambda row: None).claim_due(limit=10)
+        pub = Publisher(engine, lambda row: None)
+        assert len(pub.claim_due(limit=10)) == 1
+        with Session(engine) as session:
+            row = session.execute(
+                text("SELECT id FROM webhook_outbox WHERE id = :id"), {"id": outbox_id}
+            ).scalar()
+            assert row is not None
+        # Re-read the claimed row for its token, then publish.
+        with Session(engine) as session:
+            from shared.models.database import OutboxRow
+
+            claimed = session.get(OutboxRow, outbox_id)
+            assert claimed is not None
+            assert pub.publish(claimed) is True
+        return outbox_id
+
+    def test_full_path_pending_to_consumed(self, engine: Any) -> None:
+        from finance.ingestion.consumer import consume_once
+
+        effects: list[str] = []
+        outbox_id = self._published_id(engine, "evt_cons_full")
+
+        def _execute() -> str:
+            effects.append("ran")
+            return "exec-1"
+
+        result = consume_once(engine, outbox_id, _execute)
+        assert result.consumed is True
+        assert result.deduplicated is False
+        assert result.execution_id == "exec-1"
+        assert effects == ["ran"]
+        with Session(engine) as session:
+            status = session.execute(
+                text("SELECT status FROM webhook_outbox WHERE id = :id"),
+                {"id": outbox_id},
+            ).scalar()
+        assert status == "CONSUMED"
+
+    def test_redelivery_single_effect(self, engine: Any) -> None:
+        from finance.ingestion.consumer import consume_once
+
+        effects: list[str] = []
+
+        def _execute() -> str:
+            effects.append("ran")
+            return "exec-1"
+
+        outbox_id = self._published_id(engine, "evt_cons_1")
+        first = consume_once(engine, outbox_id, _execute)
+        second = consume_once(engine, outbox_id, _execute)
+        assert first.consumed is True
+        assert second.deduplicated is True
+        assert second.execution_id == first.execution_id == "exec-1"
+        assert effects == ["ran"]
+
+    def test_live_claim_is_busy_never_double_executes(self, engine: Any) -> None:
+        from finance.ingestion.consumer import consume_once
+
+        calls: list[str] = []
+        outbox_id = self._published_id(engine, "evt_cons_busy")
+        # Another live worker holds a CONSUMING claim (fault injection).
+        with Session(engine) as session:
+            session.execute(
+                text(
+                    "UPDATE webhook_outbox SET status = 'CONSUMING', "
+                    "claimed_by = 'consumer', claim_token = 'tok-live', "
+                    "leased_until = now() + interval '1 hour' WHERE id = :id"
+                ),
+                {"id": outbox_id},
+            )
+            session.commit()
 
         def _noop() -> str:
             calls.append("ran")
@@ -455,28 +497,17 @@ class TestConsumer:
 
     def test_crashed_claim_needs_reconciliation_not_reexecution(self, engine: Any) -> None:
         from finance.ingestion.consumer import consume_once
-        from finance.ingestion.outbox import persist_inbox_and_outbox
-        from finance.ingestion.publisher import Publisher
 
         calls: list[str] = []
-        with Session(engine) as session:
-            _, outbox, _ = persist_inbox_and_outbox(
-                session,
-                tenant_id="tenant-a",
-                provider="stripe",
-                envelope=_envelope("evt_cons_crash"),
-                raw=b"{}",
-            )
-            assert outbox is not None
-            outbox_id = str(outbox.id)
-        Publisher(engine, lambda row: None).claim_due(limit=10)
-        # Crash: lease expires with no execution recorded (effect may
-        # or may not have run — outcome UNKNOWN).
+        outbox_id = self._published_id(engine, "evt_cons_crash")
+        # Crash: CONSUMING lease expires with no execution recorded —
+        # the effect may or may not have run (outcome UNKNOWN).
         with Session(engine) as session:
             session.execute(
                 text(
-                    "UPDATE webhook_outbox SET leased_until = now() - interval '1 hour' "
-                    "WHERE id = :id"
+                    "UPDATE webhook_outbox SET status = 'CONSUMING', "
+                    "claimed_by = 'consumer', claim_token = 'tok-dead', "
+                    "leased_until = now() - interval '1 hour' WHERE id = :id"
                 ),
                 {"id": outbox_id},
             )

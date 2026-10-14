@@ -1,22 +1,25 @@
 """Idempotent outbox consumer boundary (issue #113).
 
-Claim-first protocol (review finding 2): the durable claim happens
-BEFORE the effect executes, and crash recovery distinguishes
+Unified lifecycle with the publisher: PENDING → CLAIMED[publisher] →
+PUBLISHED → CONSUMING[consumer] → CONSUMED (+ TERMINAL dead-end).
+
+Claim-first protocol (review finding 2): the durable consumer claim
+happens BEFORE the effect executes, and crash recovery distinguishes
 "definitely did not happen" from "outcome unknown":
 
-- PENDING (or expired lease, no execution recorded) → atomically
-  claim → execute → record execution (CONSUMED). Only the claim
-  winner executes.
-- CLAIMED with a live lease → another worker is active: redrive
-  (return ``busy=True``), never execute twice.
-- CLAIMED with an expired lease and no recorded execution → the
+- PUBLISHED (lease free) → atomically claim → execute → fenced
+  record. Only the claim winner executes.
+- CONSUMING with a live lease → another worker is active: redrive
+  (``busy=True``), never execute twice.
+- CONSUMING with an expired lease and no recorded execution → the
   previous worker may or may not have executed: outcome UNKNOWN.
-  The consumer does NOT blindly re-execute; it calls the injected
-  ``reconcile`` hook (reconcile-against-source, then record), or
-  returns ``needs_reconciliation=True`` when no hook is configured.
+  Never blindly re-execute; call the injected ``reconcile`` hook, or
+  return ``needs_reconciliation=True`` when unconfigured.
 - CONSUMED → replay the recorded execution id, never re-execute.
 
-SQS delivery or acknowledgement is never proof of financial
+Completion and reconciliation writes are fenced on the consumer claim
+token (review finding): a superseded worker cannot overwrite a newer
+outcome. SQS delivery or acknowledgement is never proof of financial
 execution — only the recorded execution id counts.
 """
 
@@ -63,21 +66,20 @@ def consume_once(
         row = session.get(OutboxRow, outbox_id)
         if row is None:
             raise ValueError(f"Unknown outbox row: {outbox_id}")
-        if row.consumed_at is not None:
-            recorded = row.execution_id
-            return ConsumeResult(
-                consumed=True,
-                deduplicated=True,
-                execution_id=str(recorded) if recorded is not None else None,
-            )
         # ORM attributes type as Columns; read plain values for branching.
         status = str(row.status)
         leased_until = row.leased_until
         recorded_exec = row.execution_id
+        if row.consumed_at is not None:
+            return ConsumeResult(
+                consumed=True,
+                deduplicated=True,
+                execution_id=str(recorded_exec) if recorded_exec is not None else None,
+            )
         lease_live = leased_until is not None and leased_until > now
-        if status == "CLAIMED" and lease_live and recorded_exec is None:
+        if status == "CONSUMING" and lease_live and recorded_exec is None:
             return ConsumeResult(consumed=False, deduplicated=False, busy=True)
-        if status == "CLAIMED" and not lease_live and recorded_exec is None:
+        if status == "CONSUMING" and not lease_live and recorded_exec is None:
             # Previous claimant may have executed with an unrecorded
             # outcome: never blindly re-execute.
             if reconcile is None:
@@ -88,43 +90,69 @@ def consume_once(
                 # Still unknown: leave the row for the operator, do NOT
                 # record a false outcome and do NOT re-execute.
                 return ConsumeResult(consumed=False, deduplicated=False, needs_reconciliation=True)
-            _record(session, outbox_id, execution_id)
-            session.commit()
-            return ConsumeResult(consumed=True, deduplicated=True, execution_id=execution_id)
-        token = f"consume_{uuid.uuid4().hex[:16]}"
+            if _record(session, outbox_id, _token_of(session, outbox_id), execution_id):
+                session.commit()
+                return ConsumeResult(consumed=True, deduplicated=True, execution_id=execution_id)
+            return ConsumeResult(consumed=False, deduplicated=False, busy=True)
+        token = f"con_{uuid.uuid4().hex[:16]}"
         won = session.execute(
             update(OutboxRow)
             .where(
                 OutboxRow.id == outbox_id,
-                OutboxRow.status == "PENDING",
+                OutboxRow.status == "PUBLISHED",
                 (OutboxRow.leased_until.is_(None)) | (OutboxRow.leased_until < now),
             )
             .values(
-                status="CLAIMED",
+                status="CONSUMING",
+                claimed_by="consumer",
                 claim_token=token,
                 leased_until=now + timedelta(seconds=lease_seconds),
-                attempts=OutboxRow.attempts + 1,
             )
         ).rowcount
         session.commit()
         if not won:
             return ConsumeResult(consumed=False, deduplicated=False, busy=True)
         execution_id = execute()
-        _record(session, outbox_id, execution_id)
-        session.commit()
-        return ConsumeResult(consumed=True, deduplicated=False, execution_id=execution_id)
+        if _record(session, outbox_id, token, execution_id):
+            session.commit()
+            return ConsumeResult(consumed=True, deduplicated=False, execution_id=execution_id)
+        # Lost the claim mid-execution (superseded): the recorded outcome
+        # belongs to the newer owner; do not present ours as authoritative.
+        session.rollback()
+        return ConsumeResult(consumed=False, deduplicated=False, busy=True)
 
 
-def _record(session: Session, outbox_id: str, execution_id: str | None) -> None:
-    """Record the execution outcome on a claimed row."""
-    session.execute(
+def _token_of(session: Session, outbox_id: str) -> str | None:
+    """Read the current consumer claim token for fencing."""
+    row = session.get(OutboxRow, outbox_id)
+    if row is None:
+        return None
+    token = row.claim_token
+    return str(token) if token is not None else None
+
+
+def _record(session: Session, outbox_id: str, token: str | None, execution_id: str | None) -> bool:
+    """Record the execution outcome, fenced on the consumer claim token.
+
+    Returns True when this worker still owns the claim; False when a
+    newer claim superseded it (caller must not present its outcome).
+    """
+    if token is None:
+        return False
+    won = session.execute(
         update(OutboxRow)
-        .where(OutboxRow.id == outbox_id)
+        .where(
+            OutboxRow.id == outbox_id,
+            OutboxRow.status == "CONSUMING",
+            OutboxRow.claim_token == token,
+        )
         .values(
             consumed_at=datetime.now(UTC).replace(tzinfo=None),
             status="CONSUMED",
             execution_id=execution_id,
             leased_until=None,
             claim_token=None,
+            claimed_by=None,
         )
-    )
+    ).rowcount  # type: ignore[attr-defined]  # CursorResult at runtime
+    return bool(won)

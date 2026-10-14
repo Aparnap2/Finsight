@@ -30,6 +30,8 @@ def upgrade() -> None:
         sa.Column("attempts", sa.Integer(), nullable=False),
         sa.Column("leased_until", sa.DateTime(), nullable=True),
         sa.Column("claim_token", sa.String(), nullable=True),
+        sa.Column("claimed_by", sa.String(), nullable=True),
+        sa.Column("next_eligible_at", sa.DateTime(), nullable=True),
         sa.Column("last_error", sa.Text(), nullable=True),
         sa.Column("execution_id", sa.String(), nullable=True),
         sa.Column("created_at", sa.DateTime(), nullable=True),
