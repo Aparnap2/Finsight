@@ -342,6 +342,34 @@ class TestPublisher:
         assert status == "CLAIMED"
         assert worker_b.publish(fresh_claim) is True
 
+    def test_expired_unreclaimed_publish_refused_without_send(self, engine: Any) -> None:
+        from finance.ingestion.outbox import persist_inbox_and_outbox
+        from finance.ingestion.publisher import Publisher
+
+        sent: list[str] = []
+        with Session(engine) as session:
+            persist_inbox_and_outbox(
+                session,
+                tenant_id="tenant-a",
+                provider="stripe",
+                envelope=_envelope("evt_pub_expired"),
+                raw=b"{}",
+            )
+        worker = Publisher(engine, lambda row: sent.append(str(row.id)))
+        (claimed,) = worker.claim_due(limit=10)
+        # Lease lapses with no reclaimer: the claim is expired, so even
+        # the owning worker must not send on it — reclaim first.
+        with Session(engine) as session:
+            session.execute(
+                text(
+                    "UPDATE webhook_outbox SET leased_until = now() - interval '1 hour' "
+                    "WHERE status = 'CLAIMED'"
+                )
+            )
+            session.commit()
+        assert worker.publish(claimed) is False
+        assert sent == []
+
     def test_attempts_bounded_then_terminal(self, engine: Any) -> None:
         from finance.ingestion.outbox import persist_inbox_and_outbox
         from finance.ingestion.publisher import Publisher
