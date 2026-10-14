@@ -41,7 +41,7 @@ _BACKOFF_CAP_S = 3600
 
 def _backoff_seconds(attempts: int) -> int:
     """Bounded exponential backoff: 30s, 60s, ... capped at 1h."""
-    return int(min(_BACKOFF_BASE_S * (2**max(attempts - 1, 0)), _BACKOFF_CAP_S))
+    return int(min(_BACKOFF_BASE_S * (2 ** max(attempts - 1, 0)), _BACKOFF_CAP_S))
 
 
 class Publisher:
@@ -131,11 +131,14 @@ class Publisher:
         as with any at-least-once transport.
         """
         with Session(self._engine) as session:
+            now = datetime.now(UTC).replace(tzinfo=None)
             owner = session.execute(
                 select(OutboxRow.claim_token).where(
                     OutboxRow.id == row.id,
                     OutboxRow.status == "CLAIMED",
                     OutboxRow.claimed_by == "publisher",
+                    OutboxRow.leased_until.isnot(None),
+                    OutboxRow.leased_until > now,
                 )
             ).scalar_one_or_none()
             if owner is None or str(owner) != str(row.claim_token):
