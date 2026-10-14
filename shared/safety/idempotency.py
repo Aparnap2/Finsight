@@ -81,7 +81,11 @@ class IdempotencyStore:
             engine: Shared engine (tests and the executor pass the same
                 engine they use for the exception aggregate). When
                 omitted, a private in-memory SQLite database is used.
+                The omission is recorded in ``_volatile_backend`` so
+                production guards (``shared.safety.durability``) can
+                refuse it outside explicit unit-test use.
         """
+        self._volatile_backend = engine is None
         self._engine = engine or create_engine(
             "sqlite://",
             connect_args={"check_same_thread": False},
