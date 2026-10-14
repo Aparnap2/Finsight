@@ -81,16 +81,39 @@ def consume_once(
             return ConsumeResult(consumed=False, deduplicated=False, busy=True)
         if status == "CONSUMING" and not lease_live and recorded_exec is None:
             # Previous claimant may have executed with an unrecorded
-            # outcome: never blindly re-execute.
+            # outcome: never blindly re-execute. First acquire an
+            # EXCLUSIVE reconciliation claim (fenced on the observed
+            # token, so exactly one worker runs the hook); only the
+            # winner invokes reconcile(), and completion is fenced on
+            # the winner's token.
             if reconcile is None:
                 logger.warning("unreconciled claim requires operator: %s", outbox_id)
                 return ConsumeResult(consumed=False, deduplicated=False, needs_reconciliation=True)
+            observed_token = _token_of(session, outbox_id)
+            retoken = f"rec_{uuid.uuid4().hex[:16]}"
+            acquired = session.execute(
+                update(OutboxRow)
+                .where(
+                    OutboxRow.id == outbox_id,
+                    OutboxRow.status == "CONSUMING",
+                    OutboxRow.claim_token == observed_token,
+                    OutboxRow.leased_until < now,
+                    OutboxRow.execution_id.is_(None),
+                )
+                .values(
+                    claim_token=retoken,
+                    leased_until=now + timedelta(seconds=lease_seconds),
+                )
+            ).rowcount
+            session.commit()
+            if not acquired:
+                return ConsumeResult(consumed=False, deduplicated=False, busy=True)
             execution_id = reconcile()
             if execution_id is None:
                 # Still unknown: leave the row for the operator, do NOT
                 # record a false outcome and do NOT re-execute.
                 return ConsumeResult(consumed=False, deduplicated=False, needs_reconciliation=True)
-            if _record(session, outbox_id, _token_of(session, outbox_id), execution_id):
+            if _record(session, outbox_id, retoken, execution_id):
                 session.commit()
                 return ConsumeResult(consumed=True, deduplicated=True, execution_id=execution_id)
             return ConsumeResult(consumed=False, deduplicated=False, busy=True)

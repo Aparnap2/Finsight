@@ -332,6 +332,7 @@ class TestPublisher:
         assert str(fresh_claim.claim_token) != str(stale_claim.claim_token)
         # Stale worker A's publish/fail must not touch B's claim.
         assert worker_a.publish(stale_claim) is False
+        assert sent == []  # superseded worker never invokes the sender
         assert worker_a.fail(stale_claim, "late error") is False
         with Session(engine) as session:
             status = session.execute(
@@ -494,6 +495,41 @@ class TestConsumer:
         assert result.busy is True
         assert result.consumed is False
         assert calls == []
+
+    def test_concurrent_reconcile_runs_hook_once(self, engine: Any) -> None:
+        import threading
+        from concurrent.futures import ThreadPoolExecutor
+
+        from finance.ingestion.consumer import consume_once
+
+        outbox_id = self._published_id(engine, "evt_cons_race")
+        with Session(engine) as session:
+            session.execute(
+                text(
+                    "UPDATE webhook_outbox SET status = 'CONSUMING', "
+                    "claimed_by = 'consumer', claim_token = 'tok-dead', "
+                    "leased_until = now() - interval '1 hour' WHERE id = :id"
+                ),
+                {"id": outbox_id},
+            )
+            session.commit()
+        hook_calls: list[str] = []
+        gate = threading.Barrier(2)
+
+        def _racer(_n: int) -> Any:
+            gate.wait(timeout=10)
+
+            def _hook() -> str:
+                hook_calls.append("ran")
+                return "exec-race"
+
+            return consume_once(engine, outbox_id, lambda: "exec-race", reconcile=_hook)
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(_racer, (0, 1)))
+        assert hook_calls == ["ran"]  # exactly one reconciliation ran
+        assert sum(1 for r in results if r.consumed) == 1
+        assert sum(1 for r in results if r.busy) == 1
 
     def test_crashed_claim_needs_reconciliation_not_reexecution(self, engine: Any) -> None:
         from finance.ingestion.consumer import consume_once

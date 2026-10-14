@@ -123,9 +123,24 @@ class Publisher:
     def publish(self, row: OutboxRow) -> bool:
         """Send one claimed row; mark PUBLISHED only after sender returns.
 
-        Fenced on the claim token: returns False (row untouched) when
-        this worker no longer owns the claim.
+        Checks claim ownership BEFORE sending so a known-superseded
+        worker does not emit: returns False without invoking the
+        sender. A residual TOCTOU window remains (ownership can lapse
+        between check and send); the post-send fenced update plus
+        consumer idempotency cover the send-then-crash window, exactly
+        as with any at-least-once transport.
         """
+        with Session(self._engine) as session:
+            owner = session.execute(
+                select(OutboxRow.claim_token).where(
+                    OutboxRow.id == row.id,
+                    OutboxRow.status == "CLAIMED",
+                    OutboxRow.claimed_by == "publisher",
+                )
+            ).scalar_one_or_none()
+            if owner is None or str(owner) != str(row.claim_token):
+                logger.warning("stale publish refused before send (claim superseded)")
+                return False
         self._sender(row)
         with Session(self._engine) as session:
             won = session.execute(
