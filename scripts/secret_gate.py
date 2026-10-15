@@ -191,14 +191,14 @@ def _archive_findings(path: Path, rel: str) -> list[str]:
         elif suffix in (".tar", ".tgz") or suffix == ".gz":
             import contextlib
 
-            tar_members: list[tuple[str, Any]] = []
+            tar_members: list[tuple[str, int, Any]] = []
             archive = None
-            for mode in ("r:gz",) if suffix == ".gz" else ("r",):
+            for mode in "r:gz" if suffix == ".gz" else "r":
                 candidate = None
                 try:
                     # Managed manually (closed below): the winning handle
                     # must survive beyond this block.
-                    candidate = tarfile.open(path, mode[0])  # noqa: SIM115
+                    candidate = tarfile.open(path, mode)  # noqa: SIM115
                     for member in candidate.getmembers():
                         if member.isfile():
                             tar_members.append((member.name, member.size, member))
