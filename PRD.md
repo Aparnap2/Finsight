@@ -5,6 +5,14 @@
 
 ---
 
+## Product Scope Decision — 2026-10-15 (Governing)
+
+**COBOL is not a mandatory FinSight dependency.** The flagship workflow is Razorpay Test Mode + accounting records (QuickBooks or a clearly identified fixture/mock) + settlement reconciliation. COBOL-style fixed-width settlement processing and its S3 batch adapter are optional extensions, retained as reusable code pending a value assessment. Do not add COBOL-specific features or make the core workflow depend on a legacy ledger unless a concrete business scenario demonstrates material value and a testable resolution path.
+
+FinSight's product value is the controlled financial-resolution loop: **detect → reconcile deterministically → investigate with traceable evidence → propose a typed resolution → enforce policy and required human approval → execute through an idempotent boundary → independently reread authoritative state → close only after verification**.
+
+This scope decision does not relax safety invariants: deterministic money calculations, explicit authorization, proposal-bound approval, idempotency, immutable/auditable evidence, fail-closed behavior, and independent post-action verification remain mandatory. Existing COBOL/S3 code is not being deleted by this decision; it is simply not a required part of the flagship path.
+
 ## 1. Company Dossier — Meridian Commerce Pvt Ltd
 
 | Field | Value |
@@ -12,17 +20,21 @@
 | **Industry** | B2B commerce platform |
 | **Scale** | ~250 employees, ~1,500 merchants, ~20,000 payments/day via Razorpay |
 | **Finance** | 8 finance, 3 payment-ops, Finance Manager (approver ₹5k–50k), Director (>₹50k) |
-| **Environment** | Razorpay (provider state) + QuickBooks (accounting) + Google Sheets (expected settlement) + Gmail (context) + Slack (approval) + COBOL legacy settlement ledger (fixed-width batch file, **no HTTP**, S3 transport) |
+| **Core environment** | Razorpay Test Mode (provider/payment state) + accounting records (QuickBooks or explicit test fixture) + optional expected-settlement records + controlled approval/test-execution boundary. COBOL/S3 is optional. |
 
-**Environment is frozen.** No plugin platform, no connector builder.
+**Core workflow is frozen; legacy technology is not mandatory.** No plugin platform or connector builder. The flagship must work without COBOL.
 
 ```
-Razorpay ←settlement→ QuickBooks ←batch→ COBOL (fixed-width, 500 recs, via S3) 
-     ↕                    ↕                    ↕
- Sheets (expected 10,00,000)  Gmail (context)  Slack (Approve/Reject)
+Razorpay Test Mode ── settlement/payment evidence ──┐
+Accounting records (QuickBooks or test fixture) ───┼─> Deterministic reconciliation
+Expected records (when in scenario) ───────────────┘          │
+                                                   Evidence → Proposal → Policy/HITL
+                                                             → Test execution → Independent verify
 ```
 
-## 2. Problem — Manual Settlement Reconciliation (13 Steps)
+COBOL fixed-width/S3 remains an optional adapter for a separate scenario only.
+
+## 2. Historical Manual Flow — Legacy-Heavy Variant (13 Steps; Not Core Acceptance)
 
 Meridian does not lack an ERP. It lacks **continuous reasoning across systems**.
 
@@ -32,7 +44,7 @@ Daily flow is manual:
 2. Fees/refunds/adjustments extracted
 3. Expected looked up in Sheets
 4. QuickBooks entries checked
-5. COBOL batch checked
+5. Optional legacy batch checked (only when adapter is enabled)
 6. Variance = Expected − (QB + Legacy correlated) computed
 7. Gmail searched for context (refund request, fee notice)
 8. Hypotheses formed (fee mismatch? refund lag? legacy rejection?)
@@ -40,7 +52,7 @@ Daily flow is manual:
 10. Case history checked (`get_case_history`)
 11. Proposal drafted
 12. Approval chased on Slack
-13. Correction file built → S3 → COBOL → result polled → re-reconciled → closed
+13. If the optional legacy adapter is enabled: correction file → S3 → legacy result → re-reconcile. Core flow instead verifies the approved test action against authoritative provider/accounting state.
 
 Finance spends 60-80% of time on steps 1-10; strategic analysis starved; month-end errors spike.
 
@@ -56,7 +68,7 @@ FinSight is **not** AI analyst, chatbot, BI tool, ERP, generic CFO, or workflow 
 |-------|--------------|------------|
 | Razorpay | Provider state (capture, fee, refund, adjustment) | Accounting truth |
 | QuickBooks | Accounting truth (journal, debits==credits, period open/closed) | Provider state |
-| COBOL Legacy | Legacy settlement truth (accepted/rejected per batch, fixed-width) | HTTP API |
+| Optional COBOL adapter | Legacy settlement truth only when enabled (accepted/rejected per batch, fixed-width) | Core workflow dependency |
 | Sheets | Expected settlement (business expectation) | Execution |
 | Gmail / Slack | Context / Approval signal | Authority |
 | **FinSight** | **Reasoning state only:** `FinancialSituation`, `Investigation`, `Evidence`, `Hypothesis`, `ResolutionProposal`, `PolicyDecision`, `Approval`, `Execution`, `Verification`, `Audit` | **Facts** — it correlates, never invents |
@@ -69,7 +81,7 @@ FinancialSituation FS-2026-0916-00231
   expected: 10,00,000 (Sheets)
   razorpay_net: 9,72,500  [10,00,000 - 7,500 fee - 2,500 refund - 10,000 adjustment - 7,500 pending]
   quickbooks: 9,82,500
-  legacy: 9,82,500
+  optional legacy example: 9,82,500
   variance: 10,000
 ```
 
@@ -79,16 +91,16 @@ Variance is deterministic; FinSight reasons about **why**.
 
 **In (frozen):**
 
-- Settlement vs expected vs QuickBooks vs Legacy reconciliation (Decimal, tolerance `100` minor)
+- Razorpay settlement/payment vs accounting-record reconciliation (exact decimal/integer minor units); expected records are included when the scenario uses them. Legacy comparison is optional.
 - FinancialSituation lifecycle: `DETECTED → INVESTIGATING → EVIDENCE_READY → PROPOSED → POLICY_GATED → AWAITING_APPROVAL → APPROVED → EXECUTING → POST_VERIFYING → VERIFIED → CLOSED`
-- MeridianBusinessRules: refund <₹5k auto (if evidence complete), ₹5k–50k Manager, >₹50k Director; legacy correction always approval + valid account code + balanced batch; closed period → hard block
+- MeridianBusinessRules: refund <₹5k auto (if evidence complete), ₹5k–50k Manager, >₹50k Director; optional legacy correction, if enabled, requires approval + valid account code + balanced batch; closed period → hard block
 - Agent tools read-only + cognitive (allowlisted)
-- Slack HITL, S3 fixed-width batch transport, deterministic post-verify
+- Policy-gated human approval where required, controlled test-mode execution, independent deterministic post-verify. S3 fixed-width batch transport is optional.
 - FS-231 flagship (see §6)
 
 **Explicit non-goals (frozen):** Multi-tenant SaaS, Tenant/Plugin/WorkflowBuilder/CustomSchema UIs, Qdrant, Redpanda/Kafka, Temporal, K8s (until proven), real ERP close/packs/forecasts, Go services (P8 benchmark), arbitrary `execute_sql`/`call_any_api`/`send_any_http`, new AWS services (S3 stays transport only).
 
-## 5. Flagship Workflow — 11-Stage Cognitive Loop
+## 5. Flagship Workflow — 11-Stage Cognitive Loop (Core Path Does Not Require COBOL)
 
 ```
 Detect → Triage → Investigate → Correlate → Explain → Propose → Policy → Auto/HITL → Execute → Verify → Close
@@ -100,11 +112,13 @@ Detect → Triage → Investigate → Correlate → Explain → Propose → Poli
 4. **Correlate** — `compare_financial_states` (10,00,000 vs 9,72,500 vs 9,82,500)
 5. **Explain** — `create_hypothesis` 1-3 hypotheses, `record_evidence` (hash-chain)
 6. **Propose** — `propose_resolution` → ResolutionProposal (reprocess 10k, corrected account 4812) — `ResolutionProposal ≠ Execution`
-7. **Policy** — MeridianBusinessRules: legacy → HITL required
+7. **Policy** — MeridianBusinessRules: if optional legacy adapter is enabled → HITL required
 8. **Auto/HITL** — Slack Approve (pinned to proposal hash, single-decision)
-9. **Execute** — idempotent, sandbox/S3: `CORRECTION_20260916_231.DAT` via `finsight-legacy-outbound` bucket
-10. **Verify** — deterministic re-reconcile: 9,92,500 + pending 7,500 = 10,00,000 → EXECUTION_VERIFIED
+9. **Execute** — perform only the approved action through an idempotent test-mode boundary; optional legacy scenarios may use the retained S3 adapter
+10. **Verify** — independently reread authoritative provider/accounting state and deterministically re-reconcile before `EXECUTION_VERIFIED`
 11. **Close** — CLOSED + immutable audit
+
+**Optional legacy branch:** Steps that use `get_legacy_batch`, `get_legacy_rejections`, fixed-width correction files, or S3-to-COBOL execution run only when that adapter is explicitly enabled. They are not required for flagship acceptance.
 
 **Deterministic-first ROI:**
 
@@ -114,13 +128,13 @@ Detect → Triage → Investigate → Correlate → Explain → Propose → Poli
 | Materiality / classify | Owns | None |
 | Evidence gathering | Tool contracts own shape | Selects read-only tools |
 | Narrative | Confidence formula | Drafts hypotheses only |
-| Proposal + close | Policy + HITL + S3 + post-verify | Suggests template only |
+| Proposal + close | Policy + required HITL + permitted test action + independent post-verify | Suggests template only |
 
-Deterministic MVP must be demonstrably complete before P4: webhook→verify→dedup→normalize→reconcile→classify→evidence→proposal→policy→HITL→S3→post-verify→close, zero LLM calls for §6 fee-type cases. P4 upgrades ambiguous-evidence synthesis only.
+Deterministic MVP must be demonstrably complete before P4: webhook→verify→dedup→normalize→reconcile→classify→evidence→proposal→policy→required HITL→permitted test action→independent post-verify→close, zero LLM calls for §6 fee-type cases. P4 upgrades ambiguous-evidence synthesis only.
 
 ## 6. Safety Invariants I1–I10 (compact, preserved)
 
-I1 Decimal-only. I2 Pure deterministic reconcile. I3 Evidence immutable. I4 LLM no writes. I5 Proposal needs `EVIDENCE_VERIFIED`. I6 Approval bound to immutable proposal hash, single-decision. I7 Idempotent execution. I8 Sandbox/S3-only, real targets disabled (legacy via S3 is the sandbox boundary). I9 Mandatory post-execution re-verification. I10 No close without terminal verification.
+I1 Decimal-only. I2 Pure deterministic reconcile. I3 Evidence immutable. I4 LLM no writes. I5 Proposal needs `EVIDENCE_VERIFIED`. I6 Approval bound to immutable proposal hash, single-decision. I7 Idempotent execution. I8 Test-mode execution only; real targets disabled. S3 is required only by the optional legacy adapter. I9 Mandatory post-execution re-verification. I10 No close without terminal verification.
 
 **Company/environment boundary isolation** (reinterprets former tenant isolation): every path carries `company_id=meridian` + `environment` scope; store prefixes `{company_id}/{case_id}/...`; RLS `app.company_id`. Cross-company attempts fail closed `CompanyIsolationError` (formerly `TenantIsolationError`).
 
@@ -141,7 +155,7 @@ OpsCore contrast preserved: truth engine (verified verdict + evidence + receipt;
 
 ## 8. Milestones + P1 Gate
 
-P0 frozen (contracts + I1–I10 + FS model). P1 pure `finance/reconciliation/` (stdlib + Decimal). P2 Razorpay sandbox ingest. P3 QB mock + HITL + verify. P4 agentic investigation (thin SDKs Groq/OpenRouter/Local via `LLMProvider`). P5 flagship E2E `make e2e` FS-231. P6 chaos (duplicate/out-of-order/crash-after-execute/double-approve/lost-response/legacy partial). P7 promptfoo evals offline. P8 Go benchmark (criteria). P9 hardening.
+P0 frozen (contracts + I1–I10 + FS model). P1 pure `finance/reconciliation/` (stdlib + Decimal). P2 Razorpay sandbox ingest. P3 QB mock + HITL + verify. P4 agentic investigation (thin SDKs Groq/OpenRouter/Local via `LLMProvider`). P5 flagship E2E `make e2e` FS-231. P6 chaos (duplicate/out-of-order/crash-after-execute/double-approve/lost-response/optional legacy partial). P7 promptfoo evals offline. P8 Go benchmark (criteria). P9 hardening.
 
 **P1 gate:** `pytest tests/unit/reconciliation -q` + `ruff check` + `mypy --strict` green; exact match, FS-231 net 10,00,000→9,72,500→9,82,500 variance 10k, fee boundary, duplicate fingerprint, Decimal-only, tolerance boundary, order independence, company tolerance injection (`CompanyConfiguration`) — zero infra, zero LLM.
 
@@ -154,9 +168,9 @@ ADDED:   Company (single Meridian row)
          CompanyConfiguration { base_currency: INR, tolerance_minor: 100,
                                 auto_approval: 500000, legacy_correction_requires_approval: true }
          MeridianBusinessRules (refund tiers, legacy, closed period)
-         AccountMappings (Razorpay ↔ QB ↔ COBOL static)
+         AccountMappings (Razorpay ↔ QB core; optional legacy mappings only if enabled)
          FinancialOntology (variance types)
-         IntegrationRegistry (Razorpay, QuickBooks, Sheets, Gmail, Slack, COBOL/S3 — static)
+         IntegrationRegistry (core: Razorpay, QuickBooks/accounting records; optional: Sheets/Gmail/Slack/COBOL-S3 — static)
          FinancialSituation (central object)
 ```
 
@@ -167,7 +181,7 @@ No SaaS knobs. Config is code + Alembic migration, not UI.
 | Risk | Mitigation |
 |------|------------|
 | Sheets expected is business-owned (human error) | Cross-check vs Razorpay gross; evidence hash |
-| COBOL batch is half-unknown until result file | Protocol `LEGACY_BATCH_PROTOCOL.md` + control total + checksum |
+| Optional legacy batch is half-unknown until result file | Protocol `LEGACY_BATCH_PROTOCOL.md` + control total + checksum |
 | Gmail/Sheets free text prompt injection | Conext builder treats as DATA, never instruction (corpus) |
 | Slack approval phishing | Approval pinned to proposal hash; no Gmail-passed approvals |
 

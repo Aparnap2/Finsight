@@ -2,6 +2,15 @@
 
 ## What We Set Out to Solve (Meridian-Specific)
 
+## Product Scope Decision — 2026-10-15 (Governing)
+
+**COBOL is not a mandatory FinSight dependency.** The flagship workflow is Razorpay Test Mode + accounting records (QuickBooks or a clearly identified fixture/mock) + settlement reconciliation. COBOL-style fixed-width settlement processing and its S3 batch adapter are optional extensions, retained as reusable code pending a value assessment. Do not add COBOL-specific features or make the core workflow depend on a legacy ledger unless a concrete business scenario demonstrates material value and a testable resolution path.
+
+FinSight's product value is the controlled financial-resolution loop: **detect → reconcile deterministically → investigate with traceable evidence → propose a typed resolution → enforce policy and required human approval → execute through an idempotent boundary → independently reread authoritative state → close only after verification**.
+
+This scope decision does not relax safety invariants: deterministic money calculations, explicit authorization, proposal-bound approval, idempotency, immutable/auditable evidence, fail-closed behavior, and independent post-action verification remain mandatory. Existing COBOL/S3 code is not being deleted by this decision; it is simply not a required part of the flagship path.
+
+
 Meridian's finance team reconciles **settlement vs accounting vs expectation** daily across 6 systems. The business problem is not a missing ERP. It is **no continuous reasoning across systems** — a gap FinSight now fills as the Meridian Finance Resolution Agent.
 
 ### The Manual 13-Step Flow (Observed)
@@ -14,12 +23,12 @@ Meridian's finance team reconciles **settlement vs accounting vs expectation** d
 5. Net = gross - fees - refunds - adjustments (9,72,500) — manual Decimal
 6. Expected looked up in Sheets (10,00,000)
 7. QuickBooks entries checked (9,82,500)
-8. Legacy batch checked (9,82,500)
+8. Optional legacy batch checked (9,82,500, only when enabled)
 9. Variance computed (10,000)
 10. Gmail searched for context (fee notice? refund request? rejection?)
-11. Legacy rejections inspected (499/500 accepted, 1 INVALID_ACCOUNT_CODE 4812)
+11. Optional legacy rejections inspected (499/500 accepted, 1 INVALID_ACCOUNT_CODE 4812, only when enabled)
 12. Case history checked (prior FS for same merchant/batch)
-13. Proposal drafted → Slack approval → Correction file → S3 → COBOL → result → re-reconcile → close
+13. Proposal drafted → required approval → permitted test action → independent authoritative-state reread → re-reconcile → close. Legacy S3 batch is an optional branch.
 ```
 
 Steps 1-10 are mechanical but require domain judgment; steps 11-13 require human accountability. Today steps 1-12 are **manual**, error-prone, and scale linearly with merchant count.
@@ -32,7 +41,7 @@ Steps 1-10 are mechanical but require domain judgment; steps 11-13 require human
 | **Spreadsheet automation** | Macros drift, no audit trail for variance math |
 | **BI dashboards** | Show variance, not why; no hypothesis or evidence chain |
 | **LLM copilot** | Generates plausible text but cannot guarantee INR arithmetic; hallucinates figures |
-| **Generic ERP/reconciliation SaaS** | Assumes multi-tenant pluggability; Meridian needs COBOL fixed-width + S3 transport boundary, not a plugin platform |
+| **Generic ERP/reconciliation SaaS** | Assumes multi-tenant pluggability; Meridian needs a deterministic, evidence-backed resolution loop, not a plugin platform; legacy fixed-width + S3 is optional |
 
 ### Existing Systems Own Facts — FinSight Was Missing
 
@@ -40,7 +49,7 @@ Steps 1-10 are mechanical but require domain judgment; steps 11-13 require human
 |------|-----------|-----------------|
 | Provider net 9,72,500 | Razorpay | Analyst reconciles by hand |
 | Accounting 9,82,500 | QuickBooks (debits==credits, period open) | Analyst reconciles by hand |
-| Legacy 9,82,500 (plus 499/1 rejection) | COBOL | Analyst inspects batch file by hand |
+| Optional legacy 9,82,500 (plus 499/1 rejection) | COBOL adapter, only if enabled | Analyst inspects batch file by hand |
 | Expected 10,00,000 | Sheets | Analyst looks up by hand |
 | Context | Gmail | Analyst searches by hand |
 | Approval | Slack → Human | Analyst chases by DM |
@@ -52,15 +61,15 @@ Steps 1-10 are mechanical but require domain judgment; steps 11-13 require human
 1. **100% reconciliation accuracy.** `net_settlement`, `debits==credits`, variance are deterministic `Decimal`. Zero tolerance.
 2. **Audit-grade traceability.** Every claim traces to an authoritative source via hash-verified `EvidenceItem`. Claims without evidence remain `HYPOTHESIS`.
 3. **Hallucination-proof boundary.** LLM is restricted to: what is unusual, what to investigate, which hypothesis, is evidence enough. It never computes money, never approves, never executes.
-4. **Company-specific policy enforced in code.** Refund <₹5k auto (if complete) / ₹5k-50k Manager / >₹50k Director; legacy always approval + valid code + balanced batch; closed period never modify — `MeridianBusinessRules`, not SaaS knobs.
-5. **Legacy truth without HTTP.** Fixed-width batch via S3; control total + checksum; accepted/rejected/partial/duplicate semantics proven before close.
+4. **Company-specific policy enforced in code.** Refund <₹5k auto (if complete) / ₹5k-50k Manager / >₹50k Director; if optional legacy adapter is enabled, approval + valid code + balanced batch are required; closed period never modify — `MeridianBusinessRules`, not SaaS knobs.
+5. **Optional legacy extension.** If enabled, fixed-width batch via S3 must prove control total + checksum and accepted/rejected/partial/duplicate semantics before close; this is not a core acceptance criterion.
 6. **Measurable resolution.** Cases detected/resolved, exposure ₹, false-positive rate, 100% verification, bounded LLM cost.
 
 ---
 
 ## Problem Statement (One Sentence — Frozen)
 
-> Meridian's 8-person finance team spends 60-80% of settlement close time manually correlating Razorpay/QuickBooks/COBOL/Sheets/Gmail/Slack across 13 steps because no system owns continuous reasoning that can **detect a FinancialSituation (e.g. 10,00,000 vs 9,72,500 vs 9,82,500 variance 10,000) → investigate with evidence → propose a policy-gated resolution → execute via S3 batch → post-verify → close** with audit-grade proof, while existing systems remain the sole authorities for their facts.
+> Meridian's 8-person finance team spends 60-80% of settlement close time manually correlating Razorpay/QuickBooks/COBOL/Sheets/Gmail/Slack across 13 steps because no system owns continuous reasoning that can **detect a FinancialSituation (e.g. 10,00,000 vs 9,72,500 vs 9,82,500 variance 10,000) → investigate with evidence → propose a policy-gated resolution → execute through the permitted test boundary → independently verify authoritative state → close (S3 batch only in the optional legacy scenario)** with audit-grade proof, while existing systems remain the sole authorities for their facts.
 
 ## Success Criteria (Meridian)
 
