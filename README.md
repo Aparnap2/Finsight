@@ -4,6 +4,14 @@
 
 FinSight closes **FinancialSituations**, not transactions. Deterministic engines own every number; agents only gather evidence and draft proposals. No autonomous writes. Every close is evidence-backed, policy-gated, human-approved when required, and post-verified.
 
+## Product Scope Decision — 2026-10-15 (Governing)
+
+**COBOL is not a mandatory FinSight dependency.** The flagship workflow is Razorpay Test Mode + accounting records (QuickBooks or a clearly identified fixture/mock) + settlement reconciliation. COBOL-style fixed-width settlement processing and its S3 batch adapter are optional extensions, retained as reusable code pending a value assessment. Do not add COBOL-specific features or make the core workflow depend on a legacy ledger unless a concrete business scenario demonstrates material value and a testable resolution path.
+
+FinSight's product value is the controlled financial-resolution loop: **detect → reconcile deterministically → investigate with traceable evidence → propose a typed resolution → enforce policy and required human approval → execute through an idempotent boundary → independently reread authoritative state → close only after verification**.
+
+This scope decision does not relax safety invariants: deterministic money calculations, explicit authorization, proposal-bound approval, idempotency, immutable/auditable evidence, fail-closed behavior, and independent post-action verification remain mandatory. Existing COBOL/S3 code is not being deleted by this decision; it is simply not a required part of the flagship path.
+
 ## 1. Meridian Commerce Dossier — Frozen
 
 | Attribute | Value |
@@ -11,7 +19,7 @@ FinSight closes **FinancialSituations**, not transactions. Deterministic engines
 | **Company** | Meridian Commerce Pvt Ltd — B2B commerce platform |
 | **Scale** | ~250 employees, ~1,500 active merchants, ~20,000 payments/day |
 | **Finance team** | 8 finance, 3 payment-ops, Finance Manager + Director |
-| **Systems of record** | **Razorpay** (provider state), **QuickBooks** (accounting), **COBOL** legacy settlement ledger, **Google Sheets** (expected settlement), **Gmail** (context), **Slack** (approvals) |
+| **Systems of record** | **Razorpay** (provider/payment state), **QuickBooks** (accounting), **Google Sheets** (expected settlement where used), **Gmail** (context), **Slack** (human coordination/approval). COBOL/S3 is an optional legacy extension, not a core dependency. |
 
 ### Environment Diagram (frozen)
 
@@ -38,13 +46,11 @@ FinSight closes **FinancialSituations**, not transactions. Deterministic engines
                 (thresholds)     (Slack)          → External / Legacy → Verify → Close
 ```
 
-**COBOL ledger constraint:** Fixed-width batch file `CORRECTION_YYYYMMDD_XXX.DAT` (500 records), no HTTP, transported via S3. Result file returns accepted/rejected per record. FinSight owns reasoning state; **existing systems own facts**.
+**Optional legacy adapter:** Existing fixed-width batch/S3 code can model accepted/rejected records, but it is outside the required flagship path. Keep it reusable; do not expand it without a demonstrated business need. FinSight owns reasoning state; **authoritative systems own facts**.
 
 ## 2. Business Problem — Not Missing ERP
 
-Meridian does not lack an ERP. It lacks **continuous reasoning across 6 systems**. Daily settlement reconciliation is manual across **13 steps**:
-
-1. Razorpay payout received → 2. Fees/refunds/adjustments extracted → 3. Expected sheet looked up → 4. QuickBooks entries checked → 5. Legacy batch checked → 6. Variance computed → 7. Gmail context searched → 8. Hypotheses formed → 9. Legacy rejections inspected → 10. Case history checked → 11. Proposal drafted → 12. Approval chased on Slack → 13. Correction file built, S3-uploaded, result polled, reverified.
+Meridian does not lack an ERP. It lacks **continuous reasoning across 6 systems**. The flagship demonstration uses a bounded resolution loop: (1) ingest Razorpay Test Mode payment/settlement evidence, (2) compare it with accounting records and expected amounts, (3) create a durable discrepancy case, (4) investigate competing explanations against traceable evidence, (5) produce a typed resolution proposal, (6) apply deterministic policy and human approval where required, and (7) execute in the permitted test boundary, independently reread authoritative state, and close only after verification. Legacy batch inspection is an optional extension, not a prerequisite.
 
 Mechanically 60-80% of 8-person finance team time; analytically starved; error-prone under month-end load.
 
@@ -201,9 +207,9 @@ Dependency rule preserved: `shared ← finance ← agents ← apps`. No reverse 
 
 | Phase | What happens | Who |
 |-------|--------------|-----|
-| **Discovery (W1)** | Shadow 13-step manual flow, map 6 systems, freeze FS example, lock COBOL spec | FDE + Finance + Payment Ops |
+| **Discovery (W1)** | Shadow 13-step manual flow, map 6 systems, freeze FS example, confirm optional adapter value | FDE + Finance + Payment Ops |
 | **Solution Design (W2)** | FinancialSituation model, 11-stage loop, MeridianBusinessRules, IntegrationRegistry, S3 transport contract | Architect |
-| **Build (W3-5)** | Deterministic engines → agent tools → Slack HITL → S3 batch protocol → verifier → audit | Eng |
+| **Build (W3-5)** | Deterministic engines → agent tools → Slack HITL → controlled test-boundary protocol → verifier → audit | Eng |
 | **Deploy (W6)** | `API Gateway → FastAPI (apps/api) → RDS PostgreSQL / SQS → Workers → Agent (LangGraph) → Legacy (S3)` — healthchecks, RLS/company boundary isolation, secrets via env | DevSecOps |
 | **Measure (W7+)** | Cases detected/resolved, exposure ₹, false-positive rate, LLM cost/call | FDE + Finance Lead |
 
