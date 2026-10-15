@@ -23,7 +23,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from shared.models.database import OutboxRow
@@ -33,15 +33,6 @@ logger = logging.getLogger(__name__)
 
 #: Terminal state: attempts exhausted, awaiting operator — never auto-retried.
 STATUS_TERMINAL = "TERMINAL"
-
-#: Backoff base/cap for redelivery after failure (seconds).
-_BACKOFF_BASE_S = 30
-_BACKOFF_CAP_S = 3600
-
-
-def _backoff_seconds(attempts: int) -> int:
-    """Bounded exponential backoff: 30s, 60s, ... capped at 1h."""
-    return int(min(_BACKOFF_BASE_S * (2 ** max(attempts - 1, 0)), _BACKOFF_CAP_S))
 
 
 class Publisher:
@@ -171,20 +162,14 @@ class Publisher:
     def fail(self, row: OutboxRow, error: str) -> bool:
         """Record a sanitized failure; backoff-gated redelivery within budget.
 
-        Fenced on the claim token like publish. Returns False when this
-        worker no longer owns the claim.
+        Single atomic UPDATE fenced on the claim token: the affected-row
+        count IS the verdict, so a reclaim between check and write cannot
+        produce a false success. Returns False when this worker no longer
+        owns the claim. Backoff (30s·2ⁿ, 1h cap) is computed in-statement
+        from the row's own attempt count.
         """
         with Session(self._engine) as session:
-            current = session.execute(
-                select(OutboxRow.attempts).where(
-                    OutboxRow.id == row.id,
-                    OutboxRow.status == "CLAIMED",
-                    OutboxRow.claim_token == str(row.claim_token),
-                )
-            ).scalar_one_or_none()
-            if current is None:
-                return False
-            session.execute(
+            won = session.execute(
                 update(OutboxRow)
                 .where(
                     OutboxRow.id == row.id,
@@ -197,9 +182,17 @@ class Publisher:
                     last_error=redact_pii(error)[:500],
                     leased_until=None,
                     claim_token=None,
-                    next_eligible_at=datetime.now(UTC).replace(tzinfo=None)
-                    + timedelta(seconds=_backoff_seconds(int(current))),
+                    next_eligible_at=func.now()
+                    + func.make_interval(
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        func.least(30 * func.power(2, OutboxRow.attempts), 3600),
+                    ),
                 )
-            )
+            ).rowcount  # type: ignore[attr-defined]  # CursorResult at runtime
             session.commit()
-            return True
+            return bool(won)

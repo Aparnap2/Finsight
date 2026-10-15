@@ -370,6 +370,43 @@ class TestPublisher:
         assert worker.publish(claimed) is False
         assert sent == []
 
+    def test_stale_fail_reports_false(self, engine: Any) -> None:
+        """fail() on a superseded claim returns False (rowcount-verdict)."""
+        from finance.ingestion.outbox import persist_inbox_and_outbox
+        from finance.ingestion.publisher import Publisher
+
+        with Session(engine) as session:
+            event, _, _ = persist_inbox_and_outbox(
+                session,
+                tenant_id="tenant-a",
+                provider="stripe",
+                envelope=_envelope("evt_pub_stalefail"),
+                raw=b"{}",
+            )
+            event_id = str(event.id)
+        sent: list[str] = []
+        worker_a = Publisher(engine, lambda row: sent.append(str(row.id)))
+        (stale_claim,) = worker_a.claim_due(limit=10)
+        with Session(engine) as session:
+            session.execute(
+                text(
+                    "UPDATE webhook_outbox SET leased_until = now() - interval '1 hour' "
+                    "WHERE webhook_event_id = :id"
+                ),
+                {"id": event_id},
+            )
+            session.commit()
+        worker_b = Publisher(engine, lambda row: sent.append(str(row.id)))
+        (fresh_claim,) = worker_b.claim_due(limit=10)
+        assert worker_a.fail(stale_claim, "late error") is False
+        assert worker_b.fail(fresh_claim, "real error") is True
+        with Session(engine) as session:
+            stored = session.execute(
+                text("SELECT last_error FROM webhook_outbox WHERE webhook_event_id = :id"),
+                {"id": event_id},
+            ).scalar()
+        assert stored is not None and "real error" in stored
+
     def test_attempts_bounded_then_terminal(self, engine: Any) -> None:
         from finance.ingestion.outbox import persist_inbox_and_outbox
         from finance.ingestion.publisher import Publisher
