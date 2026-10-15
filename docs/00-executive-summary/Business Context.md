@@ -1,4 +1,13 @@
-# Business Context — Meridian Commerce Pvt Ltd (Frozen)
+# Business Context — Meridian Commerce Pvt Ltd
+
+## Product Scope Decision — 2026-10-15 (Governing)
+
+**COBOL is not a mandatory FinSight dependency.** The flagship workflow is Razorpay Test Mode + accounting records (QuickBooks or a clearly identified fixture/mock) + settlement reconciliation. COBOL-style fixed-width settlement processing and its S3 batch adapter are optional extensions, retained as reusable code pending a value assessment. Do not add COBOL-specific features or make the core workflow depend on a legacy ledger unless a concrete business scenario demonstrates material value and a testable resolution path.
+
+FinSight's product value is the controlled financial-resolution loop: **detect → reconcile deterministically → investigate with traceable evidence → propose a typed resolution → enforce policy and required human approval → execute through an idempotent boundary → independently reread authoritative state → close only after verification**.
+
+This scope decision does not relax safety invariants: deterministic money calculations, explicit authorization, proposal-bound approval, idempotency, immutable/auditable evidence, fail-closed behavior, and independent post-action verification remain mandatory. Existing COBOL/S3 code is not being deleted by this decision; it is simply not a required part of the flagship path.
+
 
 ## Company Dossier
 
@@ -17,7 +26,7 @@
                               │
    ┌──────────────┬───────────┼───────────┬──────────────┬──────────────┐
    │              │           │           │              │              │
-Razorpay      QuickBooks   COBOL Legacy  Google Sheets  Gmail          Slack
+Razorpay      QuickBooks   Optional COBOL legacy adapter  Google Sheets  Gmail          Slack
 (Payments)    (Accounting) (Settlement   (Expected       (Context)      (Approval)
               [Authority]   Ledger)      Settlement)                    Human HITL
 - payouts       - Journal     - Fixed-width  - Business    - search_     - Approve/Reject
