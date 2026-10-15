@@ -49,7 +49,7 @@ Razorpay      QuickBooks   Optional COBOL legacy adapter  Google Sheets  Gmail  
            FinancialSituation (central object)
 ```
 
-**Constraint:** COBOL legacy has no HTTP. FinSight writes `CORRECTION_YYYYMMDD_XXX.DAT` (fixed-width, 500 records, control total + hash) to S3 bucket `finsight-legacy-outbound`; legacy polls S3, processes, writes result file to `finsight-legacy-result`; FinSight ingests result, re-reconciles, closes. PostgreSQL remains financial/idempotency authority; S3 is transport only (same as `add-ministack-s3-contract`).
+**Optional legacy-adapter constraint (only if enabled):** COBOL legacy has no HTTP. FinSight writes `CORRECTION_YYYYMMDD_XXX.DAT` (fixed-width, 500 records, control total + hash) to S3 bucket `finsight-legacy-outbound`; legacy polls S3, processes, writes result file to `finsight-legacy-result`; FinSight ingests result, re-reconciles, closes. PostgreSQL remains financial/idempotency authority; S3 is transport only (same as `add-ministack-s3-contract`).
 
 ### Who FinSight Serves
 
@@ -67,14 +67,14 @@ FinancialSituation FS-2026-0916-00231
   expected: 10,00,000 (Sheets authority)
   razorpay_net: 9,72,500 (Razorpay authority: gross - fee - refund - adjustment)
   quickbooks: 9,82,500 (QuickBooks authority)
-  legacy: 9,82,500 (COBOL authority)
+  optional legacy example: 9,82,500 (COBOL authority)
   variance: 10,000 (FinSight correlates, deterministic maths)
   status: INVESTIGATING → ... → CLOSED (verified)
 ```
 
 FinSight owns: `FinancialSituation`, `Investigation`, `Evidence` (hash-verified, provenance), `Hypothesis`, `ResolutionProposal`, `PolicyDecision`, `Approval`, `Execution`, `Verification`, `Audit`.
 
-Existing systems own facts (provider state, accounting, legacy, expected, context, approval signal). FinSight never invents a fact; it correlates authoritative facts into a provable resolution.
+Existing systems own facts (provider and accounting are core; legacy, expected records, context, and approval signals are optional scenario integrations). FinSight never invents a fact; it correlates authoritative facts into a provable resolution.
 
 ## Architecture Freeze (Post Phase 3 + Meridian Bound)
 
