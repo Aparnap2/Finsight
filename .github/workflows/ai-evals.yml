@@ -65,6 +65,7 @@ jobs:
     # today, it must never run on push/PR — only manual dispatch.
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    permissions: {}
     timeout-minutes: 5
     steps:
       - name: Controlled eval gate (no provider calls)
