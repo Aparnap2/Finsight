@@ -100,7 +100,7 @@ Variance is deterministic; FinSight reasons about **why**.
 
 **Explicit non-goals (frozen):** Multi-tenant SaaS, Tenant/Plugin/WorkflowBuilder/CustomSchema UIs, Qdrant, Redpanda/Kafka, Temporal, K8s (until proven), real ERP close/packs/forecasts, Go services (P8 benchmark), arbitrary `execute_sql`/`call_any_api`/`send_any_http`, new AWS services (S3 stays transport only).
 
-## 5. Flagship Workflow — 11-Stage Cognitive Loop
+## 5. Flagship Workflow — 11-Stage Cognitive Loop (Core Path Does Not Require COBOL)
 
 ```
 Detect → Triage → Investigate → Correlate → Explain → Propose → Policy → Auto/HITL → Execute → Verify → Close
@@ -118,6 +118,8 @@ Detect → Triage → Investigate → Correlate → Explain → Propose → Poli
 10. **Verify** — independently reread authoritative provider/accounting state and deterministically re-reconcile before `EXECUTION_VERIFIED`
 11. **Close** — CLOSED + immutable audit
 
+**Optional legacy branch:** Steps that use `get_legacy_batch`, `get_legacy_rejections`, fixed-width correction files, or S3-to-COBOL execution run only when that adapter is explicitly enabled. They are not required for flagship acceptance.
+
 **Deterministic-first ROI:**
 
 | Work | Deterministic | LLM |
@@ -126,9 +128,9 @@ Detect → Triage → Investigate → Correlate → Explain → Propose → Poli
 | Materiality / classify | Owns | None |
 | Evidence gathering | Tool contracts own shape | Selects read-only tools |
 | Narrative | Confidence formula | Drafts hypotheses only |
-| Proposal + close | Policy + HITL + S3 + post-verify | Suggests template only |
+| Proposal + close | Policy + required HITL + permitted test action + independent post-verify | Suggests template only |
 
-Deterministic MVP must be demonstrably complete before P4: webhook→verify→dedup→normalize→reconcile→classify→evidence→proposal→policy→HITL→S3→post-verify→close, zero LLM calls for §6 fee-type cases. P4 upgrades ambiguous-evidence synthesis only.
+Deterministic MVP must be demonstrably complete before P4: webhook→verify→dedup→normalize→reconcile→classify→evidence→proposal→policy→required HITL→permitted test action→independent post-verify→close, zero LLM calls for §6 fee-type cases. P4 upgrades ambiguous-evidence synthesis only.
 
 ## 6. Safety Invariants I1–I10 (compact, preserved)
 
