@@ -192,7 +192,7 @@ def _archive_findings(path: Path, rel: str) -> list[str]:
             import contextlib
 
             tar_members: list[tuple[str, int, Any]] = []
-            archive: Any = None
+            tar_archive = None
             tar_mode: Literal["r:gz", "r"] = "r:gz" if suffix == ".gz" else "r"
             for mode in (tar_mode,):
                 candidate = None
@@ -203,7 +203,7 @@ def _archive_findings(path: Path, rel: str) -> list[str]:
                     for member in candidate.getmembers():
                         if member.isfile():
                             tar_members.append((member.name, member.size, member))
-                    archive = candidate
+                    tar_archive = candidate
                     candidate = None
                     break
                 except tarfile.TarError:
@@ -211,7 +211,7 @@ def _archive_findings(path: Path, rel: str) -> list[str]:
                 finally:
                     if candidate is not None:
                         candidate.close()
-            if archive is None:
+            if tar_archive is None:
                 if suffix != ".gz":
                     # No tar mode could open this file: corrupt, fail closed.
                     print(f"SCAN_ERROR unreadable archive {rel}")
@@ -224,12 +224,12 @@ def _archive_findings(path: Path, rel: str) -> list[str]:
                         raise SystemExit(2) from None
                 members = [(path.name, blob)]
             else:
-                with contextlib.closing(archive):
+                with contextlib.closing(tar_archive):
                     for member_name, declared, member in tar_members:
                         if declared > _MAX_MEMBER_BYTES:
                             print(f"SCAN_ERROR oversized archive member {rel}!{member_name}")
                             raise SystemExit(2)
-                        extracted = archive.extractfile(member)
+                        extracted = tar_archive.extractfile(member)
                         if extracted is None:
                             continue
                         try:
