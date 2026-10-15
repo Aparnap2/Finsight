@@ -2,6 +2,15 @@
 
 ## What We Set Out to Solve (Meridian-Specific)
 
+## Product Scope Decision — 2026-10-15 (Governing)
+
+**COBOL is not a mandatory FinSight dependency.** The flagship workflow is Razorpay Test Mode + accounting records (QuickBooks or a clearly identified fixture/mock) + settlement reconciliation. COBOL-style fixed-width settlement processing and its S3 batch adapter are optional extensions, retained as reusable code pending a value assessment. Do not add COBOL-specific features or make the core workflow depend on a legacy ledger unless a concrete business scenario demonstrates material value and a testable resolution path.
+
+FinSight's product value is the controlled financial-resolution loop: **detect → reconcile deterministically → investigate with traceable evidence → propose a typed resolution → enforce policy and required human approval → execute through an idempotent boundary → independently reread authoritative state → close only after verification**.
+
+This scope decision does not relax safety invariants: deterministic money calculations, explicit authorization, proposal-bound approval, idempotency, immutable/auditable evidence, fail-closed behavior, and independent post-action verification remain mandatory. Existing COBOL/S3 code is not being deleted by this decision; it is simply not a required part of the flagship path.
+
+
 Meridian's finance team reconciles **settlement vs accounting vs expectation** daily across 6 systems. The business problem is not a missing ERP. It is **no continuous reasoning across systems** — a gap FinSight now fills as the Meridian Finance Resolution Agent.
 
 ### The Manual 13-Step Flow (Observed)
@@ -32,7 +41,7 @@ Steps 1-10 are mechanical but require domain judgment; steps 11-13 require human
 | **Spreadsheet automation** | Macros drift, no audit trail for variance math |
 | **BI dashboards** | Show variance, not why; no hypothesis or evidence chain |
 | **LLM copilot** | Generates plausible text but cannot guarantee INR arithmetic; hallucinates figures |
-| **Generic ERP/reconciliation SaaS** | Assumes multi-tenant pluggability; Meridian needs COBOL fixed-width + S3 transport boundary, not a plugin platform |
+| **Generic ERP/reconciliation SaaS** | Assumes multi-tenant pluggability; Meridian needs optional legacy fixed-width + S3 transport boundary, not a plugin platform |
 
 ### Existing Systems Own Facts — FinSight Was Missing
 
