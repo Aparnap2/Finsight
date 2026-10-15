@@ -28,6 +28,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 HIGH_SIGNAL = re.compile(
     r"AKIA[0-9A-Z]{16}"
@@ -141,6 +142,26 @@ def _scan_text_blob(blob: bytes, origin: str) -> list[str]:
     return findings
 
 
+class _OverrunError(Exception):
+    """Decompressed read exceeded its bound (zip-bomb guard)."""
+
+
+def _bounded_read(stream: Any, cap: int, origin: str, total: list[int]) -> bytes:
+    """Stream at most cap+1 bytes; fail closed on overrun or total breach."""
+    chunks: list[bytes] = []
+    remaining = cap + 1
+    while True:
+        piece = stream.read(min(65536, remaining))
+        if not piece:
+            break
+        chunks.append(piece)
+        remaining -= len(piece)
+        total[0] += len(piece)
+        if remaining <= 0 or total[0] > _MAX_ARCHIVE_BYTES:
+            raise _OverrunError(origin)
+    return b"".join(chunks)
+
+
 def _archive_findings(path: Path, rel: str) -> list[str]:
     """Inspect archive member names and decodable member text."""
     import gzip
@@ -149,57 +170,84 @@ def _archive_findings(path: Path, rel: str) -> list[str]:
 
     findings: list[str] = []
     suffix = path.suffix.lower()
+    members: list[tuple[str, bytes]] = []
+    total = [0]
     try:
         if suffix in (".zip", ".whl"):
             with zipfile.ZipFile(path) as archive:
-                members = [
-                    (info.filename, archive.read(info))
-                    for info in archive.infolist()
-                    if not info.is_dir()
-                ]
-        elif suffix in (".tar", ".tgz"):
-            with tarfile.open(path, "r") as archive:
-                members = []
-                for member in archive.getmembers():
-                    if not member.isfile():
+                for info in archive.infolist():
+                    if info.is_dir():
                         continue
-                    extracted = archive.extractfile(member)
-                    if extracted is None:
-                        continue
-                    members.append((member.name, extracted.read()))
-        elif suffix == ".gz":
-            try:
-                with tarfile.open(path, "r:gz") as archive:
-                    members = []
-                    for member in archive.getmembers():
-                        if not member.isfile():
-                            continue
+                    if info.file_size > _MAX_MEMBER_BYTES:
+                        print(f"SCAN_ERROR oversized archive member {rel}!{info.filename}")
+                        raise SystemExit(2)
+                    with archive.open(info) as stream:
+                        try:
+                            blob = _bounded_read(stream, _MAX_MEMBER_BYTES, info.filename, total)
+                        except _OverrunError:
+                            print(f"SCAN_ERROR oversized archive member {rel}!{info.filename}")
+                            raise SystemExit(2) from None
+                    members.append((info.filename, blob))
+        elif suffix in (".tar", ".tgz") or suffix == ".gz":
+            import contextlib
+
+            tar_members: list[tuple[str, Any]] = []
+            archive = None
+            for mode in ("r:gz",) if suffix == ".gz" else ("r",):
+                candidate = None
+                try:
+                    # Managed manually (closed below): the winning handle
+                    # must survive beyond this block.
+                    candidate = tarfile.open(path, mode[0])  # noqa: SIM115
+                    for member in candidate.getmembers():
+                        if member.isfile():
+                            tar_members.append((member.name, member.size, member))
+                    archive = candidate
+                    candidate = None
+                    break
+                except tarfile.TarError:
+                    continue
+                finally:
+                    if candidate is not None:
+                        candidate.close()
+            if archive is None:
+                if suffix != ".gz":
+                    # No tar mode could open this file: corrupt, fail closed.
+                    print(f"SCAN_ERROR unreadable archive {rel}")
+                    raise SystemExit(2)
+                with gzip.open(path, "rb") as handle:
+                    try:
+                        blob = _bounded_read(handle, _MAX_ARCHIVE_BYTES, rel, total)
+                    except _OverrunError:
+                        print(f"SCAN_ERROR archive too large to scan {rel}")
+                        raise SystemExit(2) from None
+                members = [(path.name, blob)]
+            else:
+                with contextlib.closing(archive):
+                    for member_name, declared, member in tar_members:
+                        if declared > _MAX_MEMBER_BYTES:
+                            print(f"SCAN_ERROR oversized archive member {rel}!{member_name}")
+                            raise SystemExit(2)
                         extracted = archive.extractfile(member)
                         if extracted is None:
                             continue
-                        members.append((member.name, extracted.read()))
-            except tarfile.TarError:
-                with gzip.open(path, "rb") as handle:
-                    members = [(path.name, handle.read())]
+                        try:
+                            blob = _bounded_read(extracted, _MAX_MEMBER_BYTES, member_name, total)
+                        except _OverrunError:
+                            print(f"SCAN_ERROR oversized archive member {rel}!{member_name}")
+                            raise SystemExit(2) from None
+                        members.append((member_name, blob))
         else:
             return findings
     except (OSError, EOFError, zipfile.BadZipFile, tarfile.TarError) as exc:
         print(f"SCAN_ERROR unreadable archive {rel}: {exc}")
         raise SystemExit(2) from exc
-    total = 0
     for member_name, blob in members:
         if _member_name_hit(member_name):
             findings.append(f"{rel}!{member_name}: blocked member name")
             continue
         if Path(member_name).suffix.lower() in BINARY_SUFFIXES:
             continue
-        if len(blob) > _MAX_MEMBER_BYTES:
-            print(f"SCAN_ERROR oversized archive member {rel}!{member_name}")
-            raise SystemExit(2)
-        total += len(blob)
-        if total > _MAX_ARCHIVE_BYTES:
-            print(f"SCAN_ERROR archive too large to scan {rel}")
-            raise SystemExit(2)
         findings.extend(_scan_text_blob(blob, f"{rel}!{member_name}"))
     return findings
 

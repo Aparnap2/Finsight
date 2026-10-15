@@ -215,6 +215,30 @@ class TestSecretGate:
         assert proc.returncode == 2
         assert "SCAN_ERROR" in proc.stdout
 
+    def test_streaming_read_is_bounded(self, tmp_path: Path) -> None:
+        import importlib.util
+        import io
+        import sys
+
+        gate_path = Path(__file__).resolve().parents[3] / "scripts" / "secret_gate.py"
+        spec = importlib.util.spec_from_file_location("secret_gate_probe", gate_path)
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        sys.modules["secret_gate_probe"] = module
+        spec.loader.exec_module(module)
+        # A stream claiming little but yielding much must trip the cap
+        # without materializing the whole payload.
+        lying = io.BytesIO(b"y" * 3_000_000)
+        total = [0]
+        try:
+            module._bounded_read(lying, 1_000_000, "probe", total)
+        except module._OverrunError:
+            pass
+        else:
+            raise AssertionError("overrun stream was not stopped")
+        assert lying.tell() <= 1_000_000 + 65536
+        assert total[0] <= 1_000_000 + 65536
+
     def test_git_missing_fails_closed(self, tmp_path: Path) -> None:
         import os
 
