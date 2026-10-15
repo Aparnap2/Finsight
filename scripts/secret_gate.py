@@ -28,7 +28,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 HIGH_SIGNAL = re.compile(
     r"AKIA[0-9A-Z]{16}"
@@ -192,8 +192,9 @@ def _archive_findings(path: Path, rel: str) -> list[str]:
             import contextlib
 
             tar_members: list[tuple[str, int, Any]] = []
-            archive = None
-            for mode in "r:gz" if suffix == ".gz" else "r":
+            archive: Any = None
+            tar_mode: Literal["r:gz", "r"] = "r:gz" if suffix == ".gz" else "r"
+            for mode in (tar_mode,):
                 candidate = None
                 try:
                     # Managed manually (closed below): the winning handle
