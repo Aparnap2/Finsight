@@ -5,6 +5,14 @@
 
 ---
 
+## Product Scope Decision — 2026-10-15 (Governing)
+
+**COBOL is not a mandatory FinSight dependency.** The flagship workflow is Razorpay Test Mode + accounting records (QuickBooks or a clearly identified fixture/mock) + settlement reconciliation. COBOL-style fixed-width settlement processing and its S3 batch adapter are optional extensions, retained as reusable code pending a value assessment. Do not add COBOL-specific features or make the core workflow depend on a legacy ledger unless a concrete business scenario demonstrates material value and a testable resolution path.
+
+FinSight's product value is the controlled financial-resolution loop: **detect → reconcile deterministically → investigate with traceable evidence → propose a typed resolution → enforce policy and required human approval → execute through an idempotent boundary → independently reread authoritative state → close only after verification**.
+
+This scope decision does not relax safety invariants: deterministic money calculations, explicit authorization, proposal-bound approval, idempotency, immutable/auditable evidence, fail-closed behavior, and independent post-action verification remain mandatory. Existing COBOL/S3 code is not being deleted by this decision; it is simply not a required part of the flagship path.
+
 ## 1. Company Dossier — Meridian Commerce Pvt Ltd
 
 | Field | Value |
@@ -12,15 +20,19 @@
 | **Industry** | B2B commerce platform |
 | **Scale** | ~250 employees, ~1,500 merchants, ~20,000 payments/day via Razorpay |
 | **Finance** | 8 finance, 3 payment-ops, Finance Manager (approver ₹5k–50k), Director (>₹50k) |
-| **Environment** | Razorpay (provider state) + QuickBooks (accounting) + Google Sheets (expected settlement) + Gmail (context) + Slack (approval) + COBOL legacy settlement ledger (fixed-width batch file, **no HTTP**, S3 transport) |
+| **Core environment** | Razorpay Test Mode (provider/payment state) + accounting records (QuickBooks or explicit test fixture) + optional expected-settlement records + controlled approval/test-execution boundary. COBOL/S3 is optional. |
 
-**Environment is frozen.** No plugin platform, no connector builder.
+**Core workflow is frozen; legacy technology is not mandatory.** No plugin platform or connector builder. The flagship must work without COBOL.
 
 ```
-Razorpay ←settlement→ QuickBooks ←batch→ COBOL (fixed-width, 500 recs, via S3) 
-     ↕                    ↕                    ↕
- Sheets (expected 10,00,000)  Gmail (context)  Slack (Approve/Reject)
+Razorpay Test Mode ── settlement/payment evidence ──┐
+Accounting records (QuickBooks or test fixture) ───┼─> Deterministic reconciliation
+Expected records (when in scenario) ───────────────┘          │
+                                                   Evidence → Proposal → Policy/HITL
+                                                             → Test execution → Independent verify
 ```
+
+COBOL fixed-width/S3 remains an optional adapter for a separate scenario only.
 
 ## 2. Problem — Manual Settlement Reconciliation (13 Steps)
 
@@ -79,11 +91,11 @@ Variance is deterministic; FinSight reasons about **why**.
 
 **In (frozen):**
 
-- Settlement vs expected vs QuickBooks vs Legacy reconciliation (Decimal, tolerance `100` minor)
+- Razorpay settlement/payment vs accounting-record reconciliation (exact decimal/integer minor units); expected records are included when the scenario uses them. Legacy comparison is optional.
 - FinancialSituation lifecycle: `DETECTED → INVESTIGATING → EVIDENCE_READY → PROPOSED → POLICY_GATED → AWAITING_APPROVAL → APPROVED → EXECUTING → POST_VERIFYING → VERIFIED → CLOSED`
-- MeridianBusinessRules: refund <₹5k auto (if evidence complete), ₹5k–50k Manager, >₹50k Director; legacy correction always approval + valid account code + balanced batch; closed period → hard block
+- MeridianBusinessRules: refund <₹5k auto (if evidence complete), ₹5k–50k Manager, >₹50k Director; optional legacy correction, if enabled, requires approval + valid account code + balanced batch; closed period → hard block
 - Agent tools read-only + cognitive (allowlisted)
-- Slack HITL, S3 fixed-width batch transport, deterministic post-verify
+- Policy-gated human approval where required, controlled test-mode execution, independent deterministic post-verify. S3 fixed-width batch transport is optional.
 - FS-231 flagship (see §6)
 
 **Explicit non-goals (frozen):** Multi-tenant SaaS, Tenant/Plugin/WorkflowBuilder/CustomSchema UIs, Qdrant, Redpanda/Kafka, Temporal, K8s (until proven), real ERP close/packs/forecasts, Go services (P8 benchmark), arbitrary `execute_sql`/`call_any_api`/`send_any_http`, new AWS services (S3 stays transport only).
@@ -102,8 +114,8 @@ Detect → Triage → Investigate → Correlate → Explain → Propose → Poli
 6. **Propose** — `propose_resolution` → ResolutionProposal (reprocess 10k, corrected account 4812) — `ResolutionProposal ≠ Execution`
 7. **Policy** — MeridianBusinessRules: legacy → HITL required
 8. **Auto/HITL** — Slack Approve (pinned to proposal hash, single-decision)
-9. **Execute** — idempotent, sandbox/S3: `CORRECTION_20260916_231.DAT` via `finsight-legacy-outbound` bucket
-10. **Verify** — deterministic re-reconcile: 9,92,500 + pending 7,500 = 10,00,000 → EXECUTION_VERIFIED
+9. **Execute** — perform only the approved action through an idempotent test-mode boundary; optional legacy scenarios may use the retained S3 adapter
+10. **Verify** — independently reread authoritative provider/accounting state and deterministically re-reconcile before `EXECUTION_VERIFIED`
 11. **Close** — CLOSED + immutable audit
 
 **Deterministic-first ROI:**
@@ -156,7 +168,7 @@ ADDED:   Company (single Meridian row)
          MeridianBusinessRules (refund tiers, legacy, closed period)
          AccountMappings (Razorpay ↔ QB ↔ COBOL static)
          FinancialOntology (variance types)
-         IntegrationRegistry (Razorpay, QuickBooks, Sheets, Gmail, Slack, COBOL/S3 — static)
+         IntegrationRegistry (core: Razorpay, QuickBooks/accounting records; optional: Sheets/Gmail/Slack/COBOL-S3 — static)
          FinancialSituation (central object)
 ```
 
@@ -167,7 +179,7 @@ No SaaS knobs. Config is code + Alembic migration, not UI.
 | Risk | Mitigation |
 |------|------------|
 | Sheets expected is business-owned (human error) | Cross-check vs Razorpay gross; evidence hash |
-| COBOL batch is half-unknown until result file | Protocol `LEGACY_BATCH_PROTOCOL.md` + control total + checksum |
+| Optional legacy batch is half-unknown until result file | Protocol `LEGACY_BATCH_PROTOCOL.md` + control total + checksum |
 | Gmail/Sheets free text prompt injection | Conext builder treats as DATA, never instruction (corpus) |
 | Slack approval phishing | Approval pinned to proposal hash; no Gmail-passed approvals |
 
