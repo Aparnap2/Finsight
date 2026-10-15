@@ -60,15 +60,15 @@ SKIP_DIRS = {
     "build",
     ".next",
 }
-BLOCKED_NAMES = (".pem", "id_rsa")
+BLOCKED_SUFFIXES = (".pem",)
+BLOCKED_PREFIXES = ("id_rsa",)
 
 #: Well-known placeholder tokens that are never real secrets.
 PLACEHOLDERS = frozenset({"redacted", "example", "placeholder", "changeme", "yourkey", "testkey"})
 
 #: Known-binary asset suffixes skipped by extension (auditable list).
-#: Everything else is decoded after NUL-stripping and scanned; undecodable
-#: remainder fails closed. Unknown binaries (e.g. `.bin`) are scanned,
-#: not skipped — a NUL-padded secret in one still flags.
+#: Archive formats (.zip/.whl/.tar/.gz) are NOT skipped: their member
+#: names and decodable contents are inspected instead (see below).
 BINARY_SUFFIXES = frozenset(
     {
         ".png",
@@ -83,16 +83,19 @@ BINARY_SUFFIXES = frozenset(
         ".eot",
         ".otf",
         ".pdf",
-        ".zip",
-        ".gz",
-        ".tar",
-        ".whl",
         ".so",
         ".dylib",
         ".dll",
         ".exe",
     }
 )
+
+#: Archive suffixes whose members are inspected (names + decodable text).
+ARCHIVE_SUFFIXES = frozenset({".zip", ".whl", ".tar", ".tgz", ".gz"})
+
+#: Per-member and per-archive read caps (fail-closed, not silent skip).
+_MAX_MEMBER_BYTES = 1_000_000
+_MAX_ARCHIVE_BYTES = 5_000_000
 
 
 def _is_placeholder(token: str) -> bool:
@@ -112,27 +115,143 @@ def _canary_hit(text: str) -> bool:
     return False
 
 
+def _member_name_hit(member: str) -> bool:
+    """Return True when an archive member name is itself blocked."""
+    base = member.rsplit("/", 1)[-1]
+    return (
+        base.endswith(BLOCKED_SUFFIXES)
+        or base.startswith(BLOCKED_PREFIXES)
+        or (base.startswith(".env.") and base != ".env.example")
+        or base == ".env"
+    )
+
+
+def _scan_text_blob(blob: bytes, origin: str) -> list[str]:
+    """Scan decodable bytes; fail closed when undecodable."""
+    try:
+        text = blob.replace(b"\x00", b"").decode("utf-8")
+    except UnicodeDecodeError as exc:
+        print(f"SCAN_ERROR undecodable text {origin}: {exc}")
+        raise SystemExit(2) from exc
+    findings: list[str] = []
+    if HIGH_SIGNAL.search(text):
+        findings.append(f"{origin}: high-signal secret shape")
+    elif _canary_hit(text):
+        findings.append(f"{origin}: canary secret shape")
+    return findings
+
+
+def _archive_findings(path: Path, rel: str) -> list[str]:
+    """Inspect archive member names and decodable member text."""
+    import gzip
+    import tarfile
+    import zipfile
+
+    findings: list[str] = []
+    suffix = path.suffix.lower()
+    try:
+        if suffix in (".zip", ".whl"):
+            with zipfile.ZipFile(path) as archive:
+                members = [
+                    (info.filename, archive.read(info))
+                    for info in archive.infolist()
+                    if not info.is_dir()
+                ]
+        elif suffix in (".tar", ".tgz"):
+            with tarfile.open(path, "r") as archive:
+                members = []
+                for member in archive.getmembers():
+                    if not member.isfile():
+                        continue
+                    extracted = archive.extractfile(member)
+                    if extracted is None:
+                        continue
+                    members.append((member.name, extracted.read()))
+        elif suffix == ".gz":
+            try:
+                with tarfile.open(path, "r:gz") as archive:
+                    members = []
+                    for member in archive.getmembers():
+                        if not member.isfile():
+                            continue
+                        extracted = archive.extractfile(member)
+                        if extracted is None:
+                            continue
+                        members.append((member.name, extracted.read()))
+            except tarfile.TarError:
+                with gzip.open(path, "rb") as handle:
+                    members = [(path.name, handle.read())]
+        else:
+            return findings
+    except (OSError, EOFError, zipfile.BadZipFile, tarfile.TarError) as exc:
+        print(f"SCAN_ERROR unreadable archive {rel}: {exc}")
+        raise SystemExit(2) from exc
+    total = 0
+    for member_name, blob in members:
+        if _member_name_hit(member_name):
+            findings.append(f"{rel}!{member_name}: blocked member name")
+            continue
+        if Path(member_name).suffix.lower() in BINARY_SUFFIXES:
+            continue
+        if len(blob) > _MAX_MEMBER_BYTES:
+            print(f"SCAN_ERROR oversized archive member {rel}!{member_name}")
+            raise SystemExit(2)
+        total += len(blob)
+        if total > _MAX_ARCHIVE_BYTES:
+            print(f"SCAN_ERROR archive too large to scan {rel}")
+            raise SystemExit(2)
+        findings.extend(_scan_text_blob(blob, f"{rel}!{member_name}"))
+    return findings
+
+
 def _venv_roots(root: Path) -> list[Path]:
     """Directories containing pyvenv.cfg (virtualenvs by marker, not name)."""
-    return [p.parent for p in root.glob("*/pyvenv.cfg")]
+    return [p.parent for p in root.rglob("pyvenv.cfg")]
 
 
 def _iter_files(root: Path) -> list[Path]:
-    """Collect scannable files, skipping dependency and cache trees."""
+    """Collect scannable files, skipping dependency and cache trees.
+
+    Uses os.walk with an error handler: unreadable subtrees fail closed
+    (pathlib.rglob silently skips them, contradicting this gate).
+    """
+    import os
+
     collected: list[Path] = []
+    failures: list[str] = []
+
+    def _onerror(exc: OSError) -> None:
+        failures.append(f"{exc.filename or '?'}: {exc.strerror}")
+
     venv_tops = {str(v.relative_to(root)) for v in _venv_roots(root)}
-    for path in root.rglob("*"):
-        if not path.is_file():
+    for dirpath, dirnames, filenames in os.walk(root, onerror=_onerror, followlinks=False):
+        current = Path(dirpath)
+        try:
+            rel_dir = current.relative_to(root)
+        except ValueError:
             continue
-        rel_parts = path.relative_to(root).parts
-        if rel_parts[0] in venv_tops:
-            continue  # virtualenv tree (pyvenv.cfg marker)
-        parts = set(rel_parts[:-1])
-        if parts & SKIP_DIRS or any(part.startswith(".venv") for part in rel_parts):
+        if "pyvenv.cfg" in filenames:
+            dirnames[:] = []
+            continue  # virtualenv subtree (marker beats pre-scan depth)
+        if rel_dir.parts and (
+            rel_dir.parts[0] in venv_tops
+            or set(rel_dir.parts) & SKIP_DIRS
+            or any(part.startswith(".venv") for part in rel_dir.parts)
+        ):
+            dirnames[:] = []
             continue
-        if path.suffix == ".pyc":
-            continue
-        collected.append(path)
+        dirnames[:] = sorted(
+            d
+            for d in dirnames
+            if d not in SKIP_DIRS and not d.startswith(".venv") and d != "__pycache__"
+        )
+        for name in sorted(filenames):
+            if name.endswith(".pyc"):
+                continue
+            collected.append(current / name)
+    if failures:
+        print(f"SCAN_ERROR unreadable directories: {'; '.join(sorted(failures))}")
+        raise SystemExit(2)
     return collected
 
 
@@ -183,11 +302,18 @@ def scan(root: Path) -> list[str]:
     for path in sorted(files):
         rel = str(path.relative_to(root))
         name = path.name
-        if name.endswith(BLOCKED_NAMES) or (name.startswith(".env.") and name != ".env.example"):
+        if (
+            name.endswith(BLOCKED_SUFFIXES)
+            or name.startswith(BLOCKED_PREFIXES)
+            or (name.startswith(".env.") and name != ".env.example")
+        ):
             findings.append(f"{rel}: blocked filename")
             continue
         if rel == ".env":
             continue  # live credential store; owned by APA-79
+        if path.suffix.lower() in ARCHIVE_SUFFIXES:
+            findings.extend(_archive_findings(path, rel))
+            continue
         if path.suffix.lower() in BINARY_SUFFIXES:
             continue  # known-binary asset, not a literal carrier
         try:

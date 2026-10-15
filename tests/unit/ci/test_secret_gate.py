@@ -10,6 +10,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 GATE = Path(__file__).resolve().parents[3] / "scripts" / "secret_gate.py"
 
 
@@ -131,6 +133,87 @@ class TestSecretGate:
         proc = _run(root)
         assert proc.returncode == 2
         assert "undecodable" in proc.stdout
+
+    def test_unreadable_directory_fails_closed(self, tmp_path: Path) -> None:
+        import os
+
+        if os.geteuid() == 0:
+            pytest.skip("unreadable-dir probe needs non-root")
+        root = _tree(tmp_path, {"apps/a.py": "x = 1\n"})
+        locked = tmp_path / "locked"
+        locked.mkdir(exist_ok=True)
+        (locked / "secret.txt").write_text("nothing\n")
+        locked.chmod(0o000)
+        try:
+            proc = _run(root)
+        finally:
+            locked.chmod(0o755)
+        assert proc.returncode == 2
+        assert "SCAN_ERROR" in proc.stdout
+
+    def test_id_rsa_variants_flagged(self, tmp_path: Path) -> None:
+        root = _tree(tmp_path, {"keys/id_rsa": "x\n", "keys/id_rsa.pub": "y\n"})
+        proc = _run(root)
+        assert proc.returncode == 1
+        assert "blocked filename" in proc.stdout
+
+    def _archive(self, tmp_path: Path, name: str, members: dict[str, bytes]) -> Path:
+        """Build a fixture archive from member name -> bytes."""
+        import tarfile
+        import zipfile
+
+        root = _tree(tmp_path, {"apps/a.py": "x = 1\n"})
+        target = tmp_path / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if name.endswith(".zip"):
+            with zipfile.ZipFile(target, "w") as archive:
+                for member, blob in members.items():
+                    archive.writestr(member, blob)
+        else:
+            with tarfile.open(target, "w:gz") as archive:
+                import io
+
+                for member, blob in members.items():
+                    info = tarfile.TarInfo(member)
+                    info.size = len(blob)
+                    archive.addfile(info, io.BytesIO(blob))
+        return root
+
+    def test_zip_member_secret_flagged(self, tmp_path: Path) -> None:
+        root = self._archive(
+            tmp_path, "data/bundle.zip", {"notes.txt": b"token " + _key().encode() + b"\n"}
+        )
+        proc = _run(root)
+        assert proc.returncode == 1
+        assert "bundle.zip!notes.txt" in proc.stdout
+
+    def test_zip_blocked_member_name_flagged(self, tmp_path: Path) -> None:
+        root = self._archive(tmp_path, "data/keys.zip", {"id_rsa": b"notakey\n"})
+        proc = _run(root)
+        assert proc.returncode == 1
+        assert "blocked member name" in proc.stdout
+
+    def test_tar_member_secret_flagged(self, tmp_path: Path) -> None:
+        root = self._archive(
+            tmp_path, "data/bundle.tar.gz", {"notes.txt": b"token " + _key().encode()}
+        )
+        proc = _run(root)
+        assert proc.returncode == 1
+        assert "bundle.tar.gz!notes.txt" in proc.stdout
+
+    def test_corrupt_archive_fails_closed(self, tmp_path: Path) -> None:
+        root = _tree(tmp_path, {"apps/a.py": "x = 1\n"})
+        (tmp_path / "data").mkdir(exist_ok=True)
+        (tmp_path / "data" / "broken.zip").write_bytes(b"not a zip at all")
+        proc = _run(root)
+        assert proc.returncode == 2
+        assert "SCAN_ERROR" in proc.stdout
+
+    def test_oversized_member_fails_closed(self, tmp_path: Path) -> None:
+        root = self._archive(tmp_path, "data/big.zip", {"big.bin": b"x" * 1_000_001})
+        proc = _run(root)
+        assert proc.returncode == 2
+        assert "SCAN_ERROR" in proc.stdout
 
     def test_git_missing_fails_closed(self, tmp_path: Path) -> None:
         import os
