@@ -121,7 +121,7 @@ If the optional legacy adapter is enabled, legacy correction requires approval +
 **Banned (no `execute_sql`, `call_any_api`, `send_any_http`):**
 Raw SQL, arbitrary HTTP, unsanctioned tools. Enforcement: `CapabilityExecutor` closed allowlist + `tenant_id`/`case` scope re-check.
 
-## 7. Flagship Case FS-231 — End-to-End Trace
+## 7. Historical Legacy-Enabled Example FS-231 — Optional Extension
 
 | Step | System | Value / Artifact |
 |------|--------|------------------|
@@ -155,19 +155,19 @@ All amounts `Decimal`, all writes idempotent, post-verify mandatory. Unsafe-acti
 | `MeridianBusinessRules` | Refund tiers, legacy, closed-period invariants | `finance/business_rules/meridian.py` |
 | `AccountMappings` | Razorpay ↔ QuickBooks ↔ COBOL codes (static) | `finance/domain/account_mappings.py` |
 | `FinancialOntology` | Canonical variance/exceptions for Meridian | `finance/domain/ontology.py` |
-| `IntegrationRegistry` | Fixed core: Razorpay + accounting records; optional contextual and legacy adapters are not pluggable | `finance/integration/registry.py` |
+| `IntegrationRegistry` | Fixed core: Razorpay + accounting records; contextual and legacy adapters are optional and not pluggable | `finance/integration/registry.py` |
 | `FinancialSituation` | Central object (replaces generic transaction/investigation root) | `finance/domain/financial_situation.py` |
 
 No per-tenant knobs at runtime. Config is code + migration, not UI.
 
-## 9. Architecture — Meridian Commerce → Payments/Accounting/Legacy → FinSight
+## 9. Architecture — Core Payments/Accounting → FinSight (Legacy Optional)
 
 ```
 Meridian Commerce (250 staff, 8 finance)
       │
       ├─ Payments: Razorpay (20k/day)
       ├─ Accounting: QuickBooks + Sheets (expected)
-      └─ Legacy: COBOL batch (fixed-width, S3)
+      └─ Optional: COBOL batch (fixed-width, S3; only if enabled)
                  │
                  ▼
          FinSight Core
@@ -202,9 +202,9 @@ Dependency rule preserved: `shared ← finance ← agents ← apps`. No reverse 
 | Phase | What happens | Who |
 |-------|--------------|-----|
 | **Discovery (W1)** | Shadow 13-step manual flow, map 6 systems, freeze FS example, confirm optional adapter value | FDE + Finance + Payment Ops |
-| **Solution Design (W2)** | FinancialSituation model, 11-stage loop, MeridianBusinessRules, IntegrationRegistry, S3 transport contract | Architect |
+| **Solution Design (W2)** | FinancialSituation model, 11-stage loop, MeridianBusinessRules, IntegrationRegistry, controlled test boundary; assess optional adapter only if justified | Architect |
 | **Build (W3-5)** | Deterministic engines → agent tools → Slack HITL → controlled test-boundary protocol → verifier → audit | Eng |
-| **Deploy (W6)** | `API Gateway → FastAPI (apps/api) → RDS PostgreSQL / SQS → Workers → Agent (LangGraph) → optional legacy adapter (S3)` — healthchecks, RLS/company boundary isolation, secrets via env | DevSecOps |
+| **Deploy (W6)** | `API Gateway → FastAPI (apps/api) → durable state → bounded agent → test-mode action → independent verifier` (optional legacy adapter via S3 only when enabled) — healthchecks, RLS/company boundary isolation, secrets via env | DevSecOps |
 | **Measure (W7+)** | Cases detected/resolved, exposure ₹, false-positive rate, LLM cost/call | FDE + Finance Lead |
 
 **Measure gates:** `cases_detected`, `cases_resolved`, `exposure_value`, `false_positive_rate`, `llm_cost_per_case`, `verification_rate=100%`.
