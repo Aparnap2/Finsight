@@ -21,29 +21,23 @@ This scope decision does not relax safety invariants: deterministic money calcul
 | **Finance team** | 8 finance, 3 payment-ops, Finance Manager + Director |
 | **Systems of record** | **Razorpay** (provider/payment state), **QuickBooks** (accounting), **Google Sheets** (expected settlement where used), **Gmail** (context), **Slack** (human coordination/approval). COBOL/S3 is an optional legacy extension, not a core dependency. |
 
-### Environment Diagram (frozen)
+### Environment Diagram (core path; legacy adapter optional)
 
 ```
-                         Meridian Commerce Pvt Ltd
-                                  │
-        ┌─────────────┬───────────┼───────────┬──────────────┬──────────────┐
-        │             │           │           │              │              │
-   Razorpay (Payments) QuickBooks (Accounting) COBOL Legacy  Sheets      Gmail/Slack
-   - payout, fees,    - Journal entries      - Fixed-width  - Expected   - Context / Approvals
-     refunds,           (debits==credits)      batch file     settlement   (human)
-     adjustments      - Accounting period      NO HTTP        (10,00,000)  (Slack: Approve/Reject)
-                        open/closed            via S3 transport            (Gmail: search_finance_email)
-                                    │
-                                    ▼
-                          FinSight Core (Reconciliation / Evidence / Business Rules)
-                                    │
-                          AI Investigator (cognitive tools only)
-                                    │
-                          Resolution Case (FinancialSituation)
-                                    │
-                     ┌──────────────┼──────────────┐
-                Policy Gate      Auto / HITL      Action Engine
-                (thresholds)     (Slack)          → External / Legacy → Verify → Close
+Razorpay Test Mode ──────┐
+                         ├─> Deterministic reconciliation ─> FinancialSituation
+Accounting records ──────┘                                  │
+                                                            ▼
+                                                Evidence-backed investigation
+                                                            ▼
+                                                Typed proposal + policy/HITL
+                                                            ▼
+                                                Idempotent test action
+                                                            ▼
+                                                Independent verification → Close
+
+Optional extensions: expected-settlement records, context/approval connectors,
+and the retained COBOL-style fixed-width/S3 adapter.
 ```
 
 **Optional legacy adapter:** Existing fixed-width batch/S3 code can model accepted/rejected records, but it is outside the required flagship path. Keep it reusable; do not expand it without a demonstrated business need. FinSight owns reasoning state; **authoritative systems own facts**.
@@ -60,7 +54,7 @@ Mechanically 60-80% of 8-person finance team time; analytically starved; error-p
 
 | What FinSight owns (reasoning state) | What FinSight NEVER owns (facts) |
 |--------------------------------------|----------------------------------|
-| `FinancialSituation` (e.g. FS-2026-0916-00231, variance ₹10,000, INVESTIGATING) | Razorpay provider state, QuickBooks accounting truth, COBOL legacy ledger, Sheets expected, Gmail context |
+| `FinancialSituation` (e.g. FS-2026-0916-00231, variance ₹10,000, INVESTIGATING) | Razorpay provider state, QuickBooks accounting truth, expected records when used, contextual sources when used; optional COBOL ledger only when explicitly enabled |
 | `Investigation`, `Evidence` (hash-verified), `Hypothesis`, `ResolutionProposal`, `PolicyDecision`, `Approval`, `Execution`, `Verification`, `Audit` | Slack is approval channel, not authority; Policy engine is authority |
 
 **Central object:** `FinancialSituation` ≠ transaction. Example:
@@ -70,7 +64,7 @@ FS-2026-0916-00231
   expected: 10,00,000 (Sheet)
   razorpay: 9,72,500  (gross 10,00,000 - fee 7,500 - refund 2,500 - adjustment 10,000 - pending 7,500)
   quickbooks: 9,82,500
-  legacy: 9,82,500
+  optional legacy example: 9,82,500
   variance: 10,000  STATUS=INVESTIGATING
 ```
 
@@ -82,8 +76,8 @@ Detect → Triage → Investigate → Correlate → Explain → Propose → Poli
    └─net_settlement  tools: get_*  compare_  create_  propose_  refund <5k  Slack    S3 batch  re-reconcile
      debits==credits         + Gmail/Legacy financial_states hypothesis resolution auto?          file
      period_open                          record_evidence          5k-50k Mgr
-     duplicate_action                                                  >50k Dir        → COBOL
-                                                                       legacy: always approval + valid
+     duplicate_action                                                  >50k Dir        → optional legacy adapter
+                                                                       optional legacy adapter: approval + valid
                                                                        account code + balanced batch
                                                                        closed period: NEVER modify
 ```
@@ -114,7 +108,7 @@ TOLERANCE_MINOR = Decimal("100")
 AUTO_APPROVAL_LIMIT = Decimal("500000")
 ```
 
-Legacy correction **always** requires approval + valid account code + balanced batch. Closed period → hard block (`INVESTIGATING → EXECUTING` banned).
+If the optional legacy adapter is enabled, legacy correction requires approval + valid account code + balanced batch. Closed period → hard block (`INVESTIGATING → EXECUTING` banned).
 
 ## 6. Agent Tools — Allowlists Only
 
@@ -142,7 +136,7 @@ Raw SQL, arbitrary HTTP, unsanctioned tools. Enforcement: `CapabilityExecutor` c
 | Proposal | ResolutionProposal | Reprocess ₹10,000, account code corrected, **severity Medium, HITL required** |
 | Policy | MeridianBusinessRules | Legacy correction → approval needed → route to Slack |
 | Approval | Slack | **Approved** (Manager) — pinned to proposal hash |
-| Execution | S3 transport | `CORRECTION_20260916_231.DAT` (fixed-width, balanced, valid code) → COBOL |
+| Execution | S3 transport | `CORRECTION_20260916_231.DAT` (fixed-width, balanced, valid code) → optional legacy adapter |
 | Result | Legacy | **ACCEPTED** (1/1) |
 | Verification | Deterministic | Expected 10,00,000 vs (QB 9,82,500 + correction 10,000 + Razorpay pending 7,500) == 10,00,000? Recomputed net **9,92,500** ledger → **CLOSED** (verified) |
 
@@ -161,7 +155,7 @@ All amounts `Decimal`, all writes idempotent, post-verify mandatory. Unsafe-acti
 | `MeridianBusinessRules` | Refund tiers, legacy, closed-period invariants | `finance/business_rules/meridian.py` |
 | `AccountMappings` | Razorpay ↔ QuickBooks ↔ COBOL codes (static) | `finance/domain/account_mappings.py` |
 | `FinancialOntology` | Canonical variance/exceptions for Meridian | `finance/domain/ontology.py` |
-| `IntegrationRegistry` | Fixed 6: Razorpay, QB, Sheets, Gmail, Slack, COBOL/S3 — not pluggable | `finance/integration/registry.py` |
+| `IntegrationRegistry` | Fixed core: Razorpay + accounting records; optional contextual and legacy adapters are not pluggable | `finance/integration/registry.py` |
 | `FinancialSituation` | Central object (replaces generic transaction/investigation root) | `finance/domain/financial_situation.py` |
 
 No per-tenant knobs at runtime. Config is code + migration, not UI.
@@ -210,14 +204,14 @@ Dependency rule preserved: `shared ← finance ← agents ← apps`. No reverse 
 | **Discovery (W1)** | Shadow 13-step manual flow, map 6 systems, freeze FS example, confirm optional adapter value | FDE + Finance + Payment Ops |
 | **Solution Design (W2)** | FinancialSituation model, 11-stage loop, MeridianBusinessRules, IntegrationRegistry, S3 transport contract | Architect |
 | **Build (W3-5)** | Deterministic engines → agent tools → Slack HITL → controlled test-boundary protocol → verifier → audit | Eng |
-| **Deploy (W6)** | `API Gateway → FastAPI (apps/api) → RDS PostgreSQL / SQS → Workers → Agent (LangGraph) → Legacy (S3)` — healthchecks, RLS/company boundary isolation, secrets via env | DevSecOps |
+| **Deploy (W6)** | `API Gateway → FastAPI (apps/api) → RDS PostgreSQL / SQS → Workers → Agent (LangGraph) → optional legacy adapter (S3)` — healthchecks, RLS/company boundary isolation, secrets via env | DevSecOps |
 | **Measure (W7+)** | Cases detected/resolved, exposure ₹, false-positive rate, LLM cost/call | FDE + Finance Lead |
 
 **Measure gates:** `cases_detected`, `cases_resolved`, `exposure_value`, `false_positive_rate`, `llm_cost_per_case`, `verification_rate=100%`.
 
 ## 11. Safety Invariants (P3/P4 preserved, reinterpreted)
 
-I1 Decimal-only. I2 Pure deterministic reconcile. I3 Evidence immutable. I4 LLM no writes. I5 Proposal needs `EVIDENCE_VERIFIED`. I6 Approval pinned to proposal hash, single-decision. I7 Idempotent execution. I8 Sandbox-only (S3 transport is the sandbox boundary for legacy). I9 Post-verify mandatory. I10 No close without terminal verification. **Boundary isolation = company/environment isolation** (not SaaS tenancy): every path carries `company_id=meridian` + `environment` scope.
+I1 Decimal-only. I2 Pure deterministic reconcile. I3 Evidence immutable. I4 LLM no writes. I5 Proposal needs `EVIDENCE_VERIFIED`. I6 Approval pinned to proposal hash, single-decision. I7 Idempotent execution. I8 Sandbox-only (test-mode boundary is mandatory; S3 transport is used only if optional legacy adapter is enabled). I9 Post-verify mandatory. I10 No close without terminal verification. **Boundary isolation = company/environment isolation** (not SaaS tenancy): every path carries `company_id=meridian` + `environment` scope.
 
 ## 12. Repo Map (updated)
 
@@ -225,7 +219,7 @@ I1 Decimal-only. I2 Pure deterministic reconcile. I3 Evidence immutable. I4 LLM 
 finance/domain/          → Company, CompanyConfiguration, FinancialSituation, AccountMappings, FinancialOntology
 finance/reconciliation/  → pure core: models, normalizer, matcher, tolerances, classifier, reconciler (Decimal)
 finance/business_rules/  → meridian.py (refund tiers, legacy, closed period)
-finance/integration/     → IntegrationRegistry (Razorpay/QB/Sheets/Gmail/Slack/COBOL/S3) static
+finance/integration/     → IntegrationRegistry (Razorpay/QB core; Sheets/Gmail/Slack/COBOL-S3 optional) static
 finance/evidence/        → EvidenceItem (hash, provenance, immutability)
 agents/investigation/    → allowlisted read-only + cognitive tools
 agents/verification/     → 6-stage verifier (claim→evidence→tenant/company→provenance→supported→VERIFIED)
