@@ -156,6 +156,7 @@ class ReservationStore:
 
     def __init__(self, engine: Engine | None = None) -> None:
         """Bind to ``engine`` (creating tables) or start empty memory."""
+        self._volatile_backend = engine is None
         self._engine = engine
         if engine is not None:
             reservation_table.create(engine, checkfirst=True)

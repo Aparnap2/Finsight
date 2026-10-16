@@ -46,7 +46,6 @@ from sqlalchemy.orm import Session
 
 from shared.config import get_settings
 from shared.models.database import AuditLog
-from shared.webhook_repository import insert_or_get_duplicate
 
 logger = logging.getLogger(__name__)
 
@@ -351,14 +350,14 @@ async def stripe_webhook(
 
     try:
         _set_tenant_context(session, tenant_id)
-        event, created = insert_or_get_duplicate(
+        from finance.ingestion.outbox import persist_inbox_and_outbox
+
+        event, _outbox, created = persist_inbox_and_outbox(
             session,
             tenant_id=tenant_id,
             provider="stripe",
-            event_id=event_id,
-            event_type=event_type,
-            raw=envelope,
-            fingerprint=fingerprint,
+            envelope=envelope,
+            raw=raw,
             status=STATUS_IGNORED if quarantined else STATUS_RECEIVED,
         )
     except (ValueError, SQLAlchemyError) as exc:
