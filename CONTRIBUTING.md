@@ -149,10 +149,10 @@ python -m pytest tests/unit/test_finance/test_formula_engine.py
 python -m pytest tests/integration/
 
 # Run agent tests (mocked LLM)
-python -m pytest tests/backend/agents/
+python -m pytest tests/unit/test_agents/
 ```
 
-There are currently **83 tests** in the test suite (unit, integration, and agent tests combined).
+There are currently **3,875 collected tests** across the unit, contract, integration, failure, e2e, Compute Runtime, evaluation, and ministack tiers. The fast gate runs the unit and contract tiers; the rest are PG-gated or environment-gated.
 
 ---
 

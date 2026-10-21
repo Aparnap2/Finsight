@@ -312,11 +312,11 @@ class ValidationLayerError(BaseModel):
 | 5 | DevSecOps | Migration scripts | `tests/unit/test_models/` |
 | 6 | Domain | State machine changes | `tests/unit/test_state_machines/` |
 | 7 | Domain | Rule changes | `tests/unit/test_rules/` |
-| 8 | DevSecOps | Security policy changes | `tests/backend/api/` |
+| 8 | DevSecOps | Security policy changes | `tests/unit/api/` |
 | 9 | DevSecOps | Audit schema changes | `tests/unit/test_models/` |
 | 10 | DataOps | Contract version changes | `tests/unit/test_data_contracts/` |
 | 11 | Compute | Handler type changes | `tests/unit/test_runtime/` |
-| 12 | AgentOps | Assertion rule changes | `tests/backend/validators/` |
+| 12 | AgentOps | Assertion rule changes | `tests/unit/verification/` |
 
 ---
 

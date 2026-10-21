@@ -221,10 +221,19 @@ finance/reconciliation/  → pure core: models, normalizer, matcher, tolerances,
 finance/business_rules/  → meridian.py (refund tiers, legacy, closed period)
 finance/integration/     → IntegrationRegistry (Razorpay/QB core; Sheets/Gmail/Slack/COBOL-S3 optional) static
 finance/evidence/        → EvidenceItem (hash, provenance, immutability)
+finance/accounting/     → sandbox provider boundary: adapter protocol + deterministic mock (no live provider)
+finance/execution/       → guarded executor: intent row → write → post-verify (Decimal, CAS state machine)
+finance/ingestion/       → webhook inbox + transactional outbox (at-least-once, claim/lease/fence)
+finance/policy/          → deterministic execution policy gate (thresholds, approval binding)
+finance/verification/    → single-pass verifier over recorded handoffs (readers, digest gate)
 agents/investigation/    → allowlisted read-only + cognitive tools
 agents/verification/     → 6-stage verifier (claim→evidence→tenant/company→provenance→supported→VERIFIED)
-apps/api/                → ingest, evidence, approvals, close routes (FastAPI)
+apps/api/                → ingest, evidence, approvals, close, execution, observation routes (FastAPI)
+apps/workers/            → SQS transport worker (controlled execution)
+python_runtime/          → Compute Runtime: dispatcher, handlers, exporters (duckdb/polars)
+shared/safety/           → idempotency store, execution guard, durability, secrets scrubbing
 tests/fixtures/reconciliation/ → FS-231 golden (10,00,000 / 9,72,500 / 9,82,500 / 10k)
+tests/unit/property/      → property-based financial invariants (Hypothesis, test-only dep)
 ```
 
 Flow: `shared` ← `finance` ← `agents` ← `apps`. No reverse imports.
@@ -232,16 +241,25 @@ Flow: `shared` ← `finance` ← `agents` ← `apps`. No reverse imports.
 ## 13. Quickstart
 
 ```bash
-uv sync
-uv run python -m pytest tests/unit/reconciliation -x -q
+uv sync --all-extras
+uv run pytest tests/unit/reconciliation -x -q
 uv run ruff check finance/reconciliation tests/unit/reconciliation
 uv run mypy finance/reconciliation
-# Flagship golden:
-uv run python -m pytest tests/golden/test_fs231 -xvs  # FS-2026-0916-00231
+# Deterministic golden-dataset gate (no provider calls):
+uv run python -m finance.evaluation.runner \
+  --dataset-id regression_forecast_naive \
+  --dataset-id regression_anomaly_materiality \
+  --dataset-id regression_duplicate_rows
 ```
+
+`make test` mirrors the CI fast gate (`tests/unit` + `tests/contract`);
+`make test-integration` runs the PG-gated tier; `make ci-local` runs the
+whole fast gate locally. The FS-231 lifecycle golden lives at
+`tests/unit/domain/test_fs231_lifecycle.py` — it is the optional
+legacy-enabled example, not the flagship path.
 
 ## 14. Phases + Gates (frozen)
 
-P0 frozen specs (this README/PRD). P1 pure `finance/reconciliation/` (stdlib + Decimal, no HTTP/DB/LLM). P2 Razorpay ingest. P3 QB mock + HITL + verify. P4 agent (thin SDKs: Groq/OpenRouter/Local via `LLMProvider`). P5 `make e2e` flagship FS-231. P6 chaos (duplicate/out-of-order/crash-after-execute/double-approve/lost-response). P7 promptfoo evals offline. P8 Go benchmark (criteria only). P9 hardening.
+P0 frozen specs (this README/PRD). P1 pure `finance/reconciliation/` (stdlib + Decimal, no HTTP/DB/LLM). P2 Razorpay ingest. P3 QB mock + HITL + verify. P4 agent (thin SDKs: Groq/OpenRouter/Local via `LLMProvider`). P5 flagship E2E. P6 chaos (duplicate/out-of-order/crash-after-execute/double-approve/lost-response). P7 LLM evals offline (`finance/evaluation/` golden datasets; provider calls are manual-only). P8 runtime hardening (`python_runtime/`, `agents/p8_runtime/`). P9 hardening.
 
 `S3` is artifact + legacy transport only; PostgreSQL is financial/idempotency authority. No new AWS service without queue gate.
