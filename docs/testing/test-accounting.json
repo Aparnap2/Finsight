@@ -8,14 +8,15 @@
         "Pandera nullable + Polars null handling may not trigger"
       ],
       "expected_files": [
-        "tests/unit/ci/test_ci_gate.py",
-        "tests/unit/ci/test_test_accounting.py",
-        "tests/unit/ci/test_secret_gate.py",
+        "tests/evaluation/test_llm_quality_regression.py",
         "tests/unit/ci/test_action_pinning.py",
+        "tests/unit/ci/test_ci_gate.py",
         "tests/unit/ci/test_eval_workflow_contract.py",
-        "tests/unit/ci/test_workflow_boundary.py",
         "tests/unit/ci/test_mypy_baseline_check.py",
-        "tests/evaluation/test_llm_quality_regression.py"
+        "tests/unit/ci/test_secret_gate.py",
+        "tests/unit/ci/test_test_accounting.py",
+        "tests/unit/ci/test_workflow_boundary.py",
+        "tests/unit/property/test_financial_properties.py"
       ],
       "deselect_allowance": 0
     },
