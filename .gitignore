@@ -25,3 +25,6 @@ out/
 .opencode/
 .reasoning_traces/
 pyproject.toml.bak
+
+# Hypothesis example database (APA-94 slice 2)
+.hypothesis/
