@@ -222,6 +222,12 @@ def run_execution(
     Returns:
         PipelineResult with the handoff on permit, or the first refusal
         stage plus code with later stages never run.
+
+    Note (issue #113, review P1): the default record/reservation stores
+        are process-local and test-only. There are no production callers
+        of this legacy entrypoint; any future production composition
+        must pass durable stores and enforce them with
+        ``shared.safety.durability.assert_durable``.
     """
     log: list[AuditEntry] = audit if audit is not None else []
     store = record_store if record_store is not None else ExecutionRecordStore()

@@ -52,11 +52,17 @@ def insert_or_get_duplicate(
     amount: Decimal | int | str | None = None,
     currency: str | None = None,
     status: str = "RECEIVED",
+    _commit: bool = True,
 ) -> tuple[WebhookEvent, bool]:
     """Insert a webhook envelope, or return the existing row on replay.
 
     Args:
-        session: Active SQLAlchemy session (commit happens here).
+        session: Active SQLAlchemy session. When ``_commit`` is True
+            (default, historical behavior) this function commits; when
+            False it only flushes so the caller can atomically co-commit
+            further rows (e.g. the issue-#113 outbox row) in the same
+            transaction. IntegrityError recovery (rollback + reread) is
+            identical in both modes.
         tenant_id: Explicit tenant scope, or the ``UNROUTABLE`` sentinel.
         provider: Provider name (e.g. ``"stripe"``).
         event_id: Provider-side event identifier.
@@ -112,7 +118,10 @@ def insert_or_get_duplicate(
     )
     session.add(event)
     try:
-        session.commit()
+        if _commit:
+            session.commit()
+        else:
+            session.flush()
     except IntegrityError:
         session.rollback()
         raced = session.execute(
