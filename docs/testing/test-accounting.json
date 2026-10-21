@@ -16,7 +16,8 @@
         "tests/unit/ci/test_secret_gate.py",
         "tests/unit/ci/test_test_accounting.py",
         "tests/unit/ci/test_workflow_boundary.py",
-        "tests/unit/property/test_financial_properties.py"
+        "tests/unit/property/test_financial_properties.py",
+        "tests/unit/test_platform/test_authorization_boundary.py"
       ],
       "deselect_allowance": 0
     },
