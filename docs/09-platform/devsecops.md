@@ -16,7 +16,7 @@ DevSecOps is the bedrock of the FinSight Operations OS. It owns everything that 
 
 | Capability | What it owns |
 |---|---|
-| **CI/CD pipeline** | Ruff linting, mypy strict type checking, pytest gate (full suite), conventional commit enforcement |
+| **CI/CD pipeline** | Ruff linting, mypy strict type checking + baseline ratchet, pytest gate (3,875 tests collected), conventional commit enforcement |
 | **Infrastructure as Code** | Docker Compose topology (7 services), PostgreSQL 16 schema via Alembic, containerized builds |
 | **Observability** | Structured logging (ERROR/WARNING/INFO/DEBUG), `.reasoning_traces/` for pipeline telemetry, Jaeger distributed tracing, Langfuse LLM observability |
 | **Secrets management** | Zero secrets in repo — all credentials injected via environment variables through Pydantic `BaseSettings` |
@@ -61,34 +61,31 @@ uv run mypy .            # type-check
 python -m pytest         # test
 ```
 
-**Test suite breakdown (representative layout; the CI run is authoritative):**
+**Test suite breakdown (3,875 collected across four tiers):**
 
 ```
 tests/
-├── unit/                              # Pure logic, no I/O
-│   ├── api/
-│   │   └── test_decimal_layer.py      # MoneyDecimal, float rejection
-│   └── test_finance/
-│       ├── test_formula_engine.py     # 449 lines — registration, resolution, eval
-│       ├── test_materiality.py        # 523 lines — thresholds, tiers, edge cases
-│       ├── test_calendar.py           # 349 lines — fiscal periods, linking, lifecycle
-│       ├── test_cognition_*.py        # Cognitive pipeline — harness, nodes, registry
-│       ├── test_evaluation.py         # Evaluation framework benchmarks
-│       └── test_validation_harness.py # Validation pipeline tests
-├── backend/                           # Integration + agent tests
-│   ├── agents/                        # 16 test files — mocked LLM, pipeline wiring
-│   │   ├── test_agentic_*.py          # Formatting, hallucination, type safety, tool calls
-│   │   ├── test_commentary_agent.py
-│   │   ├── test_orchestrator.py
-│   │   └── test_state_machine.py
-│   ├── api/
-│   │   ├── test_routes.py             # FastAPI endpoint contracts
-│   │   └── test_schemas.py            # Request/response validation
-│   ├── models/                        # ORM model tests
-│   ├── validators/                    # Claim validator unit tests
-│   └── test_config.py                 # Settings loading
-├── llm/
-│   └── test_providers.py              # LLM provider fallback chain
+├── unit/                              # Pure logic, no I/O (2,964)
+│   ├── test_domain/                   # Domain invariants, validation harness
+│   ├── test_finance/                  # Formula engine, materiality, calendar
+│   ├── domain/                        # Lifecycle, close gate, audit, invalid transitions
+│   ├── reconciliation/                # Matcher/tolerance/normalizer behaviour
+│   ├── verification/                  # Verification stages
+│   ├── investigation/                 # Allowlisted tools, context boundary
+│   ├── privacy/ security/             # Redaction, PII, tenant isolation
+│   ├── execution/ approval(s)/        # Guarded executor, proposal-bound approval
+│   ├── capability/…/ orchestrator/     # Agent capabilities, correlation
+│   ├── legacy/ legacy_execution/       # Optional legacy-enabled boundary
+│   ├── ci/                            # CI-gate self-tests (gate, secret gate, accounting)
+│   ├── property/                      # Property-based financial invariants (Hypothesis)
+│   └── test_platform/                 # RBAC, middleware, migrations, tenancy
+├── contract/                          # Provider + policy contracts (489)
+├── integration/                       # Real Postgres, outbox, RLS, API (191)
+├── failure/                           # Fault injection (4)
+├── e2e/                               # End-to-end resolution flows (17)
+├── test_python_runtime/               # Compute Runtime API (138)
+├── evaluation/ evals/                 # Deterministic LLM quality + manual live evals (18)
+├── ministack/                         # LocalStack S3 contract (54)
 └── conftest.py                        # sys.path setup, shared fixtures
 ```
 
@@ -510,10 +507,10 @@ alembic downgrade <rev> # revert to specific revision
 
 **Data rollback — golden dataset regression:**
 
-- Golden datasets in `tests/backend/agents/` capture known-correct outputs
+- Golden datasets in `tests/unit/test_agents/` capture known-correct outputs
 - Before/after comparison detects regressions:
   ```bash
-  python -m pytest tests/backend/agents/ -k "golden"
+  python -m pytest tests/unit/test_finance/ -k "golden"
   ```
 - Output deviation requires explicit review and golden dataset update
 
