@@ -83,6 +83,24 @@ Architectural and design decisions for FinSight, with rationale and context.
 
 ---
 
+## Why Ambiguous Writes Are Never Retried
+
+**Decision:** When an outbound write may or may not have reached the provider, the system does not retry it. It resolves the outcome by looking the entry up under the idempotency key, and if that lookup cannot establish the truth it records a durable pending state instead of guessing. Absence is treated as usable evidence only when the adapter's declared guarantees make it reliable.
+
+**Context:** `finance/execution/executor.py` retried any `TransientError` up to three times and then reported `FAILED`. A read timeout after the provider had already committed produces exactly the state that logic mishandles: the write succeeded, the client never learned the reference, and the retry creates a second journal entry. `FAILED` is worse than useless here because downstream reconciliation and reporting treat it as "no entry exists". The adapter contract offered no way to distinguish "never sent" from "sent, outcome unknown", and it had no lookup by idempotency key at all, so the executor could not establish the truth even in principle.
+
+**Rationale:**
+- The send boundary is the only sound place to classify a failure. An adapter that handed a request to the network cannot prove it was not delivered, so it must report ambiguity rather than a retryable transient error.
+- A lookup keyed by idempotency key is the only evidence that can settle an ambiguous write. The stored provider reference is written only after a successful return, so on the ambiguous path the entry identifier is unknown and `get_entry(id)` is unreachable.
+- A three-valued lookup (`FOUND`, `CONFIRMED_ABSENT`, `UNAVAILABLE`) prevents the classic defect of modelling "I could not ask" as "it is not there". Timeouts and server errors map to `UNAVAILABLE`, never to absence.
+- Whether an empty lookup is trustworthy is a provider property, not a caller preference. It is derived from declared consistency, lookup support, and key retention covering the recovery window, so an adapter cannot widen its own retry authority by asserting the answer directly.
+- `ExceptionState` stays frozen. An unresolved write is `EXECUTING` with a non-terminal `PENDING_RECONCILIATION` result, which is findable and distinguishable without adding vocabulary to a state machine shared with approval and evidence flows.
+- Re-invocation is the safe recovery trigger. It must resolve the existing intent before any write; treating a repeat call as a new intent reintroduces the duplicate under a different code path. The retry budget is persisted with the intent so a restart cannot reset it.
+
+**Trade-off:** Ambiguity becomes durable operational work. Without a reconciliation sweeper, `PENDING_RECONCILIATION` rows wait for a re-invocation or an operator, and the absence of a sweep is accepted debt rather than an oversight. The alternative — retrying into a duplicate entry, or marking `FAILED` on an unknown outcome — corrupts the ledger, which is not recoverable by later review. Full contract: `openspec/changes/add-ambiguous-write-recovery/`.
+
+---
+
 ## Why `finance/` Not `finance/ontology/`
 
 **Decision:** The domain layer is named `finance/`, not `finance/ontology/`.
