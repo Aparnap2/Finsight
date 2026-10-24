@@ -2,7 +2,7 @@
 
 **Layer**: Foundation (Layer 0 of 5)
 **Dependency direction**: Provides infrastructure for all upper layers (DataOps → MLOps → LLMOps → AgentOps)
-**Last updated**: 2026-07-29
+**Last updated**: 2026-10-24
 
 ---
 
@@ -16,7 +16,7 @@ DevSecOps is the bedrock of the FinSight Operations OS. It owns everything that 
 
 | Capability | What it owns |
 |---|---|
-| **CI/CD pipeline** | Ruff linting, mypy strict type checking, pytest gate (342 tests), conventional commit enforcement |
+| **CI/CD pipeline** | Ruff linting, mypy strict type checking, pytest gate (full suite), conventional commit enforcement |
 | **Infrastructure as Code** | Docker Compose topology (7 services), PostgreSQL 16 schema via Alembic, containerized builds |
 | **Observability** | Structured logging (ERROR/WARNING/INFO/DEBUG), `.reasoning_traces/` for pipeline telemetry, Jaeger distributed tracing, Langfuse LLM observability |
 | **Secrets management** | Zero secrets in repo — all credentials injected via environment variables through Pydantic `BaseSettings` |
@@ -40,7 +40,7 @@ flowchart LR
     B -->|fail| A
     C -->|pass| D[pytest]
     C -->|fail| A
-    D -->|342 tests pass| E[Merge]
+    D -->|tests pass| E[Merge]
     D -->|fail| A
 ```
 
@@ -61,11 +61,11 @@ uv run mypy .            # type-check
 python -m pytest         # test
 ```
 
-**Test suite breakdown (342 tests across three tiers):**
+**Test suite breakdown (representative layout; the CI run is authoritative):**
 
 ```
 tests/
-├── unit/                              # Pure logic, no I/O (~120 tests)
+├── unit/                              # Pure logic, no I/O
 │   ├── api/
 │   │   └── test_decimal_layer.py      # MoneyDecimal, float rejection
 │   └── test_finance/
@@ -86,11 +86,145 @@ tests/
 │   │   └── test_schemas.py            # Request/response validation
 │   ├── models/                        # ORM model tests
 │   ├── validators/                    # Claim validator unit tests
-│   └── test_config.py                 # Settings loading (3 tests)
+│   └── test_config.py                 # Settings loading
 ├── llm/
 │   └── test_providers.py              # LLM provider fallback chain
 └── conftest.py                        # sys.path setup, shared fixtures
 ```
+
+### Risk-based pull-request verification
+
+The pipeline has three layers. They are complementary, not alternatives:
+
+1. **Automated gates** run on every pull request (`CI (fast)`, `Integration`,
+   `AI evals`, and the existing deploy/rollback workflows).
+2. **Risk-triggered gates** add checks only when the changed paths require them.
+3. **Human approval** is reserved for decision boundaries — dependency, schema,
+   CI/infrastructure, security/authz, and unclassified changes.
+
+The implementation is intentionally stdlib-only and offline-testable:
+
+| Artifact | Purpose |
+|---|---|
+| `.github/verification-policy.json` | Machine-readable risk classes, required checks, path rules, and human-approval notes |
+| `scripts/pr_verification.py` | `plan`, `evidence`, `report`, `comment-payload`, and `pr-number-from-ref` commands |
+| `.github/workflows/verification.yml` | Additive `PR verification` workflow (`plan` → `evidence` → `report`) |
+| `.github/pull_request_template.md` | Prompts the author for the machine-readable diff scope |
+| `tests/unit/ci/test_pr_verification.py` | Offline unit tests for classification, scope, policy guard, evidence, and reporting |
+| `tests/unit/ci/test_verification_workflow.py` | Offline contract tests for triggers, permissions, action pinning, and the merge-queue base check |
+
+**Declared diff scope.** The pull request body must contain exactly one block:
+
+```text
+<!-- verification-scope:start -->
+["finance/", "tests/unit/finance/"]
+<!-- verification-scope:end -->
+```
+
+The JSON array lists path prefixes or globs. The workflow fails closed when the
+block is missing, empty, malformed, or does not cover every changed file. Scope
+is never inferred from the branch name or commit messages.
+
+**Risk classes and gates.** The baseline gate is
+`lint / typecheck / unit+contract`. Risk-specific checks are additive:
+
+| Risk class | Typical paths | Extra checks | Human review |
+|---|---|---|---|
+| `docs` | `docs/`, `*.md`, `openspec/` | none | automatic |
+| `repo-hygiene` | `.gitignore`, `.gitattributes`, `.editorconfig` | `GitGuardian Security Checks` | automatic |
+| `tests-only` | `tests/` | none | automatic |
+| `apps-web` | `apps/` | `postgres-gated integration` | automatic |
+| `finance-domain` | `finance/`, `shared/`, `agents/` | postgres + `deterministic golden-dataset eval gate` | automatic |
+| `execution` | `finance/execution/`, `finance/accounting/` | postgres + `ministack S3 contract (LocalStack)` + golden dataset | automatic |
+| `migrations` | `alembic/`, `migrations/` | postgres | required |
+| `dependencies` | lockfiles, `pyproject.toml`, `package.json` | all gates | required |
+| `ci-infra` | `.github/`, `scripts/`, build config | all gates | approval boundary |
+| `security-authz` | auth, permissions, tenancy | all gates | required |
+| `unknown` | anything unmatched | fail closed | required |
+
+Classification uses the highest severity among the changed files. Mixed pull
+requests therefore receive every gate required by their highest-risk path.
+
+**Policy anti-weakening guard.** `scripts/pr_verification.py` refuses a policy
+that removes any of the five protected branch-protection contexts from the union
+of baseline and risk-specific checks:
+
+- `lint / typecheck / unit+contract`
+- `postgres-gated integration`
+- `ministack S3 contract (LocalStack)`
+- `deterministic golden-dataset eval gate`
+- `GitGuardian Security Checks`
+
+After the policy exists on the base branch, a pull request that changes it must
+carry the `policy-change` label. The workflow uses the base policy for the
+current run and also validates the head policy, rejecting a proposal that
+removes a required check, lowers a class severity, disables review, erases a
+human-approval note, or re-routes a path pattern to a lower-risk class without a
+declared `acknowledged_path_downgrades` entry (with a reason). The bootstrap
+change (when the policy is absent on the base branch) is allowed without the
+label.
+
+**Evidence bundle.** The `evidence` job polls check-runs for the exact head SHA
+and evaluates only the checks required by the plan. It uploads the
+`verification-evidence` artifact containing `evidence.json`, `report.md`,
+`checks.jsonl`, and `reviews.jsonl`; the `plan` job uploads
+`verification-plan`. A missing check, a non-success conclusion, or a pending
+check is recorded as an exception — never silently treated as success. Exit codes
+are `0` pass, `1` fail, and `3` pending.
+
+**Approval boundaries are not gate outcomes.** Gates alone determine the verdict.
+When a required non-author approval is missing, the run still reports its
+technical result, sets `needs_human_review` in `evidence.json`, prints a "Merge
+gate" section stating that the verdict is not a mergeability claim, and applies
+the `needs-human-review` label. GitHub branch protection remains the single
+authoritative enforcement point for approvals at merge time. An affirmative
+`CHANGES_REQUESTED` review at the head commit is still a hard failure: it is an
+objection, not an absence.
+
+**Exception-only report.** The `report` job upserts one sticky comment marked
+with `<!-- pr-verification-report -->`. A clean pass prints one line plus the
+required-gate count; a failure or pending run lists the exceptions, the human
+approval boundary, and a collapsible check table. A pass with an outstanding
+approval adds the merge-gate block, and the same job syncs the
+`needs-human-review` label (`issues: write` / `pull-requests: write`). Fork pull requests do not
+receive a comment (the workflow token is read-only there), but the artifacts are
+still uploaded.
+
+**Merge queue.** The workflow also runs on `merge_group`. It parses the pull
+request number from `merge_group.head_ref`, verifies that the base SHA still
+matches the queue's base, and defers human-approval enforcement to the pull
+request run. A stale base fails closed.
+
+**Human approval items (not automated).** Enabling the merge queue and making
+`PR verification` a required check are repository-settings changes and remain
+human decisions. The required-status-checks payload must preserve the existing
+five contexts and add the aggregate job:
+
+```json
+{
+  "strict": true,
+  "contexts": [
+    "lint / typecheck / unit+contract",
+    "postgres-gated integration",
+    "ministack S3 contract (LocalStack)",
+    "deterministic golden-dataset eval gate",
+    "GitGuardian Security Checks",
+    "PR verification"
+  ]
+}
+```
+
+Enable the merge queue for `main` in **Settings → Branches → `main` → Require
+merge queue**, then apply the check set:
+
+```bash
+gh api --method PUT \
+  "repos/Aparnap2/Finsight/branches/main/protection/required_status_checks" \
+  --input required-checks.json
+```
+
+Review `required-checks.json` before running it; the verification workflow
+never changes repository settings itself.
 
 ### 2. Infrastructure as Code
 

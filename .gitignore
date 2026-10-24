@@ -25,3 +25,8 @@ out/
 .opencode/
 .reasoning_traces/
 pyproject.toml.bak
+
+# Local runtime artifacts (contain private keys and machine-specific state)
+volume/
+local_stack-docker-compose.yml
+

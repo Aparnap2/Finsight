@@ -12,7 +12,9 @@ All tests use **pytest** with the `asyncio_mode = "auto"` setting (configured in
 python -m pytest
 ```
 
-The test suite currently contains **83 tests** across unit, integration, and agent test categories.
+The test suite spans unit, integration, agent, and evaluation categories. The
+authoritative collected total is reported by the CI run; do not copy a fixed
+count into documentation, because it drifts with every test change.
 
 ---
 
