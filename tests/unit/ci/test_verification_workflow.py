@@ -93,3 +93,18 @@ class TestVerificationWorkflowShape:
             encoding="utf-8"
         )
         assert REPORT_MARKER in helper
+
+    def test_report_job_syncs_the_human_review_label(self) -> None:
+        """A green verdict with an outstanding approval stays visible in the list."""
+        text = _text()
+        report_section = text.split("\n  report:", 1)[1].split("\n  verification:", 1)[0]
+        assert "pr_verification.py label" in report_section
+        assert "needs-human-review" in report_section
+        assert report_section.count("labels/needs-human-review") == 1
+
+    def test_label_sync_skips_fork_pull_requests(self) -> None:
+        """Fork runs have a read-only token and must not attempt writes."""
+        text = _text()
+        report_section = text.split("\n  report:", 1)[1].split("\n  verification:", 1)[0]
+        guard = "github.event.pull_request.head.repo.full_name == github.repository"
+        assert report_section.count(guard) == 2

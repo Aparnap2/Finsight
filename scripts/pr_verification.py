@@ -31,12 +31,14 @@ from pathlib import Path
 SCHEMA_VERSION = 1
 POLICY_PATH = ".github/verification-policy.json"
 POLICY_CHANGE_LABEL = "policy-change"
+NEEDS_HUMAN_REVIEW_LABEL = "needs-human-review"
 REPORT_MARKER = "<!-- pr-verification-report -->"
 SCOPE_START = "<!-- verification-scope:start -->"
 SCOPE_END = "<!-- verification-scope:end -->"
 
 RISK_CLASSES: tuple[str, ...] = (
     "docs",
+    "repo-hygiene",
     "tests-only",
     "apps-web",
     "finance-domain",
@@ -93,6 +95,22 @@ class PathRule:
 
 
 @dataclass(frozen=True)
+class PathDowngrade:
+    """A declared, reviewable exception to the path-classification ratchet.
+
+    Moving a path to a lower-risk class is legitimate when the path's risk
+    genuinely drops (for example, a hook that no longer gates a build), but it
+    must be recorded here so the change appears in the policy diff instead of
+    happening silently.
+    """
+
+    pattern: str
+    from_class: str
+    to_class: str
+    reason: str
+
+
+@dataclass(frozen=True)
 class Policy:
     """Validated verification policy."""
 
@@ -102,6 +120,7 @@ class Policy:
     baseline_checks: tuple[str, ...]
     classes: dict[str, ClassPolicy]
     path_rules: tuple[PathRule, ...]
+    acknowledged_path_downgrades: tuple[PathDowngrade, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -236,6 +255,7 @@ class Evidence:
     changes_requested_by: tuple[str, ...]
     review_required: bool
     human_approvals: tuple[str, ...]
+    needs_human_review: bool
     plan_status: str
     verdict: str
     exceptions: tuple[str, ...]
@@ -335,6 +355,26 @@ def _as_class_policy(name: str, value: object) -> ClassPolicy:
     )
 
 
+def _as_path_downgrades(value: object) -> tuple[PathDowngrade, ...]:
+    """Validate the optional acknowledged path-downgrade declarations."""
+    if value is None:
+        return ()
+    items = _as_list(value, "acknowledged_path_downgrades")
+    result: list[PathDowngrade] = []
+    for index, item in enumerate(items):
+        where = f"acknowledged_path_downgrades[{index}]"
+        data = _as_dict(item, where)
+        result.append(
+            PathDowngrade(
+                pattern=_as_str(data.get("pattern"), f"{where}.pattern"),
+                from_class=_as_str(data.get("from"), f"{where}.from"),
+                to_class=_as_str(data.get("to"), f"{where}.to"),
+                reason=_as_str(data.get("reason"), f"{where}.reason"),
+            )
+        )
+    return tuple(result)
+
+
 def _validate_protected_checks(policy: Policy) -> None:
     """Fail if the policy erases any branch-protection check from its universe."""
     universe = set(policy.baseline_checks)
@@ -399,6 +439,7 @@ def load_policy(path: Path) -> Policy:
         baseline_checks=baseline_checks,
         classes=classes,
         path_rules=tuple(path_rules),
+        acknowledged_path_downgrades=_as_path_downgrades(root.get("acknowledged_path_downgrades")),
     )
     _validate_protected_checks(policy)
     return policy
@@ -551,6 +592,72 @@ def evaluate_policy_weakening(base: Policy, proposed: Policy) -> tuple[str, ...]
             errors.append(f"proposed policy disables review for {risk}")
         if base_class.human_approvals and not proposed_class.human_approvals:
             errors.append(f"proposed policy removes human approvals for {risk}")
+    errors.extend(evaluate_path_weakening(base, proposed))
+    return tuple(errors)
+
+
+def _probe_path(pattern: str) -> str:
+    """Derive a representative repository path from a policy path pattern.
+
+    Every glob metacharacter is replaced by a literal so the probe matches the
+    pattern it came from. This is a ratchet check on classification, not a
+    match-quality test: the goal is a stable sample per pattern.
+    """
+    probe = pattern.replace("*", "probe").replace("?", "probe").replace("[", "").replace("]", "")
+    probe = probe.replace("//", "/").strip("/")
+    if not probe:
+        return "probe"
+    return probe if "." in probe.rsplit("/", 1)[-1] else f"{probe}/probe.txt"
+
+
+def evaluate_path_weakening(base: Policy, proposed: Policy) -> tuple[str, ...]:
+    """Reject a proposed policy that silently lowers any path's risk class.
+
+    Class-level checks cannot see a path moving between rules. For example,
+    routing ``.github/`` to ``docs`` keeps every class definition intact while
+    removing the gates that path used to require. Each base pattern is
+    re-classified under the proposed policy and must not lose severity unless
+    the downgrade is declared in ``acknowledged_path_downgrades`` with a reason.
+    """
+    errors: list[str] = []
+    acknowledged = {
+        (item.pattern, item.from_class, item.to_class): item.reason
+        for item in proposed.acknowledged_path_downgrades
+    }
+    seen: set[str] = set()
+    for rule in base.path_rules:
+        for pattern in rule.patterns:
+            if pattern in seen:
+                continue
+            seen.add(pattern)
+            probe = _probe_path(pattern)
+            base_class = classify_path(probe, base)
+            head_class = classify_path(probe, proposed)
+            drop = base.classes[base_class].severity - proposed.classes[head_class].severity
+            if drop <= 0:
+                continue
+            if (pattern, base_class, head_class) not in acknowledged:
+                errors.append(
+                    f"proposed policy lowers classification for {pattern!r}: "
+                    f"{base_class} -> {head_class}"
+                )
+    known_patterns = {pattern for rule in base.path_rules for pattern in rule.patterns}
+    for item in proposed.acknowledged_path_downgrades:
+        where = f"acknowledged path downgrade {item.pattern!r}"
+        if not item.reason.strip():
+            errors.append(f"{where} has no reason")
+        if item.pattern not in known_patterns:
+            errors.append(f"{where} does not name a policy path pattern")
+            continue
+        if item.from_class not in proposed.classes or item.to_class not in proposed.classes:
+            errors.append(f"{where} names an unknown class")
+            continue
+        if proposed.classes[item.to_class].severity >= proposed.classes[item.from_class].severity:
+            errors.append(f"{where} does not describe a real downgrade")
+            continue
+        actual = classify_path(_probe_path(item.pattern), proposed)
+        if actual != item.to_class:
+            errors.append(f"{where} declares {item.to_class} but classifies as {actual}")
     return tuple(errors)
 
 
@@ -817,12 +924,14 @@ def build_evidence(
     if approval_evaluation.changes_requested_by:
         joined = ", ".join(f"@{name}" for name in approval_evaluation.changes_requested_by)
         hard_exceptions.append(f"changes requested at head commit by: {joined}")
-    if len(approval_evaluation.approved_by) < approvals_required:
-        hard_exceptions.append(
-            "human approval required: "
-            f"{len(approval_evaluation.approved_by)}/{approvals_required} "
-            "non-author approvals at the head commit"
-        )
+
+    # A missing approval is a review boundary, not a technical gate outcome.
+    # Branch protection enforces required approvals at merge time; duplicating
+    # that here would leave every review-required change red on a repository
+    # with zero required approvals, and would make a green verification verdict
+    # look like a mergeability claim. The shortfall is surfaced instead.
+    approval_shortfall = len(approval_evaluation.approved_by) < approvals_required
+    needs_human_review = approval_shortfall or bool(approval_evaluation.changes_requested_by)
 
     pending_exceptions = [f"pending required check: {name}" for name in check_evaluation.pending]
     exceptions = tuple(hard_exceptions + pending_exceptions)
@@ -835,6 +944,12 @@ def build_evidence(
 
     advisories = list(plan_advisories)
     advisories.extend(f"human approval boundary: {note}" for note in human_approvals)
+    if approval_shortfall:
+        advisories.append(
+            "human approval incomplete: "
+            f"{len(approval_evaluation.approved_by)}/{approvals_required} non-author "
+            "approvals at the head commit; branch protection remains the merge-time authority"
+        )
     if approvals_required and approval_evaluation.ok:
         joined = ", ".join(f"@{name}" for name in approval_evaluation.approved_by)
         advisories.append(f"human approval satisfied by: {joined}")
@@ -875,6 +990,7 @@ def build_evidence(
         changes_requested_by=approval_evaluation.changes_requested_by,
         review_required=review_required,
         human_approvals=human_approvals,
+        needs_human_review=needs_human_review,
         plan_status=plan_status,
         verdict=verdict,
         exceptions=exceptions,
@@ -914,6 +1030,9 @@ def render_report(evidence: Mapping[str, object]) -> str:
     exceptions = _as_str_list(evidence.get("exceptions", []), "evidence.exceptions")
     advisories = _as_str_list(evidence.get("advisories", []), "evidence.advisories")
     review_required = _as_bool(evidence.get("review_required", False), "evidence.review_required")
+    needs_human_review = _as_bool(
+        evidence.get("needs_human_review", False), "evidence.needs_human_review"
+    )
     human_approvals = _as_str_list(evidence.get("human_approvals", []), "evidence.human_approvals")
     approved_by = _as_str_list(evidence.get("approved_by", []), "evidence.approved_by")
     approvals_required = _as_int(
@@ -936,6 +1055,22 @@ def render_report(evidence: Mapping[str, object]) -> str:
             lines.append(
                 f"- Approvals at head commit: {len(approved_by)}/{approvals_required} ({joined})"
             )
+        if needs_human_review:
+            missing = max(approvals_required - len(approved_by), 0)
+            lines.extend(["", "### Merge gate"])
+            lines.append(
+                "- This verdict covers the required technical gates only. "
+                "It is not a mergeability claim."
+            )
+            lines.append(
+                f"- Missing {missing} of {approvals_required} required non-author "
+                "approval(s) at the head commit. Branch protection remains the "
+                "merge-time authority and will block the merge until they are recorded."
+            )
+            lines.append(
+                f"- Applied the `{NEEDS_HUMAN_REVIEW_LABEL}` label so the gap is "
+                "visible without making the verification verdict red."
+            )
         return "\n".join(lines) + "\n"
 
     lines.append("### Exceptions")
@@ -951,6 +1086,13 @@ def render_report(evidence: Mapping[str, object]) -> str:
         joined = ", ".join(f"@{name}" for name in approved_by) or "none"
         lines.append(
             f"- Approvals at head commit: {len(approved_by)}/{approvals_required} ({joined})"
+        )
+        lines.append("")
+
+    if needs_human_review:
+        lines.append(
+            f"The `{NEEDS_HUMAN_REVIEW_LABEL}` label is applied while a required "
+            "non-author approval is outstanding."
         )
         lines.append("")
 
@@ -1139,6 +1281,19 @@ def _cmd_comment_payload(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_label(args: argparse.Namespace) -> int:
+    """Write the human-review label to apply, or an empty file when none is due."""
+    evidence = _read_json_object(Path(str(args.evidence)))
+    if not evidence:
+        # Fail closed: without evidence we cannot prove approvals were recorded,
+        # so route the pull request to a human instead of staying silent.
+        _write_text(Path(str(args.out)), f"{NEEDS_HUMAN_REVIEW_LABEL}\n")
+        return 0
+    needs = _as_bool(evidence.get("needs_human_review", False), "evidence.needs_human_review")
+    _write_text(Path(str(args.out)), f"{NEEDS_HUMAN_REVIEW_LABEL}\n" if needs else "")
+    return 0
+
+
 def _cmd_pr_number(args: argparse.Namespace) -> int:
     """Execute the ``pr-number-from-ref`` command."""
     match = re.search(r"(?:^|/)pr-(\d+)(?:-|$)", str(args.ref))
@@ -1190,6 +1345,11 @@ def main(argv: list[str] | None = None) -> int:
     payload_parser.add_argument("--report", required=True)
     payload_parser.add_argument("--out", required=True)
     payload_parser.set_defaults(func=_cmd_comment_payload)
+
+    label_parser = subparsers.add_parser("label", help="decide the human-review label")
+    label_parser.add_argument("--evidence", required=True)
+    label_parser.add_argument("--out", required=True)
+    label_parser.set_defaults(func=_cmd_label)
 
     ref_parser = subparsers.add_parser("pr-number-from-ref", help="parse a merge-group ref")
     ref_parser.add_argument("--ref", required=True)

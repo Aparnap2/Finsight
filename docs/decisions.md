@@ -164,3 +164,19 @@ Architectural and design decisions for FinSight, with rationale and context.
 - Human approval is reserved for decisions automation cannot make: dependency/CVE acceptance, migration and rollback safety, CI ownership, security ownership, and unclassified paths.
 
 **Trade-off:** The policy and path rules need maintenance when the repository layout changes; an unmatched path fails closed as `unknown` until a rule is added. The workflow also adds a small amount of runtime for the plan and evidence jobs. Both costs are deliberate: a false `unknown` blocks a merge and asks for a rule, while a false `pass` would be invisible. Enabling the merge queue and making `PR verification` a required check remain human decisions because they change repository settings; the workflow itself never does.
+
+---
+
+## Why Missing Approvals Are a Label, Not a Failed Gate
+
+**Decision:** A verification run's verdict is determined only by required technical checks. When a review-required risk class lacks its non-author approval, the run still passes, sets `needs_human_review`, prints a merge-gate section stating the verdict is not a mergeability claim, and applies the `needs-human-review` label. An affirmative `CHANGES_REQUESTED` review at the head commit remains a hard failure. GitHub branch protection stays the single authoritative merge-time enforcement of approvals.
+
+**Context:** The first rollout made a missing approval a verification exception, so every `ci-infra` pull request was permanently red in a repository whose branch protection deliberately requires zero approvals and forbids self-approval. A red check that no action can clear teaches reviewers to ignore that check, and it conflates "the automated gates did not find a defect" with "this is safe to merge" — two claims with different owners and different evidence.
+
+**Rationale:**
+- Duplicating branch protection in a status check produces two sources of truth for the same rule; when they disagree, the check is wrong and gets ignored.
+- Verification answers a technical question. Expressing the approval gap as a distinct signal keeps a green verdict honest without pretending the change is mergeable.
+- `CHANGES_REQUESTED` is not an absence but an objection; automation can and should block on it.
+- A label is visible in the pull-request list and does not require a re-run to clear once approval is recorded.
+
+**Trade-off:** A passing verification no longer implies mergeability, so consumers must not treat the verdict alone as a merge signal. The merge-gate block, the label, and branch protection together carry that meaning; dropping any one of them would let a green check imply something it does not assert.

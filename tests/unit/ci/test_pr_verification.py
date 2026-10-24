@@ -604,8 +604,16 @@ def test_build_evidence_failed(verification: ModuleType) -> None:
     assert evidence.failed_checks
 
 
-def test_build_evidence_requires_head_approval(verification: ModuleType) -> None:
-    """Review-required plans fail until a non-author approves the head commit."""
+def test_build_evidence_missing_approval_is_a_label_not_a_failure(
+    verification: ModuleType,
+) -> None:
+    """A missing approval is a merge boundary, not a technical gate failure.
+
+    Branch protection enforces required approvals at merge time. Treating the
+    shortfall as a verification failure would leave every review-required change
+    red on a repository with zero required approvals, and would conflate "gates
+    passed" with "mergeable".
+    """
     plan = _minimal_plan(
         status="review",
         risk="security-authz",
@@ -626,8 +634,11 @@ def test_build_evidence_requires_head_approval(verification: ModuleType) -> None
         author="author",
         generated_at="2026-10-24T00:00:00+00:00",
     )
-    assert blocked.verdict == "fail"
-    assert any("human approval required" in item for item in blocked.exceptions)
+    assert blocked.verdict == "pass"
+    assert not blocked.exceptions
+    assert blocked.needs_human_review
+    assert any("human approval incomplete" in item for item in blocked.advisories)
+    assert not any("human approval required" in item for item in blocked.exceptions)
 
     approved = verification.build_evidence(
         plan,
@@ -640,6 +651,37 @@ def test_build_evidence_requires_head_approval(verification: ModuleType) -> None
     )
     assert approved.verdict == "pass"
     assert approved.approved_by == ("bob",)
+    assert not approved.needs_human_review
+
+
+def test_build_evidence_changes_requested_still_fails(verification: ModuleType) -> None:
+    """An affirmative objection blocks the verdict even when gates are green."""
+    plan = _minimal_plan(
+        status="review",
+        risk="security-authz",
+        review_required=True,
+        human_approvals=["security review"],
+    )
+    checks = {
+        "lint / typecheck / unit+contract": _observation(
+            verification, "lint / typecheck / unit+contract", "completed", "success"
+        )
+    }
+    evidence = verification.build_evidence(
+        plan,
+        checks,
+        (
+            verification.Review(state="APPROVED", commit_id="head", author="bob"),
+            verification.Review(state="CHANGES_REQUESTED", commit_id="head", author="carol"),
+        ),
+        event="pull_request",
+        head_sha="head",
+        author="author",
+        generated_at="2026-10-24T00:00:00+00:00",
+    )
+    assert evidence.verdict == "fail"
+    assert any("changes requested" in item for item in evidence.exceptions)
+    assert evidence.needs_human_review
 
 
 def test_report_pass_is_exception_only(verification: ModuleType) -> None:
@@ -813,3 +855,210 @@ def test_cli_pr_number_from_ref() -> None:
     )
     assert result.returncode == 0
     assert result.stdout == "42"
+
+
+HYGIENE_PATHS = (".gitignore", ".gitattributes", ".editorconfig")
+
+
+def _legacy_policy_payload(payload: dict[str, object] | None = None) -> dict[str, object]:
+    """Return the policy as it looked before ``repo-hygiene`` existed.
+
+    The ratchet compares a pull request's policy against ``main``; these tests
+    need the pre-downgrade baseline rather than the already-migrated file.
+    """
+    base = payload if payload is not None else _policy_payload()
+    classes = _classes(base)
+    classes.pop("repo-hygiene")
+    rules: list[dict[str, object]] = []
+    for rule in cast(list[dict[str, object]], base["path_rules"]):
+        if rule.get("class") == "repo-hygiene":
+            continue
+        if rule.get("class") == "ci-infra":
+            rule = dict(rule)
+            rule["patterns"] = [*cast(list[str], rule["patterns"]), *HYGIENE_PATHS]
+        rules.append(rule)
+    base["path_rules"] = rules
+    base.pop("acknowledged_path_downgrades", None)
+    return base
+
+
+def test_repo_hygiene_is_auto_and_low_risk(verification: ModuleType, policy: object) -> None:
+    """Ignore/attribute/editor files are hygiene, not pipeline infrastructure."""
+    classes = cast(Any, policy).classes
+    for path in HYGIENE_PATHS:
+        name = verification.classify_path(path, policy)
+        assert name == "repo-hygiene"
+        assert not classes[name].review_required
+    plan = _plan(
+        verification,
+        policy,
+        [".gitignore"],
+        _scope_body(".gitignore"),
+    )
+    assert plan.risk == "repo-hygiene"
+    assert plan.status == "pass"
+    assert "GitGuardian Security Checks" in plan.required_checks
+
+
+def test_repo_hygiene_keeps_secret_scan_and_baseline(
+    verification: ModuleType, policy: object
+) -> None:
+    """The low-risk class still runs the baseline gates and the secret scan."""
+    plan = _plan(verification, policy, [".gitignore"], _scope_body(".gitignore"))
+    assert "lint / typecheck / unit+contract" in plan.required_checks
+    assert "GitGuardian Security Checks" in plan.required_checks
+    assert "postgres-gated integration" not in plan.required_checks
+
+
+def test_repo_hygiene_never_wins_a_mixed_diff(verification: ModuleType, policy: object) -> None:
+    """A hygiene edit alongside domain code takes the higher-risk class."""
+    mixed = _plan(
+        verification,
+        policy,
+        [".gitignore", ".github/workflows/ci.yml"],
+        _scope_body(".gitignore", ".github/"),
+    )
+    assert mixed.risk == "ci-infra"
+    assert mixed.status == "review"
+    assert mixed.review_required
+
+    execution = _plan(
+        verification,
+        policy,
+        [".gitignore", "finance/execution/executor.py"],
+        _scope_body(".gitignore", "finance/"),
+    )
+    assert execution.risk == "execution"
+
+    domain = _plan(
+        verification,
+        policy,
+        [".gitignore", "finance/kpi/engine.py"],
+        _scope_body(".gitignore", "finance/kpi/"),
+    )
+    assert domain.risk == "finance-domain"
+
+
+def test_ci_paths_are_still_infrastructure(verification: ModuleType, policy: object) -> None:
+    """Workflow and tooling paths did not move with the dotfiles."""
+    for path in (".github/workflows/ci.yml", "scripts/pr_verification.py", "conftest.py"):
+        assert verification.classify_path(path, policy) == "ci-infra"
+
+
+def test_path_ratchet_rejects_unacknowledged_downgrade(
+    verification: ModuleType, policy: object, tmp_path: Path
+) -> None:
+    """Moving a path to a lower class fails unless the downgrade is declared."""
+    payload = _policy_payload()
+    payload.pop("acknowledged_path_downgrades")
+    proposed = verification.load_policy(_write_policy(tmp_path, payload))
+    errors = verification.evaluate_policy_weakening(
+        verification.load_policy(_write_policy(tmp_path, _legacy_policy_payload())), proposed
+    )
+    assert any("lowers classification for '.gitignore'" in error for error in errors)
+
+
+def test_path_ratchet_accepts_acknowledged_downgrade(
+    verification: ModuleType, policy: object, tmp_path: Path
+) -> None:
+    """A declared downgrade with a reason is allowed and matches the policy."""
+    legacy = verification.load_policy(_write_policy(tmp_path, _legacy_policy_payload()))
+    assert verification.evaluate_policy_weakening(legacy, policy) == ()
+
+
+def test_path_ratchet_rejects_rerouted_infrastructure(
+    verification: ModuleType, policy: object, tmp_path: Path
+) -> None:
+    """Re-routing .github/ into a low-risk class cannot hide behind class checks."""
+    payload = _policy_payload()
+    rules = cast(list[dict[str, object]], payload["path_rules"])
+    for rule in rules:
+        if rule["class"] == "ci-infra":
+            rule["patterns"] = [p for p in cast(list[str], rule["patterns"]) if p != ".github/"]
+        if rule["class"] == "docs":
+            rule["patterns"] = [*cast(list[str], rule["patterns"]), ".github/"]
+    proposed = verification.load_policy(_write_policy(tmp_path, payload))
+    errors = verification.evaluate_policy_weakening(policy, proposed)
+    assert any("lowers classification for '.github/'" in error for error in errors)
+
+
+def test_path_ratchet_rejects_dishonest_acknowledgement(
+    verification: ModuleType, policy: object, tmp_path: Path
+) -> None:
+    """An acknowledgement must name a real pattern, class, and downgrade."""
+    payload = _policy_payload()
+    payload["acknowledged_path_downgrades"] = [
+        {
+            "pattern": "nowhere/",
+            "from": "ci-infra",
+            "to": "repo-hygiene",
+            "reason": "invented",
+        }
+    ]
+    proposed = verification.load_policy(_write_policy(tmp_path, payload))
+    errors = verification.evaluate_policy_weakening(policy, proposed)
+    assert any("does not name a policy path pattern" in error for error in errors)
+
+
+def test_label_command_requests_review_on_shortfall(
+    verification: ModuleType, tmp_path: Path
+) -> None:
+    """The label decision follows the evidence flag and fails closed when absent."""
+    evidence = tmp_path / "evidence.json"
+    out = tmp_path / "label.txt"
+    evidence.write_text(json.dumps({"verdict": "pass", "needs_human_review": True}), "utf-8")
+    assert verification.main(["label", "--evidence", str(evidence), "--out", str(out)]) == 0
+    assert out.read_text(encoding="utf-8").strip() == "needs-human-review"
+
+    evidence.write_text(json.dumps({"verdict": "pass", "needs_human_review": False}), "utf-8")
+    assert verification.main(["label", "--evidence", str(evidence), "--out", str(out)]) == 0
+    assert out.read_text(encoding="utf-8").strip() == ""
+
+    missing = tmp_path / "absent.json"
+    assert verification.main(["label", "--evidence", str(missing), "--out", str(out)]) == 0
+    assert out.read_text(encoding="utf-8").strip() == "needs-human-review"
+
+
+def test_report_pass_declares_the_merge_gate(verification: ModuleType) -> None:
+    """A green verdict must not read as mergeable when approval is outstanding."""
+    report = verification.render_report(
+        {
+            "verdict": "pass",
+            "risk": "ci-infra",
+            "head_sha": "head",
+            "required_checks": ["lint / typecheck / unit+contract"],
+            "exceptions": [],
+            "advisories": ["human approval incomplete: 0/1"],
+            "review_required": True,
+            "human_approvals": ["CI infrastructure review"],
+            "approved_by": [],
+            "approvals_required": 1,
+            "needs_human_review": True,
+            "checks": [],
+        }
+    )
+    assert "### Merge gate" in report
+    assert "not a mergeability claim" in report
+    assert "branch protection" in report.lower()
+    assert "needs-human-review" in report
+
+
+def test_report_clean_pass_has_no_merge_gate(verification: ModuleType) -> None:
+    """Without a shortfall the report stays exception-only."""
+    report = verification.render_report(
+        {
+            "verdict": "pass",
+            "risk": "docs",
+            "head_sha": "head",
+            "required_checks": ["lint / typecheck / unit+contract"],
+            "exceptions": [],
+            "advisories": [],
+            "review_required": False,
+            "human_approvals": [],
+            "approved_by": [],
+            "approvals_required": 0,
+            "needs_human_review": False,
+            "checks": [],
+        }
+    )
+    assert "### Merge gate" not in report

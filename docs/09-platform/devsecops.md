@@ -131,13 +131,14 @@ is never inferred from the branch name or commit messages.
 | Risk class | Typical paths | Extra checks | Human review |
 |---|---|---|---|
 | `docs` | `docs/`, `*.md`, `openspec/` | none | automatic |
+| `repo-hygiene` | `.gitignore`, `.gitattributes`, `.editorconfig` | `GitGuardian Security Checks` | automatic |
 | `tests-only` | `tests/` | none | automatic |
 | `apps-web` | `apps/` | `postgres-gated integration` | automatic |
 | `finance-domain` | `finance/`, `shared/`, `agents/` | postgres + `deterministic golden-dataset eval gate` | automatic |
 | `execution` | `finance/execution/`, `finance/accounting/` | postgres + `ministack S3 contract (LocalStack)` + golden dataset | automatic |
 | `migrations` | `alembic/`, `migrations/` | postgres | required |
 | `dependencies` | lockfiles, `pyproject.toml`, `package.json` | all gates | required |
-| `ci-infra` | `.github/`, `scripts/`, build config | all gates | required |
+| `ci-infra` | `.github/`, `scripts/`, build config | all gates | approval boundary |
 | `security-authz` | auth, permissions, tenancy | all gates | required |
 | `unknown` | anything unmatched | fail closed | required |
 
@@ -157,22 +158,35 @@ of baseline and risk-specific checks:
 After the policy exists on the base branch, a pull request that changes it must
 carry the `policy-change` label. The workflow uses the base policy for the
 current run and also validates the head policy, rejecting a proposal that
-removes a required check, lowers a class severity, disables review, or erases a
-human-approval note. The bootstrap change (when the policy is absent on the base
-branch) is allowed without the label.
+removes a required check, lowers a class severity, disables review, erases a
+human-approval note, or re-routes a path pattern to a lower-risk class without a
+declared `acknowledged_path_downgrades` entry (with a reason). The bootstrap
+change (when the policy is absent on the base branch) is allowed without the
+label.
 
 **Evidence bundle.** The `evidence` job polls check-runs for the exact head SHA
 and evaluates only the checks required by the plan. It uploads the
 `verification-evidence` artifact containing `evidence.json`, `report.md`,
 `checks.jsonl`, and `reviews.jsonl`; the `plan` job uploads
-`verification-plan`. A missing check, a non-success conclusion, a pending check,
-or a missing approval is recorded as an exception — never silently treated as
-success. Exit codes are `0` pass, `1` fail, and `3` pending.
+`verification-plan`. A missing check, a non-success conclusion, or a pending
+check is recorded as an exception — never silently treated as success. Exit codes
+are `0` pass, `1` fail, and `3` pending.
+
+**Approval boundaries are not gate outcomes.** Gates alone determine the verdict.
+When a required non-author approval is missing, the run still reports its
+technical result, sets `needs_human_review` in `evidence.json`, prints a "Merge
+gate" section stating that the verdict is not a mergeability claim, and applies
+the `needs-human-review` label. GitHub branch protection remains the single
+authoritative enforcement point for approvals at merge time. An affirmative
+`CHANGES_REQUESTED` review at the head commit is still a hard failure: it is an
+objection, not an absence.
 
 **Exception-only report.** The `report` job upserts one sticky comment marked
 with `<!-- pr-verification-report -->`. A clean pass prints one line plus the
 required-gate count; a failure or pending run lists the exceptions, the human
-approval boundary, and a collapsible check table. Fork pull requests do not
+approval boundary, and a collapsible check table. A pass with an outstanding
+approval adds the merge-gate block, and the same job syncs the
+`needs-human-review` label (`issues: write` / `pull-requests: write`). Fork pull requests do not
 receive a comment (the workflow token is read-only there), but the artifacts are
 still uploaded.
 
