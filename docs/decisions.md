@@ -163,3 +163,38 @@ Architectural and design decisions for FinSight, with rationale and context.
 - The claim validators (`shared/utils/validators/claim_validator.py`) cross-check every numeric value in LLM output against the evidence context.
 
 **Trade-off:** Evidence tracking adds complexity to the data model and requires additional storage for evidence references. The alternative — producing plausible-sounding but unverifiable claims — is unacceptable in financial contexts.
+
+---
+
+## Why Risk-Based PR Verification
+
+**Decision:** Pull-request verification is split into three layers: automated gates on every pull request, risk-triggered gates derived from changed paths, and human approval only at decision boundaries. The diff scope is declared explicitly in the pull request body, and the policy that maps risk to gates is machine-readable and protected against weakening.
+
+**Context:** The previous pipeline ran the same gates for every change. That is safe but slow, and it still left the most consequential reviews — dependency upgrades, migrations, CI changes, and authorization changes — dependent on reviewer attention rather than an explicit boundary. Conversely, treating every change as equally risky would either block documentation fixes or normalize bypassing checks. The repository already has strong gates; the missing piece is deciding which gates a given diff actually needs and recording why.
+
+**Rationale:**
+- Classification from changed paths is deterministic and auditable. It does not depend on the author's self-assessment or on an LLM.
+- The declared scope block fails closed. A missing, malformed, or incomplete scope cannot silently widen or narrow verification.
+- Risk classes compose by highest severity, so a mixed pull request receives every gate required by its riskiest file.
+- The policy file makes the risk-to-gate mapping reviewable in the same diff as the code. The `PROTECTED_CHECKS` guard prevents a policy edit from dropping one of the five branch-protection contexts.
+- Evidence is bound to the exact head SHA. Missing, pending, or failed checks become exceptions rather than implicit passes.
+- The sticky report is exception-only, so a clean pull request stays quiet while a blocked one explains exactly what is missing and who must approve.
+- Human approval is reserved for decisions automation cannot make: dependency/CVE acceptance, migration and rollback safety, CI ownership, security ownership, and unclassified paths.
+
+**Trade-off:** The policy and path rules need maintenance when the repository layout changes; an unmatched path fails closed as `unknown` until a rule is added. The workflow also adds a small amount of runtime for the plan and evidence jobs. Both costs are deliberate: a false `unknown` blocks a merge and asks for a rule, while a false `pass` would be invisible. Enabling the merge queue and making `PR verification` a required check remain human decisions because they change repository settings; the workflow itself never does.
+
+---
+
+## Why Missing Approvals Are a Label, Not a Failed Gate
+
+**Decision:** A verification run's verdict is determined only by required technical checks. When a review-required risk class lacks its non-author approval, the run still passes, sets `needs_human_review`, prints a merge-gate section stating the verdict is not a mergeability claim, and applies the `needs-human-review` label. An affirmative `CHANGES_REQUESTED` review at the head commit remains a hard failure. GitHub branch protection stays the single authoritative merge-time enforcement of approvals.
+
+**Context:** The first rollout made a missing approval a verification exception, so every `ci-infra` pull request was permanently red in a repository whose branch protection deliberately requires zero approvals and forbids self-approval. A red check that no action can clear teaches reviewers to ignore that check, and it conflates "the automated gates did not find a defect" with "this is safe to merge" — two claims with different owners and different evidence.
+
+**Rationale:**
+- Duplicating branch protection in a status check produces two sources of truth for the same rule; when they disagree, the check is wrong and gets ignored.
+- Verification answers a technical question. Expressing the approval gap as a distinct signal keeps a green verdict honest without pretending the change is mergeable.
+- `CHANGES_REQUESTED` is not an absence but an objection; automation can and should block on it.
+- A label is visible in the pull-request list and does not require a re-run to clear once approval is recorded.
+
+**Trade-off:** A passing verification no longer implies mergeability, so consumers must not treat the verdict alone as a merge signal. The merge-gate block, the label, and branch protection together carry that meaning; dropping any one of them would let a green check imply something it does not assert.

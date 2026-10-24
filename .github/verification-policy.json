@@ -1,0 +1,247 @@
+{
+  "schema_version": 1,
+  "policy_path": ".github/verification-policy.json",
+  "baseline_checks": [
+    "lint / typecheck / unit+contract"
+  ],
+  "classes": {
+    "docs": {
+      "severity": 0,
+      "extra_checks": [],
+      "review_required": false,
+      "human_approvals": []
+    },
+    "repo-hygiene": {
+      "severity": 1,
+      "extra_checks": [
+        "GitGuardian Security Checks"
+      ],
+      "review_required": false,
+      "human_approvals": []
+    },
+    "tests-only": {
+      "severity": 1,
+      "extra_checks": [],
+      "review_required": false,
+      "human_approvals": []
+    },
+    "apps-web": {
+      "severity": 2,
+      "extra_checks": [
+        "postgres-gated integration"
+      ],
+      "review_required": false,
+      "human_approvals": []
+    },
+    "finance-domain": {
+      "severity": 3,
+      "extra_checks": [
+        "postgres-gated integration",
+        "deterministic golden-dataset eval gate"
+      ],
+      "review_required": false,
+      "human_approvals": []
+    },
+    "execution": {
+      "severity": 3,
+      "extra_checks": [
+        "postgres-gated integration",
+        "ministack S3 contract (LocalStack)",
+        "deterministic golden-dataset eval gate"
+      ],
+      "review_required": false,
+      "human_approvals": []
+    },
+    "dependencies": {
+      "severity": 4,
+      "extra_checks": [
+        "postgres-gated integration",
+        "ministack S3 contract (LocalStack)",
+        "deterministic golden-dataset eval gate",
+        "GitGuardian Security Checks"
+      ],
+      "review_required": true,
+      "human_approvals": [
+        "dependency/CVE review recorded in the PR"
+      ]
+    },
+    "migrations": {
+      "severity": 4,
+      "extra_checks": [
+        "postgres-gated integration"
+      ],
+      "review_required": true,
+      "human_approvals": [
+        "migration and rollback plan reviewed by a database owner"
+      ]
+    },
+    "ci-infra": {
+      "severity": 4,
+      "extra_checks": [
+        "postgres-gated integration",
+        "ministack S3 contract (LocalStack)",
+        "deterministic golden-dataset eval gate",
+        "GitGuardian Security Checks"
+      ],
+      "review_required": true,
+      "human_approvals": [
+        "CI/infrastructure change reviewed by a CI owner"
+      ]
+    },
+    "security-authz": {
+      "severity": 5,
+      "extra_checks": [
+        "postgres-gated integration",
+        "ministack S3 contract (LocalStack)",
+        "deterministic golden-dataset eval gate",
+        "GitGuardian Security Checks"
+      ],
+      "review_required": true,
+      "human_approvals": [
+        "security/authz change reviewed by a security owner"
+      ]
+    },
+    "unknown": {
+      "severity": 6,
+      "extra_checks": [
+        "postgres-gated integration",
+        "ministack S3 contract (LocalStack)",
+        "deterministic golden-dataset eval gate",
+        "GitGuardian Security Checks"
+      ],
+      "review_required": true,
+      "human_approvals": [
+        "unclassified path: extend path_rules before merge"
+      ]
+    }
+  },
+  "path_rules": [
+    {
+      "class": "tests-only",
+      "patterns": [
+        "tests/"
+      ]
+    },
+    {
+      "class": "dependencies",
+      "patterns": [
+        "*pyproject.toml",
+        "*uv.lock",
+        "*package.json",
+        "*pnpm-lock.yaml",
+        "*package-lock.json",
+        "*yarn.lock",
+        "*requirements*.txt",
+        "*constraints*.txt",
+        "*Pipfile",
+        "*Pipfile.lock",
+        "*poetry.lock"
+      ]
+    },
+    {
+      "class": "security-authz",
+      "patterns": [
+        "shared/auth/",
+        "shared/security/",
+        "apps/api/auth/",
+        "apps/api/middleware/auth",
+        "shared/utils/policy.py",
+        "*auth*.py",
+        "*permission*.py",
+        "*tenant*.py"
+      ]
+    },
+    {
+      "class": "migrations",
+      "patterns": [
+        "alembic/versions/",
+        "alembic/env.py",
+        "alembic.ini",
+        "migrations/"
+      ]
+    },
+    {
+      "class": "execution",
+      "patterns": [
+        "finance/execution/",
+        "finance/accounting/"
+      ]
+    },
+    {
+      "class": "ci-infra",
+      "patterns": [
+        ".github/",
+        "scripts/",
+        "conftest.py",
+        "*/conftest.py",
+        "pytest.ini",
+        "tox.ini",
+        "ruff.toml",
+        "mypy.ini",
+        ".devcontainer/",
+        "Dockerfile*",
+        "*/Dockerfile*",
+        "*docker-compose*.yml",
+        "*docker-compose*.yaml",
+        "Makefile",
+        "*/Makefile",
+        ".pre-commit-config.yaml"
+      ]
+    },
+    {
+      "class": "finance-domain",
+      "patterns": [
+        "finance/",
+        "shared/",
+        "agents/"
+      ]
+    },
+    {
+      "class": "apps-web",
+      "patterns": [
+        "apps/"
+      ]
+    },
+    {
+      "class": "docs",
+      "patterns": [
+        "docs/",
+        "openspec/",
+        "README*",
+        "CONTRIBUTING.md",
+        "SECURITY.md",
+        "LICENSE*",
+        "*.md",
+        "*.rst"
+      ]
+    },
+    {
+      "class": "repo-hygiene",
+      "patterns": [
+        ".gitignore",
+        ".gitattributes",
+        ".editorconfig"
+      ]
+    }
+  ],
+  "acknowledged_path_downgrades": [
+    {
+      "pattern": ".gitignore",
+      "from": "ci-infra",
+      "to": "repo-hygiene",
+      "reason": "An ignore rule is hygiene, not CI infrastructure: it cannot change build or test behaviour, and the secret scan remains required."
+    },
+    {
+      "pattern": ".gitattributes",
+      "from": "ci-infra",
+      "to": "repo-hygiene",
+      "reason": "Attribute rules affect checkout/line endings but not the pipelines ci-infra gates exercise."
+    },
+    {
+      "pattern": ".editorconfig",
+      "from": "ci-infra",
+      "to": "repo-hygiene",
+      "reason": "Editor configuration is not consumed by CI at all."
+    }
+  ]
+}
