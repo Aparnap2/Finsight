@@ -83,6 +83,24 @@ Architectural and design decisions for FinSight, with rationale and context.
 
 ---
 
+## Why Ambiguous Writes Are Never Retried
+
+**Decision:** When an outbound write may or may not have reached the provider, the system does not retry it. It resolves the outcome by looking the entry up under the idempotency key, and if that lookup cannot establish the truth it records a durable pending state instead of guessing. Absence is treated as usable evidence only when the adapter's declared guarantees make it reliable.
+
+**Context:** `finance/execution/executor.py` retried any `TransientError` up to three times and then reported `FAILED`. A read timeout after the provider had already committed produces exactly the state that logic mishandles: the write succeeded, the client never learned the reference, and the retry creates a second journal entry. `FAILED` is worse than useless here because downstream reconciliation and reporting treat it as "no entry exists". The adapter contract offered no way to distinguish "never sent" from "sent, outcome unknown", and it had no lookup by idempotency key at all, so the executor could not establish the truth even in principle.
+
+**Rationale:**
+- The send boundary is the only sound place to classify a failure. An adapter that handed a request to the network cannot prove it was not delivered, so it must report ambiguity rather than a retryable transient error.
+- A lookup keyed by idempotency key is the only evidence that can settle an ambiguous write. The stored provider reference is written only after a successful return, so on the ambiguous path the entry identifier is unknown and `get_entry(id)` is unreachable.
+- A three-valued lookup (`FOUND`, `CONFIRMED_ABSENT`, `UNAVAILABLE`) prevents the classic defect of modelling "I could not ask" as "it is not there". Timeouts and server errors map to `UNAVAILABLE`, never to absence.
+- Whether an empty lookup is trustworthy is a provider property, not a caller preference. It is derived from declared consistency, lookup support, and key retention covering the recovery window, so an adapter cannot widen its own retry authority by asserting the answer directly.
+- `ExceptionState` stays frozen. An unresolved write is `EXECUTING` with a non-terminal `PENDING_RECONCILIATION` result, which is findable and distinguishable without adding vocabulary to a state machine shared with approval and evidence flows.
+- Re-invocation is the safe recovery trigger. It must resolve the existing intent before any write; treating a repeat call as a new intent reintroduces the duplicate under a different code path. The retry budget is persisted with the intent so a restart cannot reset it.
+
+**Trade-off:** Ambiguity becomes durable operational work. Without a reconciliation sweeper, `PENDING_RECONCILIATION` rows wait for a re-invocation or an operator, and the absence of a sweep is accepted debt rather than an oversight. The alternative — retrying into a duplicate entry, or marking `FAILED` on an unknown outcome — corrupts the ledger, which is not recoverable by later review. Full contract: `openspec/changes/add-ambiguous-write-recovery/`.
+
+---
+
 ## Why `finance/` Not `finance/ontology/`
 
 **Decision:** The domain layer is named `finance/`, not `finance/ontology/`.
@@ -145,3 +163,38 @@ Architectural and design decisions for FinSight, with rationale and context.
 - The claim validators (`shared/utils/validators/claim_validator.py`) cross-check every numeric value in LLM output against the evidence context.
 
 **Trade-off:** Evidence tracking adds complexity to the data model and requires additional storage for evidence references. The alternative — producing plausible-sounding but unverifiable claims — is unacceptable in financial contexts.
+
+---
+
+## Why Risk-Based PR Verification
+
+**Decision:** Pull-request verification is split into three layers: automated gates on every pull request, risk-triggered gates derived from changed paths, and human approval only at decision boundaries. The diff scope is declared explicitly in the pull request body, and the policy that maps risk to gates is machine-readable and protected against weakening.
+
+**Context:** The previous pipeline ran the same gates for every change. That is safe but slow, and it still left the most consequential reviews — dependency upgrades, migrations, CI changes, and authorization changes — dependent on reviewer attention rather than an explicit boundary. Conversely, treating every change as equally risky would either block documentation fixes or normalize bypassing checks. The repository already has strong gates; the missing piece is deciding which gates a given diff actually needs and recording why.
+
+**Rationale:**
+- Classification from changed paths is deterministic and auditable. It does not depend on the author's self-assessment or on an LLM.
+- The declared scope block fails closed. A missing, malformed, or incomplete scope cannot silently widen or narrow verification.
+- Risk classes compose by highest severity, so a mixed pull request receives every gate required by its riskiest file.
+- The policy file makes the risk-to-gate mapping reviewable in the same diff as the code. The `PROTECTED_CHECKS` guard prevents a policy edit from dropping one of the five branch-protection contexts.
+- Evidence is bound to the exact head SHA. Missing, pending, or failed checks become exceptions rather than implicit passes.
+- The sticky report is exception-only, so a clean pull request stays quiet while a blocked one explains exactly what is missing and who must approve.
+- Human approval is reserved for decisions automation cannot make: dependency/CVE acceptance, migration and rollback safety, CI ownership, security ownership, and unclassified paths.
+
+**Trade-off:** The policy and path rules need maintenance when the repository layout changes; an unmatched path fails closed as `unknown` until a rule is added. The workflow also adds a small amount of runtime for the plan and evidence jobs. Both costs are deliberate: a false `unknown` blocks a merge and asks for a rule, while a false `pass` would be invisible. Enabling the merge queue and making `PR verification` a required check remain human decisions because they change repository settings; the workflow itself never does.
+
+---
+
+## Why Missing Approvals Are a Label, Not a Failed Gate
+
+**Decision:** A verification run's verdict is determined only by required technical checks. When a review-required risk class lacks its non-author approval, the run still passes, sets `needs_human_review`, prints a merge-gate section stating the verdict is not a mergeability claim, and applies the `needs-human-review` label. An affirmative `CHANGES_REQUESTED` review at the head commit remains a hard failure. GitHub branch protection stays the single authoritative merge-time enforcement of approvals.
+
+**Context:** The first rollout made a missing approval a verification exception, so every `ci-infra` pull request was permanently red in a repository whose branch protection deliberately requires zero approvals and forbids self-approval. A red check that no action can clear teaches reviewers to ignore that check, and it conflates "the automated gates did not find a defect" with "this is safe to merge" — two claims with different owners and different evidence.
+
+**Rationale:**
+- Duplicating branch protection in a status check produces two sources of truth for the same rule; when they disagree, the check is wrong and gets ignored.
+- Verification answers a technical question. Expressing the approval gap as a distinct signal keeps a green verdict honest without pretending the change is mergeable.
+- `CHANGES_REQUESTED` is not an absence but an objection; automation can and should block on it.
+- A label is visible in the pull-request list and does not require a re-run to clear once approval is recorded.
+
+**Trade-off:** A passing verification no longer implies mergeability, so consumers must not treat the verdict alone as a merge signal. The merge-gate block, the label, and branch protection together carry that meaning; dropping any one of them would let a green check imply something it does not assert.
