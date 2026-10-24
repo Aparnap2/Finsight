@@ -24,24 +24,27 @@ Today the code is safe only because the only adapter is the fake. The moment a l
 - **Adds lookup by idempotency key** to the adapter contract, itself three-valued (`FOUND`, `CONFIRMED_ABSENT`, `UNAVAILABLE`) so that a failed lookup can never be mistaken for evidence of absence.
 - **Adds declared recovery capabilities** (`WriteRecoveryCapabilities`). Whether `CONFIRMED_ABSENT` authorizes a retry is derived from the adapter's declared consistency and key-retention guarantees, never assumed by the executor.
 - **Splits the write failure taxonomy**: `WriteNotSentError` (provably not transmitted, retry safe) vs `AmbiguousWriteError` (transmitted, outcome unknown, must resolve by lookup). `TransientError` is narrowed to the pre-send case.
-- **Replaces the in-memory call-log scan** as the recovery mechanism with durable key lookup.
+- **Replaces the in-memory call-log scan** as the recovery mechanism with durable key lookup, and makes re-invocation resolve an existing non-terminal intent before any write.
 - **Adds `ExecutionResultStatus.PENDING_RECONCILIATION`** and keeps the aggregate in `EXECUTING` for unknown outcomes. No new `ExceptionState` is introduced; the frozen SM-1 vocabulary is unchanged.
 - **Extends the failure-injection fake** so it can commit a write and then raise a timeout, and can make lookup unavailable — the two conditions the current fake cannot express.
+- **Persists recovery state on the intent row**: the shared write-attempt budget, the recovery reason, and when recovery began, so a pending row is distinguishable from abandoned work and a restart cannot reset the budget.
 
 ## Impact
 
 - **Affected specs (ADDED):** `accounting-write-recovery`.
-- **Affected code (after approval):** `finance/accounting/errors.py`, `finance/accounting/adapter.py`, `finance/accounting/mock.py`, `finance/execution/executor.py`, `finance/execution/execution_result.py`, `tests/unit/test_finance/`, `docs/testing/test-accounting.json`, `docs/decisions.md`.
+- **Affected code (after approval):** `finance/accounting/errors.py`, `finance/accounting/adapter.py`, `finance/accounting/mock.py`, `finance/execution/executor.py`, `finance/execution/execution_result.py`, the durable execution store (intent lookup + recovery fields), `tests/unit/test_finance/`, `docs/testing/test-accounting.json`, `docs/decisions.md`.
 - **Unaffected:** approval, policy, guard, triple-hash integrity, tenant isolation, post-verification tolerance, the idempotency claim store's `(tenant, key)` scope.
 
 ## Non-Goals
 
 - No live provider integration; no credentials, no network writes.
-- No change to the 3-attempt budget, and no new retry budget.
+- No change to the 3-attempt budget and no new retry budget; the counter becomes durable and shared across both retry paths rather than being a per-call constant.
 - No automatic reconciliation sweeper. `PENDING_RECONCILIATION` is a durable handoff; a re-invocation with the same key is the existing safe recovery trigger.
 - No change to the frozen `ExceptionState` vocabulary.
 - No rollback of already-booked entries; that is a separate compensating-entry concern.
 
 ## Approval Required
 
-`finance/execution/execution_result.py` and `finance/accounting/adapter.py` are contract surfaces consumed by tests that assert current terminal verdicts. Adding `PENDING_RECONCILIATION` changes the set of legal results. Implementation SHALL NOT begin until this contract is ratified.
+`finance/execution/execution_result.py` and `finance/accounting/adapter.py` are contract surfaces consumed by tests that assert current terminal verdicts. Adding `PENDING_RECONCILIATION` changes the set of legal results.
+
+**Status: ratified 2026-10-24.** D1–D5 were accepted with conditions, recorded in `design.md` §10 and `docs/decisions.md`. Tasks 0.1 and 0.2 are complete. Implementation proceeds one task at a time under `tasks.md`, each as its own reviewable change; this contract change itself ships no production code.

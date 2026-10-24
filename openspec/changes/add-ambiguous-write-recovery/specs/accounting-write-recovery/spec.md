@@ -46,9 +46,11 @@ The accounting adapter SHALL expose `get_entry_by_key(idempotency_key)` returnin
 
 Each adapter SHALL declare its recovery capabilities through `describe_recovery_capabilities()`, covering lookup availability, lookup consistency, duplicate-write semantics, key retention window, and lookup budget. The executor SHALL derive recovery behaviour exclusively from these declarations and SHALL NOT assume provider guarantees. `absence_is_authoritative` SHALL be derived as true only when lookup is supported, consistency is strong, and key retention covers the recovery window.
 
+`absence_is_authoritative` SHALL NOT be a declared input, a constructor argument, or a settable field. The capability type SHALL NOT be able to represent that value independently of the declarations it is derived from. An adapter cannot widen its own retry authority by asserting the derived value.
+
 #### Scenario: Undeclared guarantees forbid retry
 
-- **WHEN** an adapter declares `absence_is_authoritative = false`
+- **WHEN** an adapter's declared inputs derive `absence_is_authoritative = false`
 - **THEN** a `CONFIRMED_ABSENT` lookup does not authorize any retry and the outcome remains `UNKNOWN`
 
 #### Scenario: Retention shorter than the recovery window
@@ -78,6 +80,43 @@ An unknown outcome SHALL be persisted durably before the call returns. The aggre
 
 - **WHEN** the process terminates after an ambiguous write and before resolution
 - **THEN** the persisted intent remains `EXECUTING` with a `PENDING_RECONCILIATION` result, and a later invocation with the same key resolves it without a duplicate write
+
+### Requirement: Re-Invocation Resolves The Existing Intent
+
+When a command is presented under an idempotency key whose intent already exists and is not terminal, the executor SHALL resolve that intent before issuing any adapter write. It SHALL load the persisted intent through the durable store and, when the intent is `EXECUTING` with no result, SHALL enter lookup-based recovery as if resuming the original attempt. Re-invocation SHALL NOT be treated as a fresh intent, and no code path SHALL write while a non-terminal intent exists for the key.
+
+A re-invocation whose intent already holds a terminal result SHALL return that stored result unchanged. A re-invocation whose claim conflicts on `payload_hash` SHALL be rejected without a write.
+
+`PENDING_RECONCILIATION` SHALL be non-terminal. A pending row SHALL persist its recovery reason, its write-attempt counter, and the time recovery began, so that it is distinguishable from an abandoned or crashed execution.
+
+#### Scenario: Re-invocation of a pending intent performs no write
+
+- **WHEN** the same key is submitted again after a prior invocation ended in `PENDING_RECONCILIATION`
+- **THEN** the executor performs zero adapter writes, performs at least one `get_entry_by_key` lookup, and resolves through the recovery transitions
+
+#### Scenario: Completed intent is replayed, not re-executed
+
+- **WHEN** the same key is submitted again after a terminal successful result
+- **THEN** the stored result is returned with zero adapter writes and zero recovery lookups
+
+#### Scenario: Pending row is not indistinguishable from abandoned work
+
+- **WHEN** an intent is left in `PENDING_RECONCILIATION`
+- **THEN** the persisted row records the recovery reason and the write-attempt counter, so an operator can tell it apart from an abandoned execution
+
+### Requirement: Durable Retry Budget
+
+The write-attempt counter SHALL be persisted with the intent and SHALL bound the total adapter writes for one operation at three, shared across pre-send retries and retries after an authoritative absence. The counter SHALL NOT reset on process restart, on construction of a new executor, or on repeated invocation of the same key.
+
+#### Scenario: Budget survives restart
+
+- **WHEN** an operation has consumed its write attempts and the process restarts before a further attempt
+- **THEN** the remaining budget is unchanged by the restart and no further write is permitted for that operation
+
+#### Scenario: Budget is shared across both retry paths
+
+- **WHEN** an operation has already consumed attempts through pre-send retries and later reaches a retry after authoritative absence
+- **THEN** the post-absence retry draws from the same counter and the combined total does not exceed three
 
 ### Requirement: Key Scope, Durability And Conflict
 

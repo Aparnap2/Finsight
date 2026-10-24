@@ -5,15 +5,17 @@ Each task is one reviewable iteration; gates are `uv run ruff check . && uv run 
 
 ## Phase 0 — Ratification (blocking)
 
-### Task 0.1 — Ratify contract decisions
+### Task 0.1 — Ratify contract decisions — ✅ DONE (2026-10-24)
 - **Scope:** Resolve D1–D5 in `design.md`; confirm `UNKNOWN → EXECUTING + PENDING_RECONCILIATION` and the `TransientError` narrowing.
 - **Acceptance:** Each decision marked accepted or replaced; no open question remains that changes the state table.
 - **Test phase:** none (review artifact).
+- **Outcome:** All five accepted with conditions recorded in `design.md` §10. D1 adds §5.1 (resolve-before-write on re-invocation). D3 adds §5.3 (durable budget). D4 adds §5.2 (pending row diagnostics). D5 corrects §4.3: `absence_is_authoritative` is derived and never a declared input.
 
-### Task 0.2 — Confirm no live provider is in scope
+### Task 0.2 — Confirm no live provider is in scope — ✅ DONE (2026-10-24)
 - **Scope:** Verify the claim that `finance/accounting/*` is the only write surface and that Razorpay/Stripe are read-side only.
 - **Acceptance:** Written confirmation in the change; any live client found is named and scoped before Task 1.1.
 - **Test phase:** none (audit).
+- **Outcome:** Confirmed in `design.md` §6. `AccountingAdapter` is satisfied only by `MockAccountingAdapter`; Razorpay is an inbound webhook source type; `finance/stripe/adapter.py` normalises inbound events; `.env.example` holds no outbound payment credentials. No live write client exists, so no live provider guarantee is in scope.
 
 ## Phase 1 — Contract types (no behaviour change)
 
@@ -27,7 +29,12 @@ Each task is one reviewable iteration; gates are `uv run ruff check . && uv run 
 - **Acceptance:** `absence_is_authoritative` is a derived property, not a settable field; the type cannot represent a binary present/absent lookup.
 - **Test phase:** Unit.
 
-### Task 1.3 — Add pending result status
+### Task 1.3 — Durable intent lookup and recovery fields
+- **Scope:** durable store — `find_intent_by_key(tenant_id, key)`; persisted `recovery_reason`, `adapter_write_attempts`, `recovery_started_at` on the intent row.
+- **Acceptance:** A row can be found by `(tenant_id, key)` after restart; the three recovery fields round-trip; `adapter_write_attempts` defaults to 0 and is monotonic.
+- **Test phase:** Unit.
+
+### Task 1.4 — Add pending result status
 - **Scope:** `finance/execution/execution_result.py` — `ExecutionResultStatus.PENDING_RECONCILIATION`; document that it is non-terminal and never closes a case.
 - **Acceptance:** No `ExceptionState` member added; `CLOSED` remains reachable only from `SUCCEEDED` + `MATCHED`.
 - **Test phase:** Unit.
@@ -45,8 +52,8 @@ Each task is one reviewable iteration; gates are `uv run ruff check . && uv run 
 - **Test phase:** Unit.
 
 ### Task 2.3 — Capability declaration on the fake
-- **Scope:** `mock.py` — `describe_recovery_capabilities` with test-only overrides, defaulting to non-authoritative absence.
-- **Acceptance:** Default fake reports `absence_is_authoritative = false`; overriding to true is explicit and documented as a fixture affordance.
+- **Scope:** `mock.py` — `describe_recovery_capabilities`; the fixture may declare the capability **inputs** (`lookup_by_key`, `lookup_consistency`, `key_retention_seconds`, `max_recovery_lookups`, `duplicate_write_semantics`), defaulting to non-authoritative absence.
+- **Acceptance:** Default fake derives `absence_is_authoritative = false`. A fixture that needs it true declares strong consistency plus sufficient retention and the value follows. Supplying `absence_is_authoritative` directly is rejected, and a test asserts the type cannot be constructed with it.
 - **Test phase:** Unit.
 
 ## Phase 3 — Executor recovery
@@ -71,6 +78,21 @@ Each task is one reviewable iteration; gates are `uv run ruff check . && uv run 
 - **Acceptance:** Row is `EXECUTING` with `PENDING_RECONCILIATION`; `FAILED` requires established absence.
 - **Test phase:** Unit.
 
+### Task 3.5 — Resolve unresolved intent on re-invocation (D1)
+- **Scope:** `executor.py` — on `IdempotencyStore` `REPLAY`, load the intent via `find_intent_by_key` and branch on persisted state: terminal → replay result; `EXECUTING` with no result → recovery via lookup; missing row → fail closed to pending. No write while a non-terminal intent exists.
+- **Acceptance:** Re-invocation of an unresolved intent performs 0 writes and ≥1 lookup; a completed intent replays with 0 writes and 0 lookups. A test asserts no `create_entry` call occurs before the first lookup when the intent is non-terminal.
+- **Test phase:** Unit.
+
+### Task 3.6 — Persist the write-attempt budget (D3)
+- **Scope:** `executor.py` — increment `adapter_write_attempts` before each write; cap the combined total at 3 across T1 and T5; never reset on restart or re-invocation.
+- **Acceptance:** A restart between attempts does not restore budget; a pre-send retry plus a post-absence retry cannot exceed 3 in total.
+- **Test phase:** Unit.
+
+### Task 3.7 — Persist pending diagnostics (D4)
+- **Scope:** `executor.py` — write `recovery_reason` (T6/T7/T8) and `recovery_started_at` when returning `PENDING_RECONCILIATION`.
+- **Acceptance:** The three pending reasons are distinguishable from the row alone; a pending row is distinguishable from a crashed `EXECUTING` row with no reason.
+- **Test phase:** Unit.
+
 ## Phase 4 — Acceptance
 
 ### Task 4.1 — A1–A5 (send boundary and lookup outcomes)
@@ -92,6 +114,11 @@ Each task is one reviewable iteration; gates are `uv run ruff check . && uv run 
 - **Scope:** `docs/testing/test-accounting.json`, `docs/decisions.md`, README test counts.
 - **Acceptance:** Manifest lists the new tests; decision record captures D1–D5; counts match collected.
 - **Test phase:** none (docs).
+
+### Task 4.5 — A10–A12 (re-invocation, replay, durable budget)
+- **Scope:** same file — re-invocation of a pending intent, replay of a completed intent, budget surviving restart.
+- **Acceptance:** A10 asserts 0 writes and ≥1 lookup; A11 asserts 0 writes and 0 lookups; A12 asserts the remaining budget is unchanged after restart.
+- **Test phase:** Unit.
 
 ## Phase 5 — Follow-on (explicitly out of scope here)
 
