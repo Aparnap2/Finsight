@@ -1,0 +1,70 @@
+{
+  "$comment": "Test accounting manifest (APA-94 G1). Declares what each CI job's collected/executed split is allowed to look like. scripts/test_accounting.py fails the job when the split is not explained by a declared reason. A skip reason that is not listed here is a change in what the suite verifies and must be reviewed before it is declared.",
+  "jobs": {
+    "unit": {
+      "scope": "tests/unit tests/contract tests/evaluation",
+      "skip_reasons": [
+        "P7-08 slice guard retired post-merge",
+        "Pandera nullable + Polars null handling may not trigger"
+      ],
+      "expected_files": [
+        "tests/unit/ci/test_ci_gate.py",
+        "tests/unit/ci/test_test_accounting.py",
+        "tests/unit/ci/test_secret_gate.py",
+        "tests/unit/ci/test_action_pinning.py",
+        "tests/unit/ci/test_eval_workflow_contract.py",
+        "tests/unit/ci/test_workflow_boundary.py",
+        "tests/unit/ci/test_mypy_baseline_check.py",
+        "tests/evaluation/test_llm_quality_regression.py"
+      ],
+      "deselect_allowance": 0
+    },
+    "integration": {
+      "scope": "tests/integration tests/failure tests/e2e tests/test_python_runtime",
+      "skip_reasons": [
+        "needs PostgreSQL + SQS emulator",
+        "integration database not usable",
+        "integration database not reachable",
+        "Pandera nullable + Polars null handling may not trigger"
+      ],
+      "expected_files": [
+        "tests/integration/test_webhook_outbox.py",
+        "tests/integration/test_sqs_execute_e2e.py",
+        "tests/failure/test_negatives.py",
+        "tests/e2e/test_investigation_orchestration.py",
+        "tests/e2e/test_partial_refund_resolution.py"
+      ],
+      "deselect_allowance": 0
+    },
+    "ministack": {
+      "scope": "pytest -m ministack",
+      "skip_reasons": [
+        "MiniStack not at http://localhost:4566",
+        "MiniStack not reachable"
+      ],
+      "expected_files": [
+        "tests/ministack/test_s3_ministack.py",
+        "tests/ministack/test_tenant_isolation_ministack.py"
+      ],
+      "deselect_allowance": 4000
+    },
+    "evaluation": {
+      "scope": "tests/evaluation",
+      "skip_reasons": [],
+      "expected_files": [
+        "tests/evaluation/test_llm_quality_regression.py"
+      ],
+      "deselect_allowance": 0
+    },
+    "live_llm": {
+      "scope": "tests/evals/llm",
+      "skip_reasons": [
+        "Live LLM tests require FINSIGHT_ALLOW_LIVE_LLM=1"
+      ],
+      "expected_files": [
+        "tests/evals/llm/test_groq_smoke.py"
+      ],
+      "deselect_allowance": 0
+    }
+  }
+}
