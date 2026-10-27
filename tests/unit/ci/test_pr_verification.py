@@ -1098,6 +1098,7 @@ def test_report_pass_declares_the_merge_gate(verification: ModuleType) -> None:
     assert "### Merge gate" in report
     assert "not a mergeability claim" in report
     assert "branch protection" in report.lower()
+    assert "will block" not in report.lower()
     assert "needs-human-review" in report
 
 

@@ -948,7 +948,7 @@ def build_evidence(
         advisories.append(
             "human approval incomplete: "
             f"{len(approval_evaluation.approved_by)}/{approvals_required} non-author "
-            "approvals at the head commit; branch protection remains the merge-time authority"
+            "approvals at the head commit"
         )
     if approvals_required and approval_evaluation.ok:
         joined = ", ".join(f"@{name}" for name in approval_evaluation.approved_by)
@@ -1064,8 +1064,9 @@ def render_report(evidence: Mapping[str, object]) -> str:
             )
             lines.append(
                 f"- Missing {missing} of {approvals_required} required non-author "
-                "approval(s) at the head commit. Branch protection remains the "
-                "merge-time authority and will block the merge until they are recorded."
+                "approval(s) at the head commit. This workflow does not read repository "
+                "branch protection, so it does not claim the merge will be blocked: the "
+                "platform's settings decide that, independently of this verdict."
             )
             lines.append(
                 f"- Applied the `{NEEDS_HUMAN_REVIEW_LABEL}` label so the gap is "
