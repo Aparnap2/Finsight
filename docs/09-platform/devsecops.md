@@ -358,7 +358,7 @@ Each trace file (96 traces on disk as of 2026-07-28) captures:
 
 ```python
 class Settings(BaseSettings):
-    postgres_uri: str = "postgresql://finsight:finsight@localhost:5432/finsight"
+    postgres_uri: str = "postgresql+psycopg://finsight:finsight@localhost:5432/finsight"
     openai_api_key: str = "sk-placeholder"
     groq_api_key: str = ""
     langfuse_public_key: str | None = None

@@ -791,7 +791,7 @@ from shared.utils.policy import AutonomyLevel, PolicyDecision
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `POSTGRES_URI` | `postgresql://finsight:finsight@localhost:5432/finsight` | Database connection string |
+| `POSTGRES_URI` | `postgresql+psycopg://finsight:finsight@localhost:5432/finsight` | Database connection string (bare `postgresql://` is normalized to the psycopg 3 dialect) |
 | `QDRANT_URL` | `http://localhost:6333` | Qdrant vector store URL |
 | `REDIS_URL` | `redis://localhost:6379/0` | Redis connection string |
 | `OPENAI_API_KEY` | — | OpenAI API key |

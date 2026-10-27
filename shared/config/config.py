@@ -4,13 +4,37 @@ import json
 import logging
 from functools import lru_cache
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings
 
 logger = logging.getLogger(__name__)
 
+#: SQLAlchemy only ships a psycopg 2 dialect for the bare ``postgresql://``
+#: scheme. psycopg 2 is not installed here, so a bare DSN raised
+#: ``ModuleNotFoundError`` at engine creation. The runtime and migration DSNs
+#: are normalized to the psycopg 3 dialect at the configuration boundary.
+BARE_POSTGRES_SCHEMES = frozenset({"postgres", "postgresql"})
+PSYCOPG_SCHEME = "postgresql+psycopg"
+
+
+def normalize_postgres_dsn(uri: str) -> str:
+    """Add the psycopg 3 driver to a bare PostgreSQL DSN.
+
+    Only the scheme is rewritten, so credentials, host, port, database name,
+    query parameters, and percent-encoding pass through byte-for-byte. A DSN
+    that already names a driver (``postgresql+asyncpg://``,
+    ``postgresql+psycopg2://``) is returned untouched: choosing a driver is a
+    deployment decision, not something this function should silently override.
+    Non-PostgreSQL URLs (``sqlite://``) and empty strings are also untouched.
+    """
+    scheme, separator, remainder = uri.partition("://")
+    if not separator or scheme.lower() not in BARE_POSTGRES_SCHEMES:
+        return uri
+    return f"{PSYCOPG_SCHEME}://{remainder}"
+
 
 class Settings(BaseSettings):
-    postgres_uri: str = "postgresql://finsight:finsight@localhost:5432/finsight"
+    postgres_uri: str = "postgresql+psycopg://finsight:finsight@localhost:5432/finsight"
     #: Separate migration URI (Slice 3: migration role != runtime role).
     #: Empty means migrations use ``postgres_uri`` (dev default).
     migration_postgres_uri: str = ""
@@ -50,6 +74,16 @@ class Settings(BaseSettings):
     operator_console_demo_user_id: str = ""
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+
+    @field_validator("postgres_uri", "migration_postgres_uri", mode="before")
+    @classmethod
+    def _normalize_postgres_dsn(cls, value: object) -> object:
+        """Normalize both DSN fields so an env-supplied bare DSN still works.
+
+        ``migration_postgres_uri`` is empty by default, meaning "use the
+        runtime DSN"; empty stays empty so that fallback keeps working.
+        """
+        return normalize_postgres_dsn(value) if isinstance(value, str) else value
 
     @property
     def stripe_tenant_mapping(self) -> dict[str, object]:
