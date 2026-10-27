@@ -166,6 +166,29 @@ Architectural and design decisions for FinSight, with rationale and context.
 
 ---
 
+## Why Hypothesis for Property-Based Testing
+
+**Decision:** Add Hypothesis as a **test-only** dependency, for property-based tests of financial invariants (APA-94, monetary-conservation slice).
+
+**Context:** FinSight's monetary invariants are currently asserted by example only. The risk-to-test matrix records `INV-MONEY-02` (monetary conservation: gross − fees − refunds − adjustments = net) as a **GAP** — the property named in `openspec/project.md` is never enforced by a generated input space, only by hand-written cases. Examples cannot close a gap defined over a generated space: they sample the space by hand, and the sampling is the unproven part. `CONTRIBUTING.md` requires team consensus for a new `pyproject.toml` dependency; this entry records that consensus.
+
+**Rationale:**
+- Monetary conservation is a financial invariant. A wrong fee calculation is not a cosmetic bug.
+- Hypothesis generates `Decimal` inputs and **shrinks** a failure to a minimal counterexample, so a red property test reports the smallest input that breaks it rather than a large arbitrary one.
+- The alternative — a custom standard-library generator — would require building and maintaining shrinking, generation strategies, and edge-case exploration. That is test infrastructure we would then own, for one slice.
+- Test-only placement keeps the production dependency graph unchanged: `hypothesis` must never appear in a runtime import path.
+
+**Constraints (binding):**
+- Test-only dependency; no production imports.
+- Lockfile updated and reproducible — `uv.lock` committed, `uv sync --frozen` succeeds in CI.
+- Properties and the accounting sign/rounding conventions are **defined before implementation**; no assumed accounting identity is encoded until its business semantics are confirmed against the real domain code.
+- Deterministic CI configuration: bounded examples, reproducible failures, no flakiness across runs.
+- No scope expansion beyond the agreed slice.
+
+**Trade-off:** We accept a new test-only dependency and the lockfile churn it brings, in exchange for invariants that are checked over generated inputs rather than chosen ones. The cost is one more thing to keep up to date; the benefit is that a hand-picked example set stops being the only thing standing between a code change and a wrong number in a ledger.
+
+---
+
 ## Why Risk-Based PR Verification
 
 **Decision:** Pull-request verification is split into three layers: automated gates on every pull request, risk-triggered gates derived from changed paths, and human approval only at decision boundaries. The diff scope is declared explicitly in the pull request body, and the policy that maps risk to gates is machine-readable and protected against weakening.
