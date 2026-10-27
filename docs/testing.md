@@ -12,7 +12,9 @@ All tests use **pytest** with the `asyncio_mode = "auto"` setting (configured in
 python -m pytest
 ```
 
-The test suite currently contains **83 tests** across unit, integration, and agent test categories.
+The test suite spans unit, integration, agent, and evaluation categories. The
+authoritative collected total is reported by the CI run; do not copy a fixed
+count into documentation, because it drifts with every test change.
 
 ---
 
@@ -120,7 +122,7 @@ For a given input set (the "golden dataset"), the system must produce outputs th
 ### Running Golden Dataset Tests
 
 ```bash
-python -m pytest tests/backend/agents/ -k "golden"
+python -m pytest tests/unit/test_finance/ -k "golden"
 ```
 
 ### When to Update the Golden Dataset
@@ -140,7 +142,7 @@ All golden dataset updates require peer review.
 LLM evaluation tests verify that agent-generated outputs meet quality, safety, and structural requirements. These tests use **mocked LLM responses** for deterministic execution.
 
 ### Location
-`tests/backend/agents/`
+`tests/unit/test_agents/`
 
 ### What We Evaluate
 
@@ -165,7 +167,7 @@ The assertion pipeline and claim validator (`shared/utils/validators/claim_valid
 ### Running LLM Evaluation Tests
 
 ```bash
-python -m pytest tests/backend/agents/ -v
+python -m pytest tests/unit/test_agents/ -v
 ```
 
 ---
@@ -224,7 +226,7 @@ python -m pytest tests/unit/
 python -m pytest tests/integration/
 
 # Run agent tests (mocked LLM)
-python -m pytest tests/backend/agents/
+python -m pytest tests/unit/test_agents/
 
 # Run specific test file
 python -m pytest tests/unit/test_finance/test_formula_engine.py

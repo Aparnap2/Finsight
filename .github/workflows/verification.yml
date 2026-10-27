@@ -1,0 +1,384 @@
+name: PR verification
+
+# Additive verification layer. It classifies the diff, enforces the declared
+# scope, and turns the existing gates plus risk-specific gates into a single
+# evidence bundle. It does not replace or weaken any existing workflow.
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+      - labeled
+      - unlabeled
+      - edited
+  merge_group:
+
+concurrency:
+  group: pr-verification-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    name: risk classification + scope + policy
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve base, head, PR number, and policy baseline
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "merge_group" ]; then
+            BASE_SHA="${{ github.event.merge_group.base_sha }}"
+            HEAD_SHA="${{ github.event.merge_group.head_sha }}"
+            PR_NUMBER=$(python3 scripts/pr_verification.py pr-number-from-ref \
+              --ref "${{ github.event.merge_group.head_ref }}")
+          else
+            BASE_SHA="${{ github.event.pull_request.base.sha }}"
+            HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+            PR_NUMBER="${{ github.event.pull_request.number }}"
+          fi
+          if [ -z "$BASE_SHA" ] || [ -z "$HEAD_SHA" ] || [ -z "$PR_NUMBER" ]; then
+            echo "could not resolve base, head, or pull request number" >&2
+            exit 1
+          fi
+          # Fork PR heads are reachable through refs/pull/<n>/head. The explicit
+          # fetch keeps the diff reproducible even when checkout fetched only
+          # the synthetic merge commit.
+          git fetch --no-tags origin \
+            "+refs/pull/${PR_NUMBER}/head:refs/remotes/origin/pr-${PR_NUMBER}-head"
+          git cat-file -e "${HEAD_SHA}^{commit}"
+          git cat-file -e "${BASE_SHA}^{commit}"
+          if git cat-file -e "${BASE_SHA}:.github/verification-policy.json" 2>/dev/null; then
+            POLICY_EXISTED=true
+          else
+            POLICY_EXISTED=false
+          fi
+          {
+            echo "BASE_SHA=$BASE_SHA"
+            echo "HEAD_SHA=$HEAD_SHA"
+            echo "PR_NUMBER=$PR_NUMBER"
+            echo "POLICY_EXISTED=$POLICY_EXISTED"
+          } >> "$GITHUB_ENV"
+
+      - name: Reject a stale merge-queue base
+        if: github.event_name == 'merge_group'
+        env:
+          MERGE_GROUP_BASE_REF: ${{ github.event.merge_group.base_ref }}
+          MERGE_GROUP_BASE_SHA: ${{ github.event.merge_group.base_sha }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin "${MERGE_GROUP_BASE_REF}"
+          CURRENT_BASE_SHA=$(git rev-parse FETCH_HEAD)
+          if [ "${CURRENT_BASE_SHA}" != "${MERGE_GROUP_BASE_SHA}" ]; then
+            echo "STALE_BASE: queued base ${MERGE_GROUP_BASE_SHA} does not match ${CURRENT_BASE_SHA}" >&2
+            exit 1
+          fi
+
+      - name: Fetch pull request metadata
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" > pr.json
+
+      - name: Compute changed files
+        run: |
+          set -euo pipefail
+          git diff --name-only --no-renames --diff-filter=ACDMRTUXB \
+            "${BASE_SHA}...${HEAD_SHA}" > changed-files.txt
+          echo "changed files: $(wc -l < changed-files.txt)"
+
+      - name: Extract base and proposed policy
+        run: |
+          set -euo pipefail
+          if [ "${POLICY_EXISTED}" = "true" ]; then
+            git show "${BASE_SHA}:.github/verification-policy.json" > base-policy.json
+          fi
+          if git cat-file -e "${HEAD_SHA}:.github/verification-policy.json" 2>/dev/null; then
+            git show "${HEAD_SHA}:.github/verification-policy.json" > head-policy.json
+          elif [ "${POLICY_EXISTED}" = "true" ]; then
+            echo "verification policy was deleted; restore it before merging" >&2
+            exit 1
+          fi
+
+      - name: Build verification plan
+        run: |
+          set -euo pipefail
+          # The ratchet compares the policy on the base revision against the
+          # proposed policy. Without --policy the script falls back to the
+          # checked-out file, which is the head policy: base and head then match
+          # by construction and every weakening check is a no-op.
+          POLICY_ARGS=()
+          if [ -f base-policy.json ]; then
+            POLICY_ARGS+=(--policy base-policy.json)
+          fi
+          HEAD_POLICY_ARGS=()
+          if [ -f head-policy.json ]; then
+            HEAD_POLICY_ARGS+=(--head-policy head-policy.json)
+          fi
+          python3 scripts/pr_verification.py plan \
+            --changed-files changed-files.txt \
+            --pr-json pr.json \
+            --out plan.json \
+            --event "${{ github.event_name }}" \
+            --repository "${GITHUB_REPOSITORY}" \
+            --pr-number "${PR_NUMBER}" \
+            --base-sha "${BASE_SHA}" \
+            --head-sha "${HEAD_SHA}" \
+            --policy-existed-on-base "${POLICY_EXISTED}" \
+            "${POLICY_ARGS[@]}" \
+            "${HEAD_POLICY_ARGS[@]}"
+
+      - name: Upload verification plan
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: verification-plan
+          path: |
+            plan.json
+            base-policy.json
+            head-policy.json
+            changed-files.txt
+            pr.json
+          if-no-files-found: ignore
+          retention-days: 7
+
+  evidence:
+    name: gate evidence bundle
+    needs: [plan]
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      checks: read
+      pull-requests: read
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Download verification plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          gh run download "${GITHUB_RUN_ID}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --name verification-plan \
+            --dir .
+
+      - name: Resolve base, head, PR number, and author
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "merge_group" ]; then
+            BASE_SHA="${{ github.event.merge_group.base_sha }}"
+            HEAD_SHA="${{ github.event.merge_group.head_sha }}"
+            PR_NUMBER=$(python3 scripts/pr_verification.py pr-number-from-ref \
+              --ref "${{ github.event.merge_group.head_ref }}")
+            AUTHOR=""
+          else
+            BASE_SHA="${{ github.event.pull_request.base.sha }}"
+            HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+            PR_NUMBER="${{ github.event.pull_request.number }}"
+            AUTHOR="${{ github.event.pull_request.user.login }}"
+          fi
+          if [ -z "$BASE_SHA" ] || [ -z "$HEAD_SHA" ] || [ -z "$PR_NUMBER" ]; then
+            echo "could not resolve base, head, or pull request number" >&2
+            exit 1
+          fi
+          {
+            echo "BASE_SHA=$BASE_SHA"
+            echo "HEAD_SHA=$HEAD_SHA"
+            echo "PR_NUMBER=$PR_NUMBER"
+            echo "AUTHOR=$AUTHOR"
+          } >> "$GITHUB_ENV"
+
+      - name: Collect required check-runs at the head commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [ ! -f plan.json ]; then
+            echo "plan artifact missing; cannot determine required checks" >&2
+            exit 1
+          fi
+          for attempt in $(seq 1 45); do
+            gh api --paginate \
+              "repos/${GITHUB_REPOSITORY}/commits/${HEAD_SHA}/check-runs?per_page=100" \
+              --jq '.check_runs[] | {name,status,conclusion,details_url}' > checks.jsonl
+            pending=$(python3 -c 'import json; required = json.load(open("plan.json")).get("required_checks", []); observed = {json.loads(line)["name"]: json.loads(line).get("status") for line in open("checks.jsonl") if line.strip()}; print(sum(1 for name in required if observed.get(name) != "completed"))')
+            if [ "$pending" -eq 0 ]; then
+              echo "all required check-runs are complete (attempt ${attempt})"
+              break
+            fi
+            echo "waiting for ${pending} required check-run(s) (attempt ${attempt})"
+            sleep 20
+          done
+
+      - name: Collect pull request reviews
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [ -n "${PR_NUMBER}" ]; then
+            gh api --paginate \
+              "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/reviews?per_page=100" \
+              --jq '.[] | {state,commit_id,user:{login:.user.login}}' > reviews.jsonl
+          else
+            : > reviews.jsonl
+          fi
+
+      - name: Build evidence bundle and exception report
+        run: |
+          set -euo pipefail
+          python3 scripts/pr_verification.py evidence \
+            --plan plan.json \
+            --checks checks.jsonl \
+            --reviews reviews.jsonl \
+            --pr-json pr.json \
+            --event "${{ github.event_name }}" \
+            --head-sha "${HEAD_SHA}" \
+            --author "${AUTHOR}" \
+            --out evidence.json \
+            --report report.md
+
+      - name: Upload verification evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: verification-evidence
+          path: |
+            evidence.json
+            report.md
+            checks.jsonl
+            reviews.jsonl
+          if-no-files-found: ignore
+          retention-days: 7
+
+  report:
+    name: exception-only review report
+    needs: [plan, evidence]
+    if: always() && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      issues: write
+      pull-requests: write
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Download verification artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          gh run download "${GITHUB_RUN_ID}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --name verification-plan \
+            --dir . || echo "verification-plan artifact unavailable" >&2
+          gh run download "${GITHUB_RUN_ID}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --name verification-evidence \
+            --dir . || echo "verification-evidence artifact unavailable" >&2
+
+      - name: Render report and comment payload
+        run: |
+          set -euo pipefail
+          python3 scripts/pr_verification.py report \
+            --plan plan.json \
+            --evidence evidence.json \
+            --out report.md
+          python3 scripts/pr_verification.py comment-payload \
+            --report report.md \
+            --out comment.json
+
+      - name: Upsert sticky verification comment
+        if: github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          COMMENT_IDS=$(gh api --paginate \
+            "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments?per_page=100" \
+            --jq '.[] | select(.body | contains("<!-- pr-verification-report -->")) | .id')
+          COMMENT_ID=""
+          for candidate in ${COMMENT_IDS}; do
+            COMMENT_ID="${candidate}"
+            break
+          done
+          if [ -n "$COMMENT_ID" ]; then
+            gh api --method PATCH \
+              "repos/${GITHUB_REPOSITORY}/issues/comments/${COMMENT_ID}" \
+              --input comment.json > /dev/null
+          else
+            gh api --method POST \
+              "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" \
+              --input comment.json > /dev/null
+          fi
+
+      - name: Sync human-review label
+        if: github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          python3 scripts/pr_verification.py label \
+            --evidence evidence.json \
+            --out label.txt
+          LABEL=$(tr -d '\n' < label.txt)
+          if [ -n "$LABEL" ]; then
+            gh label create "$LABEL" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --color "fbca04" \
+              --description "Verification passed its technical gates; a required non-author approval is outstanding" \
+              --force > /dev/null
+            gh api --method POST \
+              "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/labels" \
+              -f "labels[]=${LABEL}" > /dev/null
+          else
+            gh api --method DELETE \
+              "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/labels/needs-human-review" \
+              > /dev/null 2>&1 || true
+          fi
+
+  verification:
+    name: PR verification
+    needs: [plan, evidence, report]
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 5
+    steps:
+      - name: Require plan and evidence to succeed
+        env:
+          PLAN_RESULT: ${{ needs.plan.result }}
+          EVIDENCE_RESULT: ${{ needs.evidence.result }}
+        run: |
+          set -euo pipefail
+          if [ "${PLAN_RESULT}" != "success" ] || [ "${EVIDENCE_RESULT}" != "success" ]; then
+            echo "verification failed: plan=${PLAN_RESULT} evidence=${EVIDENCE_RESULT}" >&2
+            exit 1
+          fi

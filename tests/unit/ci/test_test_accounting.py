@@ -148,6 +148,67 @@ class TestAccountingGate:
         assert proc.returncode == 2
         assert "DESELECT_BUDGET_EXCEEDED" in proc.stdout
 
+    def test_manifest_without_deselect_allowance_fails(self, tmp_path: Path) -> None:
+        """Deleting the budget key disables the check, so it must fail closed."""
+        manifest_payload = {
+            key: value for key, value in _MANIFEST.items() if key != "deselect_allowance"
+        }
+        report = _write(tmp_path, _REPORT, "accounting.json")
+        manifest = _write(tmp_path, manifest_payload, "manifest.json")
+        proc = _run(str(report), "--manifest", str(manifest), tmp_path=tmp_path)
+        assert proc.returncode == 2
+        assert "MANIFEST_MISSING_DESELECT_ALLOWANCE" in proc.stdout
+
+    def test_manifest_without_expected_files_fails(self, tmp_path: Path) -> None:
+        """A job with no declared expectations cannot detect a dropped file."""
+        manifest_payload = {
+            key: value for key, value in _MANIFEST.items() if key != "expected_files"
+        }
+        report = _write(tmp_path, _REPORT, "accounting.json")
+        manifest = _write(tmp_path, manifest_payload, "manifest.json")
+        proc = _run(str(report), "--manifest", str(manifest), tmp_path=tmp_path)
+        assert proc.returncode == 2
+        assert "MANIFEST_MISSING_EXPECTED_FILES" in proc.stdout
+
+    def test_manifest_with_empty_expected_files_fails(self, tmp_path: Path) -> None:
+        """An empty expectation list is the weakening, not a valid declaration."""
+        manifest_payload = {**_MANIFEST, "expected_files": []}
+        report = _write(tmp_path, _REPORT, "accounting.json")
+        manifest = _write(tmp_path, manifest_payload, "manifest.json")
+        proc = _run(str(report), "--manifest", str(manifest), tmp_path=tmp_path)
+        assert proc.returncode == 2
+        assert "MANIFEST_MISSING_EXPECTED_FILES" in proc.stdout
+
+    def test_manifest_with_negative_allowance_fails(self, tmp_path: Path) -> None:
+        """A negative budget is not a budget."""
+        manifest_payload = {**_MANIFEST, "deselect_allowance": -1}
+        report = _write(tmp_path, _REPORT, "accounting.json")
+        manifest = _write(tmp_path, manifest_payload, "manifest.json")
+        proc = _run(str(report), "--manifest", str(manifest), tmp_path=tmp_path)
+        assert proc.returncode == 2
+        assert "MANIFEST_INVALID_DESELECT_ALLOWANCE" in proc.stdout
+
+    def test_undeclared_skip_is_invisible_without_the_gate(self, tmp_path: Path) -> None:
+        """Declaring a new skip reason is itself a weakening of the manifest.
+
+        The gate cannot know who authorised a reason; the policy class is what
+        forces a human to look. This asserts the failure the manifest edit
+        would silence, so the pairing (silence possible, review required) is
+        explicit rather than assumed.
+        """
+        payload = dict(_REPORT)
+        payload["skipped_reasons"] = {"tests/b.py::test_two": "Skipped: flaky on CI"}
+        report = _write(tmp_path, payload, "accounting.json")
+        manifest = _write(tmp_path, _MANIFEST, "manifest.json")
+        proc = _run(str(report), "--manifest", str(manifest), tmp_path=tmp_path)
+        assert proc.returncode == 2
+        assert "UNDECLARED_SKIP" in proc.stdout
+
+        widened = {**_MANIFEST, "skip_reasons": [*_MANIFEST["skip_reasons"], "flaky on CI"]}
+        permissive = _write(tmp_path, widened, "manifest-widened.json")
+        passed = _run(str(report), "--manifest", str(permissive), tmp_path=tmp_path)
+        assert passed.returncode == 0, passed.stdout
+
     def test_multi_job_manifest_requires_job_selection(self, tmp_path: Path) -> None:
         manifest_payload = {"jobs": {"unit": _MANIFEST, "integration": _MANIFEST}}
         report = _write(tmp_path, _REPORT, "accounting.json")

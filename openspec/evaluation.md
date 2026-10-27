@@ -130,7 +130,7 @@ validation pipeline, etc.) and why does it warrant careful measurement?
 
 Check every gate before merging:
 
-- [ ] **Tests pass** — `python -m pytest` (all 342 tests pass)
+- [ ] **Tests pass** — `python -m pytest` (all 3,875 collected tests pass)
 - [ ] **Type check passes** — `mypy .` (strict mode, no errors)
 - [ ] **Lint passes** — `ruff check .` (no warnings)
 - [ ] **All 12 metrics meet thresholds** — 6 runtime + 6 business metrics above their configured floor

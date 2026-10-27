@@ -28,3 +28,7 @@ pyproject.toml.bak
 
 # Hypothesis example database (APA-94 slice 2)
 .hypothesis/
+
+# Local runtime artifacts (contain private keys and machine-specific state)
+volume/
+local_stack-docker-compose.yml

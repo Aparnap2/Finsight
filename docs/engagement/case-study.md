@@ -247,7 +247,7 @@ finsight/
 ├── finance/forecast_engine/
 ├── finance/assertion_pipeline.py
 ├── shared/                 Utilities, config, models
-├── tests/                  342 tests
+├── tests/                  3,875 collected tests
 ├── docs/                   Full engagement documentation
 └── docs/diagrams/          Architecture and lifecycle diagrams
 ```
@@ -256,7 +256,7 @@ finsight/
 
 ```bash
 uv sync
-uv run python -m pytest    # 342 tests
+uv run python -m pytest    # 3,875 collected tests
 uv run mypy .              # type check
 uv run ruff check .        # lint
 uv run uvicorn apps.api.main:app --reload  # API

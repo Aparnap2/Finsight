@@ -821,10 +821,10 @@ from shared.utils.policy import AutonomyLevel, PolicyDecision
 |------------|----------|-------|-----------|
 | **Unit** — Deterministic Finance | `tests/unit/test_finance/` | Formula engine, calendar, materiality — 100% oracle match | pytest |
 | **Unit** — Decimal Layer | `tests/unit/api/` | Float rejection, Decimal serialization | pytest |
-| **Integration** — API | `tests/backend/api/` | Endpoints, schema validation | pytest + httpx |
-| **Integration** — Agents | `tests/backend/agents/` | Pipeline nodes, state transitions | pytest |
-| **Integration** — Engine | `tests/backend/engine/` | Assertion pipeline, policy, bridge, data quality | pytest |
-| **Integration** — Models | `tests/backend/models/` | Domain models, tenant isolation | pytest + SQLAlchemy |
-| **Integration** — Validators | `tests/backend/validators/` | Claim validator | pytest |
-| **Agentic** — Hallucination | `tests/backend/agents/test_agentic_*.py` | LLM safety, formatting, tool calls, type safety | pytest + real LLM |
+| **Integration** — API | `tests/unit/api/` | Endpoints, schema validation | pytest + httpx |
+| **Integration** — Agents | `tests/unit/test_agents/` | Pipeline nodes, state transitions | pytest |
+| **Integration** — Engine | `tests/unit/test_finance/` | Assertion pipeline, policy, bridge, data quality | pytest |
+| **Integration** — Models | `tests/unit/test_platform/` | Domain models, tenant isolation | pytest + SQLAlchemy |
+| **Integration** — Validators | `tests/unit/verification/` | Claim validator | pytest |
+| **Agentic** — Hallucination | `tests/unit/investigation/` | LLM safety, formatting, tool calls, type safety | pytest + real LLM |
 | **E2E** | `tests/e2e/` | Full pipeline scenarios | pytest |
