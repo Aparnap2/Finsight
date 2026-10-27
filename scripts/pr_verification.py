@@ -596,18 +596,76 @@ def evaluate_policy_weakening(base: Policy, proposed: Policy) -> tuple[str, ...]
     return tuple(errors)
 
 
-def _probe_path(pattern: str) -> str:
-    """Derive a representative repository path from a policy path pattern.
+def _instantiate_glob(pattern: str) -> str:
+    """Instantiate a shell-style glob as one concrete path.
 
-    Every glob metacharacter is replaced by a literal so the probe matches the
-    pattern it came from. This is a ratchet check on classification, not a
-    match-quality test: the goal is a stable sample per pattern.
+    Each metacharacter is replaced by a literal that satisfies it. Character
+    classes are honoured, including negation, so ``[!p]`` cannot be replaced by
+    a path the pattern rejects. An unterminated or unsatisfiable class raises
+    ``PolicyError``: a pattern the ratchet cannot probe must fail loudly rather
+    than silently drop out of coverage.
     """
-    probe = pattern.replace("*", "probe").replace("?", "probe").replace("[", "").replace("]", "")
+    out: list[str] = []
+    index = 0
+    length = len(pattern)
+    while index < length:
+        char = pattern[index]
+        if char == "*":
+            while index < length and pattern[index] == "*":
+                index += 1
+            out.append("probe")
+            continue
+        if char == "?":
+            out.append("p")
+            index += 1
+            continue
+        if char == "[":
+            end = pattern.find("]", index + 1)
+            if end == -1:
+                raise PolicyError(f"policy pattern {pattern!r} has an unterminated character class")
+            body = pattern[index + 1 : end]
+            negated = body[:1] in {"!", "^"}
+            members = body[1:] if negated else body
+            if not members:
+                raise PolicyError(f"policy pattern {pattern!r} has an empty character class")
+            chosen = next(
+                (
+                    candidate
+                    for candidate in ("p", "q", "z", "0")
+                    if (candidate not in members) == negated
+                ),
+                None,
+            )
+            if chosen is None:
+                raise PolicyError(f"policy pattern {pattern!r} has no satisfiable character")
+            out.append(chosen)
+            index = end + 1
+            continue
+        out.append(char)
+        index += 1
+    return "".join(out)
+
+
+def _probe_path(pattern: str) -> str:
+    """Derive a concrete path that the given pattern actually matches.
+
+    The ratchet re-classifies every base pattern under the proposed policy, so
+    the probe stands in for that pattern. A probe that falls through to a
+    different rule would turn the check into a no-op, so the result is verified
+    against the pattern and a mismatch raises ``PolicyError``.
+    """
+    if any(char in pattern for char in "*?["):
+        probe = _instantiate_glob(pattern)
+    elif pattern.endswith("/"):
+        probe = f"{pattern.rstrip('/')}/__probe__.txt"
+    else:
+        probe = pattern
     probe = probe.replace("//", "/").strip("/")
-    if not probe:
-        return "probe"
-    return probe if "." in probe.rsplit("/", 1)[-1] else f"{probe}/probe.txt"
+    if not probe or probe.startswith("/") or ".." in probe.split("/"):
+        raise PolicyError(f"policy pattern {pattern!r} produced an invalid probe path")
+    if not _path_matches(probe, pattern):
+        raise PolicyError(f"policy pattern {pattern!r} cannot be probed for coverage")
+    return probe
 
 
 def evaluate_path_weakening(base: Policy, proposed: Policy) -> tuple[str, ...]:
@@ -711,6 +769,16 @@ def build_plan(
 
     errors = list(scope_errors) + list(guard.errors) + list(weakening)
     advisories = list(scope_advisories)
+    if (
+        proposed_policy is not None
+        and policy_existed_on_base
+        and policy.digest == proposed_policy.digest
+        and policy.policy_path in set(classification.changed_files)
+    ):
+        errors.append(
+            f"{policy.policy_path} changed but the base and proposed policies are identical; "
+            "the base policy must be read from the base revision"
+        )
     if classification.unknown_paths:
         joined = ", ".join(classification.unknown_paths)
         errors.append(f"unclassified changed paths: {joined}; add a path rule")

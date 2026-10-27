@@ -102,9 +102,12 @@ jobs:
             "${BASE_SHA}...${HEAD_SHA}" > changed-files.txt
           echo "changed files: $(wc -l < changed-files.txt)"
 
-      - name: Extract proposed policy
+      - name: Extract base and proposed policy
         run: |
           set -euo pipefail
+          if [ "${POLICY_EXISTED}" = "true" ]; then
+            git show "${BASE_SHA}:.github/verification-policy.json" > base-policy.json
+          fi
           if git cat-file -e "${HEAD_SHA}:.github/verification-policy.json" 2>/dev/null; then
             git show "${HEAD_SHA}:.github/verification-policy.json" > head-policy.json
           elif [ "${POLICY_EXISTED}" = "true" ]; then
@@ -115,6 +118,14 @@ jobs:
       - name: Build verification plan
         run: |
           set -euo pipefail
+          # The ratchet compares the policy on the base revision against the
+          # proposed policy. Without --policy the script falls back to the
+          # checked-out file, which is the head policy: base and head then match
+          # by construction and every weakening check is a no-op.
+          POLICY_ARGS=()
+          if [ -f base-policy.json ]; then
+            POLICY_ARGS+=(--policy base-policy.json)
+          fi
           HEAD_POLICY_ARGS=()
           if [ -f head-policy.json ]; then
             HEAD_POLICY_ARGS+=(--head-policy head-policy.json)
@@ -129,6 +140,7 @@ jobs:
             --base-sha "${BASE_SHA}" \
             --head-sha "${HEAD_SHA}" \
             --policy-existed-on-base "${POLICY_EXISTED}" \
+            "${POLICY_ARGS[@]}" \
             "${HEAD_POLICY_ARGS[@]}"
 
       - name: Upload verification plan
@@ -138,6 +150,7 @@ jobs:
           name: verification-plan
           path: |
             plan.json
+            base-policy.json
             head-policy.json
             changed-files.txt
             pr.json

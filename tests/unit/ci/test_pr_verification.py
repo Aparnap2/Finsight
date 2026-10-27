@@ -103,13 +103,14 @@ def _plan(
     )
 
 
-def _run_cli(*args: str) -> subprocess.CompletedProcess[str]:
+def _run_cli(*args: str, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
     """Run the verification CLI as a subprocess."""
     return subprocess.run(
         [sys.executable, str(SCRIPT), *args],
         capture_output=True,
         text=True,
         check=False,
+        cwd=cwd,
     )
 
 
@@ -1056,6 +1057,187 @@ def test_path_ratchet_rejects_dishonest_acknowledgement(
     proposed = verification.load_policy(_write_policy(tmp_path, payload))
     errors = verification.evaluate_policy_weakening(policy, proposed)
     assert any("does not name a policy path pattern" in error for error in errors)
+
+
+def _write_pr_json(path: Path, changed: list[str], labels: list[str]) -> Path:
+    """Write a pull-request payload whose scope block covers the changed files."""
+    payload = {
+        "number": 1,
+        "user": {"login": "octocat"},
+        "labels": [{"name": name} for name in labels],
+        "body": _scope_body(*changed),
+    }
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    return path
+
+
+def _run_plan_cli(
+    tmp_path: Path,
+    changed: list[str],
+    *,
+    policy: Path | None,
+    head_policy: Path | None,
+    labels: list[str] | None = None,
+    cwd: Path | None = None,
+) -> subprocess.CompletedProcess[str]:
+    """Invoke the plan command with the same arguments the workflow passes.
+
+    ``policy=None`` reproduces the pre-fix wiring, where the script fell back to
+    the checked-out (head) policy because ``--policy`` was never supplied.
+    """
+    changed_file = tmp_path / "changed-files.txt"
+    changed_file.write_text("\n".join(changed) + "\n", encoding="utf-8")
+    pr_json = _write_pr_json(tmp_path / "pr.json", changed, labels or [])
+    args = [
+        "plan",
+        "--changed-files",
+        str(changed_file),
+        "--pr-json",
+        str(pr_json),
+        "--out",
+        str(tmp_path / "plan.json"),
+        "--event",
+        "pull_request",
+        "--repository",
+        "owner/repo",
+        "--pr-number",
+        "1",
+        "--base-sha",
+        "base",
+        "--head-sha",
+        "head",
+        "--policy-existed-on-base",
+        "true",
+    ]
+    if policy is not None:
+        args += ["--policy", str(policy)]
+    if head_policy is not None:
+        args += ["--head-policy", str(head_policy)]
+    return _run_cli(*args, cwd=cwd)
+
+
+def test_workflow_reads_the_base_policy_from_the_base_revision() -> None:
+    """The plan step must consume a policy materialized from BASE_SHA."""
+    workflow = (ROOT / ".github" / "workflows" / "verification.yml").read_text(encoding="utf-8")
+    assert 'git show "${BASE_SHA}:.github/verification-policy.json" > base-policy.json' in workflow
+    plan_step = workflow.split("- name: Build verification plan", 1)[1].split("- name:", 1)[0]
+    assert "--policy base-policy.json" in plan_step
+    assert '"${POLICY_ARGS[@]}"' in plan_step
+
+
+def test_plan_cli_rejects_weakened_path_policy(tmp_path: Path) -> None:
+    """A rerouted path is caught through the workflow's real argument wiring."""
+    payload = _policy_payload()
+    rules = cast(list[dict[str, object]], payload["path_rules"])
+    for rule in rules:
+        if rule["class"] == "ci-infra":
+            rule["patterns"] = [p for p in cast(list[str], rule["patterns"]) if p != ".github/"]
+        if rule["class"] == "docs":
+            rule["patterns"] = [*cast(list[str], rule["patterns"]), ".github/"]
+    head = _write_policy(tmp_path, payload)
+    result = _run_plan_cli(
+        tmp_path,
+        [".github/verification-policy.json", "docs/notes.md"],
+        policy=POLICY,
+        head_policy=head,
+        labels=["policy-change"],
+    )
+    assert result.returncode == 1, result.stderr
+    assert "lowers classification for '.github/': ci-infra -> docs" in result.stderr
+
+
+def test_plan_cli_rejects_head_policy_as_the_base_policy(tmp_path: Path) -> None:
+    """Evaluating the head policy against itself must fail closed, not pass 0 errors."""
+    result = _run_plan_cli(
+        tmp_path,
+        [".github/verification-policy.json"],
+        policy=None,
+        head_policy=POLICY,
+        labels=["policy-change"],
+        cwd=ROOT,
+    )
+    assert result.returncode == 1, result.stdout
+    assert "the base policy must be read from the base revision" in result.stderr
+
+
+def test_plan_cli_accepts_an_unchanged_policy(tmp_path: Path) -> None:
+    """A diff that leaves the policy alone still plans cleanly."""
+    result = _run_plan_cli(
+        tmp_path,
+        ["docs/notes.md"],
+        policy=POLICY,
+        head_policy=POLICY,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "status=" in result.stdout
+
+
+def test_plan_cli_accepts_a_strengthened_policy(tmp_path: Path) -> None:
+    """Adding a required check is a strengthening and must not trip the ratchet."""
+    payload = _policy_payload()
+    _classes(payload)["docs"]["extra_checks"] = ["postgres-gated integration"]
+    head = _write_policy(tmp_path, payload)
+    result = _run_plan_cli(
+        tmp_path,
+        [".github/verification-policy.json", "docs/notes.md"],
+        policy=POLICY,
+        head_policy=head,
+        labels=["policy-change"],
+    )
+    assert result.returncode == 0, result.stderr
+    assert "lowers classification" not in result.stderr
+
+
+def test_plan_cli_fails_on_an_unusable_policy_pattern(tmp_path: Path) -> None:
+    """A pattern the ratchet cannot probe fails visibly instead of shrinking coverage."""
+    payload = _policy_payload()
+    for rule in cast(list[dict[str, object]], payload["path_rules"]):
+        if rule["class"] == "docs":
+            rule["patterns"] = [*cast(list[str], rule["patterns"]), "[abc"]
+    base = _write_policy(tmp_path, payload)
+    result = _run_plan_cli(
+        tmp_path,
+        [".github/verification-policy.json"],
+        policy=base,
+        head_policy=POLICY,
+        labels=["policy-change"],
+    )
+    assert result.returncode == 1, result.stdout
+    assert "unterminated character class" in result.stderr
+
+
+def test_probe_paths_match_every_policy_pattern(verification: ModuleType, policy: object) -> None:
+    """Every declared pattern must yield a probe that the pattern itself matches."""
+    for rule in cast(Any, policy).path_rules:
+        for pattern in rule.patterns:
+            probe = verification._probe_path(pattern)
+            assert verification._path_matches(probe, pattern), (pattern, probe)
+
+
+@pytest.mark.parametrize(
+    ("pattern", "expected"),
+    [
+        (".github/", "ci-infra"),
+        ("tests/", "tests-only"),
+        ("docs/", "docs"),
+        ("*Pipfile", "dependencies"),
+        ("*/Makefile", "ci-infra"),
+        ("*pyproject.toml", "dependencies"),
+    ],
+)
+def test_probe_paths_preserve_prefix_and_glob_classification(
+    verification: ModuleType, policy: object, pattern: str, expected: str
+) -> None:
+    """Prefix and glob rules classify their probes as they do real files."""
+    probe = verification._probe_path(pattern)
+    assert verification.classify_path(probe, policy) == expected
+
+
+@pytest.mark.parametrize("pattern", ["[abc", "[!]"])
+def test_probe_paths_reject_unusable_globs(verification: ModuleType, pattern: str) -> None:
+    """Malformed or unsatisfiable character classes are not silently dropped."""
+    with pytest.raises(verification.PolicyError):
+        verification._probe_path(pattern)
 
 
 def test_label_command_requests_review_on_shortfall(
