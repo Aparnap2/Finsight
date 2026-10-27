@@ -117,6 +117,12 @@
   },
   "path_rules": [
     {
+      "class": "docs",
+      "patterns": [
+        ".github/"
+      ]
+    },
+    {
       "class": "ci-infra",
       "patterns": [
         "docs/testing/test-accounting.json",
