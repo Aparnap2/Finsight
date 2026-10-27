@@ -26,6 +26,11 @@ Failure semantics (a skipped test is not a passing test):
 - FAIL (exit 2, ``UNDECLARED_FILE``) when a test file exists in the
   manifest's declared scope but was not collected by the run — the file was
   expected to execute and did not.
+- FAIL (exit 2, ``MANIFEST_MISSING_EXPECTED_FILES`` /
+  ``MANIFEST_MISSING_DESELECT_ALLOWANCE`` /
+  ``MANIFEST_INVALID_DESELECT_ALLOWANCE``) when a job omits or malforms the
+  declarations that make weakening visible. A deleted key must fail closed:
+  "no budget declared" is not "unlimited allowance".
 - PASS (exit 0) otherwise, printing the collected/executed split and
   writing a machine-readable summary.
 
@@ -128,6 +133,28 @@ def _undeclared_skips(
     return problems
 
 
+def validate_manifest(manifest: dict[str, Any]) -> list[str]:
+    """Return structural problems that would let a job be weakened silently.
+
+    The manifest is this gate's policy input, so omitting a key must fail
+    closed rather than disable the check that key controls. ``evaluate``
+    cannot distinguish "no allowance declared" from "unlimited allowance",
+    so the requirement is enforced here instead.
+    """
+    problems: list[str] = []
+    expected_files = manifest.get("expected_files")
+    if not isinstance(expected_files, list) or not expected_files:
+        problems.append(
+            "MANIFEST_MISSING_EXPECTED_FILES: every job must declare the test files it expects"
+        )
+    allowance = manifest.get("deselect_allowance")
+    if allowance is None:
+        problems.append("MANIFEST_MISSING_DESELECT_ALLOWANCE: deselection must declare a budget")
+    elif isinstance(allowance, bool) or not isinstance(allowance, int) or allowance < 0:
+        problems.append(f"MANIFEST_INVALID_DESELECT_ALLOWANCE: {allowance!r}")
+    return problems
+
+
 def evaluate(report: dict[str, Any], manifest: dict[str, Any]) -> list[str]:
     """Return the list of gate violations for one run (empty means pass).
 
@@ -213,6 +240,11 @@ def main(argv: list[str] | None = None) -> int:
             # be evaluated: the skip reasons of one job are not the skip
             # reasons of another.
             print("NO_REPORT manifest holds several jobs; pass --job")
+            return 2
+        manifest_problems = validate_manifest(manifest)
+        if manifest_problems:
+            for manifest_problem in manifest_problems:
+                print(manifest_problem)
             return 2
 
     outcomes = report.get("outcomes", {})

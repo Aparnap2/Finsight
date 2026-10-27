@@ -945,6 +945,64 @@ def test_ci_paths_are_still_infrastructure(verification: ModuleType, policy: obj
         assert verification.classify_path(path, policy) == "ci-infra"
 
 
+_ACCOUNTING_POLICY_INPUTS = (
+    "docs/testing/test-accounting.json",
+    "tests/accounting_plugin.py",
+)
+
+
+def test_accounting_policy_inputs_require_infrastructure_review(
+    verification: ModuleType, policy: object
+) -> None:
+    """The gate's manifest and its evidence producer are policy, not prose.
+
+    `scripts/test_accounting.py` reads every acceptance expectation from
+    `docs/testing/test-accounting.json` and every measurement from
+    `tests/accounting_plugin.py`. Classifying either as `docs` or `tests-only`
+    would let a zero-review edit change what the gate can detect.
+    """
+    typed = cast(Any, policy)
+    infra = typed.classes["ci-infra"]
+    assert infra.severity == 4
+    assert infra.review_required is True
+    expected = verification.required_checks(policy, "ci-infra")
+    assert len(expected) == 5
+    for path in _ACCOUNTING_POLICY_INPUTS:
+        risk = verification.classify_path(path, policy)
+        assert risk == "ci-infra"
+        assert verification.required_checks(policy, risk) == expected
+
+
+def test_manifest_only_change_is_planned_as_infrastructure(
+    verification: ModuleType, policy: object
+) -> None:
+    """A manifest-only diff must not land as a one-gate docs change."""
+    changed = ["docs/testing/test-accounting.json"]
+    plan = _plan(verification, policy, changed, _scope_body(*changed))
+    assert plan.risk == "ci-infra"
+    assert plan.review_required is True
+    assert set(plan.required_checks) == set(verification.required_checks(policy, "ci-infra"))
+
+
+def test_path_ratchet_rejects_rerouting_accounting_policy(
+    verification: ModuleType, policy: object, tmp_path: Path
+) -> None:
+    """Moving the manifest or plugin back to a weaker class must fail the ratchet."""
+    payload = _policy_payload()
+    rules = cast(list[dict[str, object]], payload["path_rules"])
+    protected = set(_ACCOUNTING_POLICY_INPUTS)
+    for rule in rules:
+        if rule["class"] == "ci-infra":
+            rule["patterns"] = [
+                pattern for pattern in cast(list[str], rule["patterns"]) if pattern not in protected
+            ]
+    payload["path_rules"] = [rule for rule in rules if cast(list[str], rule["patterns"])]
+    proposed = verification.load_policy(_write_policy(tmp_path, payload))
+    errors = verification.evaluate_path_weakening(policy, proposed)
+    for path in _ACCOUNTING_POLICY_INPUTS:
+        assert any(f"lowers classification for {path!r}" in error for error in errors), errors
+
+
 def test_path_ratchet_rejects_unacknowledged_downgrade(
     verification: ModuleType, policy: object, tmp_path: Path
 ) -> None:

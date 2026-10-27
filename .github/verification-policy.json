@@ -117,6 +117,13 @@
   },
   "path_rules": [
     {
+      "class": "ci-infra",
+      "patterns": [
+        "docs/testing/test-accounting.json",
+        "tests/accounting_plugin.py"
+      ]
+    },
+    {
       "class": "tests-only",
       "patterns": [
         "tests/"
