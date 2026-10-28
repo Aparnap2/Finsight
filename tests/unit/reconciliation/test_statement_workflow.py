@@ -41,11 +41,7 @@ from finance.reconciliation.statement_workflow import (
 from finance.reconciliation.tolerances import ReconciliationTolerance
 
 _FIXTURES = (
-    Path(__file__).resolve().parents[3]
-    / "tests"
-    / "fixtures"
-    / "reconciliation"
-    / "triangle"
+    Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "reconciliation" / "triangle"
 )
 _CASES = _FIXTURES / "cases.json"
 _EXPECTED = _FIXTURES / "expected.json"
@@ -178,9 +174,7 @@ def _s7(report: ReconciliationReport) -> dict[str, object]:
     return {
         "outcome": deposit.allocation.outcome.value,
         "exception_code": deposit.allocation.exception_code,
-        "reason": (
-            None if deposit.allocation.reason is None else deposit.allocation.reason.value
-        ),
+        "reason": (None if deposit.allocation.reason is None else deposit.allocation.reason.value),
         "candidates": candidates,
     }
 
@@ -417,9 +411,7 @@ def test_window_seconds_must_be_non_negative() -> None:
 def test_statement_sources_reject_foreign_row_types() -> None:
     sources = _sources("s1_exact_match")
     with pytest.raises(InvariantViolation):
-        run_statement_reconciliation(
-            replace(sources, bank_rows=cast(Any, "not-a-sequence"))
-        )
+        run_statement_reconciliation(replace(sources, bank_rows=cast(Any, "not-a-sequence")))
 
 
 def test_cli_writes_the_report(tmp_path: Path) -> None:
@@ -439,12 +431,16 @@ def test_cli_writes_the_report(tmp_path: Path) -> None:
     assert exit_code == 0
     payload = json.loads(out.read_text(encoding="utf-8"))
     assert set(payload) == {"s4b_partial_payment", "s6_duplicate"}
-    assert payload["s4b_partial_payment"]["edges"]["charge_to_deposit"]["results"][0][
-        "unallocated_deposit"
-    ] == "600.00"
-    assert payload["s6_duplicate"]["edges"]["charge_to_deposit"]["results"][0][
-        "exception_code"
-    ] == "I-DUPLICATE"
+    assert (
+        payload["s4b_partial_payment"]["edges"]["charge_to_deposit"]["results"][0][
+            "unallocated_deposit"
+        ]
+        == "600.00"
+    )
+    assert (
+        payload["s6_duplicate"]["edges"]["charge_to_deposit"]["results"][0]["exception_code"]
+        == "I-DUPLICATE"
+    )
 
 
 def test_statement_line_is_the_deposit_identity() -> None:

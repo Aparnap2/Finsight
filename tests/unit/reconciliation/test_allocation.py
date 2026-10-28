@@ -119,10 +119,9 @@ class TestWholeChargeAllocation:
         assert result.fee_total == Decimal("30.00")
         assert result.refund_total == Decimal("0.00")
         assert sum(leg.net for leg in result.legs) == Decimal("970.00")
-        assert (
-            sum(leg.gross for leg in result.legs) - result.fee_total - result.refund_total
-            == Decimal("970.00")
-        )
+        assert sum(
+            leg.gross for leg in result.legs
+        ) - result.fee_total - result.refund_total == Decimal("970.00")
         assert result.allocated_total + result.unallocated_deposit == Decimal("970.00")
 
     def test_input_order_does_not_change_the_result(self) -> None:
