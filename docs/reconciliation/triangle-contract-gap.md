@@ -108,15 +108,25 @@ Contract constraints, all enforced in `finance/reconciliation/allocation.py`:
   per leg (`0 < allocated <= net`) and in aggregate (`allocated_total`,
   `open_balance`, `unallocated_deposit`).
 
-## Open adjudication notes
+## Adjudicated contradictions (2026-10-28)
 
-- The spec's "Fee drift from a zero-fee leg" scenario (charge net 1000.00,
-  fee 0.00, deposit 971.00 ⇒ `I-FEE-DRIFT`) collides with its own
-  `I-PARTIAL` rule: a 971.00 deposit against a 1000.00 charge is a residual
-  open balance, so the implemented precedence reports `I-PARTIAL`.
-  `I-FEE-DRIFT` is emitted when the charge legs carry fees that do not
-  explain the shortfall. The spec scenario is left untouched for
-  adjudication rather than silently rewritten.
-- The conservation scenario lists nets `388.00/291.00/291.00` with fees
-  `11.00/9.00/9.00`, which cannot come from whole-number grosses; the fixture
-  uses fees `12.00/9.00/9.00`. The normative sentence is satisfied either way.
+Both examples below were internal inconsistencies in the source change. The
+normative requirements were not in question; the examples were. They are
+corrected by `openspec/changes/correct-payout-classification-scenarios/`, and
+the original text is preserved unchanged in `add-bank-payout-reconciliation`
+so the decision stays auditable.
+
+1. **Zero-fee drift → `I-PARTIAL`.** "Fee drift from a zero-fee leg"
+   (charge net 1000.00, fee 0.00, deposit 971.00) contradicted the change's
+   own `I-PARTIAL` rule. Decision: classification follows evidence, not the
+   size of the difference. A 29.00 shortfall with no fee evidence is unpaid
+   principal — `I-PARTIAL` with `open_balance` 29.00. `I-FEE-DRIFT` requires
+   at least one allocated leg with a non-zero fee whose total does not explain
+   the remainder. Implementation unchanged; pinned by
+   `test_unexplained_shortfall_is_partial_not_fee_drift` and
+   `test_fee_drift`.
+2. **Conservation fees `11/9/9` → `12/9/9`.** Nets `388.00/291.00/291.00`
+   with fees totalling 29.00 imply a net of 971.00, not 970.00. Decision: the
+   invariant is `gross - fee == net`; the fixture's source records
+   (gross 400/300/300, fees 12/9/9, nets 388/291/291) are correct and the
+   example was wrong. Pinned by `test_conservation_is_exact_for_three_charges`.

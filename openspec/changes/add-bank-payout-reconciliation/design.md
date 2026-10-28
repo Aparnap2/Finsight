@@ -133,3 +133,22 @@ Deterministic reasons cover the cases that previously surfaced as implicit excep
 refund not explained by the legs (`REFUND_LAG`), currency difference (`CURRENCY_MISMATCH`), missing payout record
 (`NO_DEPOSIT`), outside the settlement window (`OUTSIDE_WINDOW`), candidate cap (`CANDIDATE_LIMIT`), ambiguity
 (`AMBIGUOUS`), and mixed-currency payout (`FX_UNSUPPORTED`, `REQUIRES_HUMAN`).
+
+## Adjudications (2026-10-28)
+
+Two examples in `specs/reconciliation/spec.md` were internally inconsistent;
+the normative requirements they illustrated were not. Both are recorded and
+corrected in `openspec/changes/correct-payout-classification-scenarios/`:
+
+- **Zero-fee shortfall.** "Fee drift from a zero-fee leg" demanded
+  `I-FEE-DRIFT` for a 29.00 shortfall with no fee evidence, contradicting the
+  `I-PARTIAL` rule in this change. Classification follows evidence: an
+  unexplained shortfall is `I-PARTIAL`; `I-FEE-DRIFT` requires fee evidence.
+  No implementation change.
+- **Conservation arithmetic.** The conservation example paired nets
+  `388/291/291` with fees `11/9/9`, which total 29.00 and imply a net of
+  971.00. The invariant is unchanged; the corrected example uses gross
+  `400/300/300` and fees `12/9/9`.
+
+This section is the decision record; the corrected scenarios live in the
+follow-up change so this change's reviewed text remains history.
