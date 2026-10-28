@@ -596,18 +596,80 @@ def evaluate_policy_weakening(base: Policy, proposed: Policy) -> tuple[str, ...]
     return tuple(errors)
 
 
-def _probe_path(pattern: str) -> str:
-    """Derive a representative repository path from a policy path pattern.
+_PROBE_CHARACTERS = ("p", "a", "z", "0", "9", "A", "_")
 
-    Every glob metacharacter is replaced by a literal so the probe matches the
-    pattern it came from. This is a ratchet check on classification, not a
-    match-quality test: the goal is a stable sample per pattern.
+
+def _instantiate_glob(pattern: str) -> str:
+    """Instantiate a shell-style glob as one concrete path.
+
+    Each metacharacter is replaced by a literal that satisfies it. Character
+    classes are resolved by testing candidate characters against the class with
+    the same matcher the ratchet uses, so negation and ranges are honoured. An
+    unterminated or unsatisfiable class raises ``PolicyError``: a pattern the
+    ratchet cannot probe must fail loudly rather than silently drop out of
+    coverage.
     """
-    probe = pattern.replace("*", "probe").replace("?", "probe").replace("[", "").replace("]", "")
+    out: list[str] = []
+    index = 0
+    length = len(pattern)
+    while index < length:
+        char = pattern[index]
+        if char == "*":
+            while index < length and pattern[index] == "*":
+                index += 1
+            out.append("probe")
+            continue
+        if char == "?":
+            out.append("p")
+            index += 1
+            continue
+        if char == "[":
+            end = pattern.find("]", index + 1)
+            if end == -1:
+                raise PolicyError(f"policy pattern {pattern!r} has an unterminated character class")
+            class_text = pattern[index : end + 1]
+            if len(class_text) == 2:
+                raise PolicyError(f"policy pattern {pattern!r} has an empty character class")
+            chosen = next(
+                (
+                    candidate
+                    for candidate in _PROBE_CHARACTERS
+                    if fnmatchcase(candidate, class_text)
+                ),
+                None,
+            )
+            if chosen is None:
+                raise PolicyError(f"policy pattern {pattern!r} has no satisfiable character")
+            out.append(chosen)
+            index = end + 1
+            continue
+        out.append(char)
+        index += 1
+    return "".join(out)
+
+
+def _probe_path(pattern: str) -> str:
+    """Derive a concrete path that the given pattern actually matches.
+
+    The ratchet re-classifies every base pattern under the proposed policy, so
+    the probe stands in for that pattern. A probe that falls through to a
+    different rule would turn the check into a no-op, so the result is verified
+    against the pattern and a mismatch raises ``PolicyError``.
+
+    A directory pattern is probed with a file inside it, so a prefix rule and a
+    glob rule ending in ``/`` are both exercised the way real files are.
+    """
+    matchable = pattern.rstrip("/")
+    has_glob = any(char in matchable for char in "*?[")
+    probe = _instantiate_glob(matchable) if has_glob else matchable
     probe = probe.replace("//", "/").strip("/")
-    if not probe:
-        return "probe"
-    return probe if "." in probe.rsplit("/", 1)[-1] else f"{probe}/probe.txt"
+    if not probe or ".." in probe.split("/"):
+        raise PolicyError(f"policy pattern {pattern!r} produced an invalid probe path")
+    if not _path_matches(probe, matchable):
+        raise PolicyError(f"policy pattern {pattern!r} cannot be probed for coverage")
+    if pattern.endswith("/"):
+        probe = f"{probe}/__probe__.txt"
+    return probe
 
 
 def evaluate_path_weakening(base: Policy, proposed: Policy) -> tuple[str, ...]:
@@ -711,6 +773,16 @@ def build_plan(
 
     errors = list(scope_errors) + list(guard.errors) + list(weakening)
     advisories = list(scope_advisories)
+    if (
+        proposed_policy is not None
+        and policy_existed_on_base
+        and policy.digest == proposed_policy.digest
+        and policy.policy_path in set(classification.changed_files)
+    ):
+        errors.append(
+            f"{policy.policy_path} changed but the base and proposed policies are identical; "
+            "the base policy must be read from the base revision"
+        )
     if classification.unknown_paths:
         joined = ", ".join(classification.unknown_paths)
         errors.append(f"unclassified changed paths: {joined}; add a path rule")
@@ -948,7 +1020,7 @@ def build_evidence(
         advisories.append(
             "human approval incomplete: "
             f"{len(approval_evaluation.approved_by)}/{approvals_required} non-author "
-            "approvals at the head commit; branch protection remains the merge-time authority"
+            "approvals at the head commit"
         )
     if approvals_required and approval_evaluation.ok:
         joined = ", ".join(f"@{name}" for name in approval_evaluation.approved_by)
@@ -1064,8 +1136,9 @@ def render_report(evidence: Mapping[str, object]) -> str:
             )
             lines.append(
                 f"- Missing {missing} of {approvals_required} required non-author "
-                "approval(s) at the head commit. Branch protection remains the "
-                "merge-time authority and will block the merge until they are recorded."
+                "approval(s) at the head commit. This workflow does not read repository "
+                "branch protection, so it does not claim the merge will be blocked: the "
+                "platform's settings decide that, independently of this verdict."
             )
             lines.append(
                 f"- Applied the `{NEEDS_HUMAN_REVIEW_LABEL}` label so the gap is "
