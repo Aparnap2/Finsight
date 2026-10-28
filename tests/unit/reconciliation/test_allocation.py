@@ -108,6 +108,23 @@ class TestWholeChargeAllocation:
         assert tuple(leg.payment_id for leg in result.legs) == ("ch_1", "ch_2", "ch_3")
         assert all(leg.allocated == leg.net for leg in result.legs)
 
+    def test_conservation_is_exact_for_three_charges(self) -> None:
+        """Adjudicated D2: gross 1000.00 minus fees 30.00 equals nets 970.00."""
+        charges = [
+            _charge("ch_1", gross="400.00", fee="12.00"),
+            _charge("ch_2", gross="300.00", fee="9.00"),
+            _charge("ch_3", gross="300.00", fee="9.00"),
+        ]
+        result = allocate_deposit(_deposit("970.00"), charges, _STRICT)
+        assert result.fee_total == Decimal("30.00")
+        assert result.refund_total == Decimal("0.00")
+        assert sum(leg.net for leg in result.legs) == Decimal("970.00")
+        assert (
+            sum(leg.gross for leg in result.legs) - result.fee_total - result.refund_total
+            == Decimal("970.00")
+        )
+        assert result.allocated_total + result.unallocated_deposit == Decimal("970.00")
+
     def test_input_order_does_not_change_the_result(self) -> None:
         charges = [
             _charge("ch_1", gross="400.00", fee="12.00"),
@@ -143,6 +160,17 @@ class TestPartialSettlement:
         assert result.unallocated_deposit == Decimal("0.00")
         assert result.legs[0].allocated == Decimal("600.00")
         assert result.legs[0].net == Decimal("1000.00")
+
+    def test_unexplained_shortfall_is_partial_not_fee_drift(self) -> None:
+        """Adjudicated D1: no fee evidence means unpaid principal, not fee drift."""
+        result = allocate_deposit(_deposit("971.00"), [_charge("ch_1", gross="1000.00")], _STRICT)
+        assert result.outcome is PayoutOutcome.EXCEPTION
+        assert result.exception_code is ExceptionCode.PARTIAL_SETTLEMENT
+        assert result.reason is PayoutReason.PARTIAL
+        assert result.allocated_total == Decimal("971.00")
+        assert result.open_balance == Decimal("29.00")
+        assert result.unallocated_deposit == Decimal("0.00")
+        assert result.fee_total == Decimal("0.00")
 
     def test_multi_charge_shortfall_does_not_guess_a_partial(self) -> None:
         charges = [
