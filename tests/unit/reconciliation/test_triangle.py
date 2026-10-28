@@ -8,11 +8,11 @@ No production code is modified here; the module records what the core
 does today.
 
 Scenarios marked ``supported`` assert the core's current behaviour.
-Scenarios marked ``gap`` in ``expected.json`` are recorded as
-``xfail(strict=True)``: they assert the behaviour the triangle *needs*
-and fail until the missing contract exists. A strict xfail turns green
-the moment the gap closes, so neither the fixture nor the suite can
-drift silently.
+Scenarios marked ``gap`` in ``expected.json`` record behaviour the
+triangle still cannot express. The payout checks that used to be strict
+xfails (s3, s5b, s7) now run against the ``reconcile_payout`` contract;
+s4b remains a gap only for the pairwise ``reconcile`` surface, which the
+payout surface supersedes for payouts.
 
 Checks covered:
 
@@ -24,14 +24,14 @@ s2_fee_invoice_vs_charge                yes         fee drift is I-FEE-DRIFT
 s2_fee_charge_vs_bank                   yes         fees are already inside net
 s2_fee_invoice_vs_naive_bank            gap         bank row has no fee column
 s2_fee_invoice_vs_enriched_bank         yes         fee knowledge fixes the code
-s3_many_to_one                          gap         N charges -> 1 deposit
+s3_many_to_one                          yes         N charges -> 1 deposit
 s4a_refund_folded                       yes         refunds folded into net match
-s4b_partial_payment                     gap         no partial-payment code
+s4b_partial_payment                     gap         pairwise surface has no partial code
 s5_delayed_deposit                      yes         time skew via window_seconds
-s5b_missing_deposit                     gap         absence has no representation
+s5b_missing_deposit                     yes         absence is PENDING_EVIDENCE
 s6_duplicate_bank_row                   yes         dedup must precede reconcile
 s6_duplicate_drifted                    yes         duplicate flag on drift
-s7_ambiguous_allocation                 gap         no ambiguity signal
+s7_ambiguous_allocation                 yes         two fits -> REQUIRES_HUMAN
 ======================================  ==========  ==========================
 """
 
@@ -44,15 +44,20 @@ from typing import Any
 import pytest
 
 from finance.reconciliation import (
+    BankDepositRecord,
     ExceptionCode,
     PaymentRecord,
+    PayoutOutcome,
+    PayoutReason,
     ReconciliationOutcome,
     ReconciliationTolerance,
     ensure_unique,
     find_duplicates,
     find_match,
+    fingerprint_payment,
     normalize,
     reconcile,
+    reconcile_payout,
 )
 from finance.reconciliation.errors import DuplicateError
 
@@ -84,6 +89,21 @@ def _leg(name: str, source: str, payment_id: str) -> PaymentRecord:
         if record["payment_id"] == payment_id:
             return normalize(record, tenant_id=TENANT)
     raise AssertionError(f"{name}/{source} has no record {payment_id!r}")
+
+
+def _deposit_from_leg(leg: PaymentRecord) -> BankDepositRecord:
+    """Treat one normalized bank leg as a normalized deposit record."""
+    return BankDepositRecord(
+        deposit_id=leg.payment_id,
+        tenant_id=leg.tenant_id,
+        amount=leg.net,
+        currency=leg.currency,
+        posted_at=leg.occurred_at,
+        statement_digest=fingerprint_payment(leg),
+        line_number=2,
+        fee=leg.fee,
+        reference=leg.source_reference or leg.payment_id,
+    )
 
 
 def _assert_check(check: str, outcome: ReconciliationOutcome, code: str | None, diff: str) -> None:
@@ -248,18 +268,21 @@ def test_s3_each_charge_is_an_exception_against_the_payout() -> None:
     assert outcomes == {ReconciliationOutcome.EXCEPTION}
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="gap: no many-to-one contract; reconcile() takes one processor leg",
-)
 def test_s3_one_deposit_reconciles_three_charges() -> None:
-    """The missing contract: allocate one payout across several charges."""
+    """The payout contract allocates one deposit across several charges."""
     charges = _legs("s3_many_to_one", "stripe")
-    deposit = _legs("s3_many_to_one", "bank")[0]
+    deposit = _deposit_from_leg(_legs("s3_many_to_one", "bank")[0])
 
-    result = reconcile(charges, deposit, STRICT)  # type: ignore[arg-type]
+    result = reconcile_payout(deposit, charges, STRICT)
 
-    assert result.outcome is ReconciliationOutcome.MATCHED
+    expected = EXPECTED["s3_many_to_one"]
+    assert result.outcome is PayoutOutcome.MATCHED
+    assert result.reason is None
+    assert result.exception_code is None
+    assert result.allocated_total == Decimal(expected["allocated_total"])
+    assert result.open_balance == Decimal(expected["open_balance"])
+    assert result.unallocated_deposit == Decimal("0.00")
+    assert [leg.payment_id for leg in result.legs] == ["ch_2001", "ch_2002", "ch_2003"]
 
 
 def test_s4a_refund_folded_into_net_matches_the_deposit() -> None:
@@ -303,19 +326,20 @@ def test_s5_delayed_deposit_matches_when_the_time_window_allows_it() -> None:
     )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="gap: reconcile() needs two legs, so an absent deposit cannot be reported",
-)
 def test_s5b_missing_deposit_yields_an_unmatched_expected_state() -> None:
-    """The missing contract: say 'expected but not observed' without inventing a leg."""
+    """An absent deposit is open evidence, not an invented leg."""
     charge = _leg("s5b_missing_deposit", "stripe", "ch_1007")
     deposits = _legs("s5b_missing_deposit", "bank")
     assert deposits == []
 
-    result = reconcile(charge, None, STRICT)  # type: ignore[arg-type]
+    result = reconcile_payout(None, [charge], STRICT)
 
-    assert result.outcome is ReconciliationOutcome.PENDING_EVIDENCE
+    expected = EXPECTED["s5b_missing_deposit"]
+    assert result.outcome is PayoutOutcome.PENDING_EVIDENCE
+    assert result.reason is PayoutReason.NO_DEPOSIT
+    assert result.exception_code is None
+    assert result.open_balance == Decimal(expected["open_balance"])
+    assert result.unallocated_deposit == Decimal("0.00")
 
 
 def test_s6_duplicate_rows_are_grouped_by_the_dedup_layer() -> None:
@@ -373,18 +397,21 @@ def test_s7_find_match_silently_picks_one_plausible_allocation() -> None:
     assert sum((charge.net for charge in charges[:3]), Decimal("0")) == deposit.net
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="gap: find_match() returns one candidate and reports no ambiguity",
-)
 def test_s7_ambiguous_allocation_is_reported_as_ambiguous() -> None:
-    """The missing contract: refuse to choose when two allocations both balance."""
+    """Refuse to choose when two allocations both balance exactly."""
     charges = _legs("s7_ambiguous_allocation", "stripe")
-    deposit = _legs("s7_ambiguous_allocation", "bank")[0]
+    deposit = _deposit_from_leg(_legs("s7_ambiguous_allocation", "bank")[0])
 
-    ambiguous = find_match(deposit, charges, STRICT, report_ambiguity=True)  # type: ignore[call-arg]
+    result = reconcile_payout(deposit, charges, STRICT)
 
-    assert ambiguous is None
+    expected = EXPECTED["s7_ambiguous_allocation"]
+    assert result.outcome is PayoutOutcome.REQUIRES_HUMAN
+    assert result.reason is PayoutReason.AMBIGUOUS
+    assert result.exception_code is None
+    assert result.legs == ()
+    assert {candidate.payment_ids for candidate in result.candidates} == {
+        tuple(candidate) for candidate in expected["candidates"]
+    }
 
 
 def test_gap_inventory_matches_the_recorded_expectations() -> None:
@@ -393,10 +420,7 @@ def test_gap_inventory_matches_the_recorded_expectations() -> None:
 
     assert gaps == {
         "s2_fee_invoice_vs_naive_bank",
-        "s3_many_to_one",
         "s4b_partial_payment",
-        "s5b_missing_deposit",
-        "s7_ambiguous_allocation",
     }
     for name in gaps:
         assert EXPECTED[name]["gap"], f"{name} is marked as a gap without a reason"

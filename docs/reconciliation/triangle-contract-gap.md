@@ -1,13 +1,26 @@
-# Three-source reconciliation: what the frozen core handles
+# Three-source reconciliation: pairwise core vs payout surface
 
-_Evidence: `tests/unit/finance/test_reconciliation_triangle.py` over
-`tests/fixtures/reconciliation/triangle/`. 18 passing checks, 3 strict xfails.
-No production code in `finance/` was changed._
+_Evidence: `tests/unit/reconciliation/test_triangle.py` over
+`tests/fixtures/reconciliation/triangle/`. 21 checks, 0 strict xfails.
+The pairwise `reconcile()` core is unchanged; payouts are handled by the
+additive `reconcile_payout()` contract._
 
 The scenario is a month of card revenue: an invoice register says what should
 be paid, Stripe says what was charged, a bank statement says what landed.
 
-## Handled today
+## Handled by `reconcile_payout` (bank payout contract)
+
+| Case | Behaviour |
+|---|---|
+| One deposit settles N charges (`388.00 + 291.00 + 291.00 = 970.00`) | `MATCHED`, `allocated_total 970.00`, `open_balance 0.00` |
+| Deposit covers only part of one charge (600.00 vs 1000.00 net) | `EXCEPTION` / `I-PARTIAL`, `open_balance 400.00` |
+| Two subsets both reproduce the deposit | `REQUIRES_HUMAN` / `AMBIGUOUS`, every candidate subset reported, no legs chosen |
+| Charge with no bank line at all | `PENDING_EVIDENCE` / `NO_DEPOSIT`, `open_balance` equals the charge net |
+| Deposit larger than every candidate | `EXCEPTION` / `I-PAYOUT` / `UNALLOCATED_DEPOSIT` |
+| Fee gap not explained by charge fees | `EXCEPTION` / `I-FEE-DRIFT` / `FEE_DRIFT` |
+| Cross-currency payout | `CurrencyMismatch`, no allocation |
+
+## Handled by the remaining pairwise core
 
 | Case | Behaviour |
 |---|---|
@@ -19,81 +32,91 @@ be paid, Stripe says what was charged, a bank statement says what landed.
 | Duplicate bank import | `find_duplicates` groups by `idempotency_key`; `ensure_unique` raises |
 | Duplicate that also drifted (150.00 vs 148.00) | `I-DUPLICATE` when `duplicate=True` |
 
-## Not representable
+## Still not representable on the pairwise surface
 
-1. **Many-to-one payouts.** `reconcile(processor, ledger, tolerance)` accepts
-   exactly one leg per side. 388.00 + 291.00 + 291.00 = one 970.00 deposit has
-   no entry point; passing the list raises `InvariantViolation`.
-2. **A bank leg with no fee column.** A deposit is one credit. Normalized as
+1. **A bank leg with no fee column.** A deposit is one credit. Normalized as
    its own `gross`, the 29.00 fee becomes a gross delta; the classifier has no
    gross-only code, so **a pure fee difference is reported as `I-REFUND-LAG`**
    (`test_s2_naive_bank_leg_misattributes_fee_drift_to_a_refund_lag`). The
    triangle is also not transitive: invoice = charge and charge = deposit, yet
    invoice ≠ deposit. Bank rows must be enriched from the processor leg.
-3. **Underpayment.** A 400.00 shortfall with no refund is `I-REFUND-LAG`; there
-   is no partial-payment code, so it is indistinguishable from refund timing.
-4. **A missing deposit.** `reconcile` needs two legs, so "expected but never
-   observed" produces nothing at all. Absence and not-yet-arrived are the same
-   non-result.
-5. **Ambiguous allocation.** 970.00 could be three charges or one 970.00
-   charge. `find_match` returns the first equal-net candidate; no ambiguity is
-   signalled, so a plausible-but-wrong allocation passes silently.
-6. **Dedup ordering.** `duplicate=True` only reaches `classify` after the
+2. **Underpayment on `reconcile()`.** A 400.00 shortfall with no refund is
+   `I-REFUND-LAG`; pairwise has no partial-payment code, so it is
+   indistinguishable from refund timing. `reconcile_payout()` reports it as
+   `I-PARTIAL` (see above); the fixture keeps the pairwise characterization.
+3. **Dedup ordering.** `duplicate=True` only reaches `classify` after the
    tolerance check fails, so an exact-matching duplicate closes as `MATCHED`.
    Dedup must run before `reconcile`; the core does not enforce that order.
 
-There is also no bank importer and no invoice vocabulary: `finance/` has no
-bank-statement or invoice mapping, and `finance/stripe/adapter.py` handles only
-`charge.succeeded` and `refund.created` (no payout events).
+Bank-statement ingestion is available through
+`finance/reconciliation/bank.py` (`normalize_bank_statement`), not through the
+pairwise core.
 
-## Smallest missing contract
-
-Signatures only; nothing below is implemented.
+## Implemented contract
 
 ```python
 # finance/reconciliation/bank.py
 @dataclass(frozen=True)
 class BankDepositRecord:
     deposit_id: str
-    net_credit: Decimal      # the statement line, never a float
+    tenant_id: str
+    amount: Decimal          # the statement line, never a float
     currency: str
     posted_at: datetime      # tz-aware
-    tenant_id: str
-    reference: str | None    # bank memo / payout id when the statement has one
-
-def normalize_bank_row(row: Mapping[str, str], *, tenant_id: str) -> BankDepositRecord: ...
+    statement_digest: str
+    line_number: int
+    fee: Decimal = Decimal("0")
+    reference: str = ""
+    ...
 
 # finance/reconciliation/allocation.py
 @dataclass(frozen=True)
-class Allocation:
-    deposit_id: str
-    charge_payment_id: str
-    amount: Decimal
-    fee: Decimal             # copied from the charge, so fee drift stays I-FEE-DRIFT
+class AllocationLeg:
+    payment_id: str
+    fingerprint: str
+    net: Decimal             # charge net
+    allocated: Decimal       # 0 < allocated <= net
 
 def allocate_deposit(
     deposit: BankDepositRecord,
     charges: Sequence[PaymentRecord],
     tolerance: ReconciliationTolerance,
-) -> tuple[Allocation, ...]:   # raises AmbiguousAllocation when 2+ sums balance
-    ...
+    *,
+    max_candidates: int = MAX_ALLOCATION_CANDIDATES,
+    tenant_id: str | None = None,
+) -> Allocation: ...
 
 def reconcile_payout(
-    deposit: BankDepositRecord,
+    deposit: BankDepositRecord | None,
     charges: Sequence[PaymentRecord],
     tolerance: ReconciliationTolerance,
     *,
     window_seconds: int | None = None,
-) -> ReconciliationResult:     # one result for N charges against one deposit
-    ...
+    max_candidates: int = MAX_ALLOCATION_CANDIDATES,
+    tenant_id: str | None = None,
+    now: datetime | None = None,
+) -> Allocation: ...
 ```
 
-Two constraints belong in the contract, not in the implementation:
+Contract constraints, all enforced in `finance/reconciliation/allocation.py`:
 
-- `Allocation.fee` is copied from the charge, so the existing classifier keeps
-  returning `I-FEE-DRIFT` instead of mislabelling it.
-- `allocate_deposit` must **refuse** to choose when more than one subset sums
-  to the deposit; ambiguity is an outcome, not a tie-break.
+- Leg fees are copied from the charge, so fee gaps stay `I-FEE-DRIFT` instead
+  of being mislabelled as refund lags.
+- Two or more subsets that reproduce the deposit are reported, never
+  tie-broken on recency, id, size, or input order.
+- `AllocationLeg.allocated` carries partial amounts; conservation is checked
+  per leg (`0 < allocated <= net`) and in aggregate (`allocated_total`,
+  `open_balance`, `unallocated_deposit`).
 
-Everything else — the normalizer, matcher, classifier, fingerprints, and
-`I-REFUND-LAG` / `I-FEE-DRIFT` / `I-DUPLICATE` — is sufficient as it stands.
+## Open adjudication notes
+
+- The spec's "Fee drift from a zero-fee leg" scenario (charge net 1000.00,
+  fee 0.00, deposit 971.00 ⇒ `I-FEE-DRIFT`) collides with its own
+  `I-PARTIAL` rule: a 971.00 deposit against a 1000.00 charge is a residual
+  open balance, so the implemented precedence reports `I-PARTIAL`.
+  `I-FEE-DRIFT` is emitted when the charge legs carry fees that do not
+  explain the shortfall. The spec scenario is left untouched for
+  adjudication rather than silently rewritten.
+- The conservation scenario lists nets `388.00/291.00/291.00` with fees
+  `11.00/9.00/9.00`, which cannot come from whole-number grosses; the fixture
+  uses fees `12.00/9.00/9.00`. The normative sentence is satisfied either way.
