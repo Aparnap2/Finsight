@@ -76,12 +76,21 @@ def test_credentials_and_query_parameters_are_preserved_exactly() -> None:
         "postgresql+psycopg2://app:secret@db:5432/finance",
         "sqlite:///:memory:",
         "mysql://app:secret@db:3306/finance",
-        "",
     ],
 )
 def test_other_schemes_are_left_alone(dsn: str) -> None:
     """An explicitly chosen driver is a deployment decision, not ours to rewrite."""
     assert normalize_postgres_dsn(dsn) == dsn
+
+
+def test_empty_dsn_is_a_no_op() -> None:
+    """Empty ``migration_postgres_uri`` must stay empty, not become a driver DSN.
+
+    Callers rely on ``migration_postgres_uri or postgres_uri``; normalizing an
+    empty string would silently pin migrations to the runtime DSN and make the
+    fallback indistinguishable from an explicit override.
+    """
+    assert normalize_postgres_dsn("") == ""
 
 
 def test_libpq_postgres_alias_is_normalized() -> None:
