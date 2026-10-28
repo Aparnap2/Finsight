@@ -133,10 +133,10 @@ The system SHALL reconcile a deposit against its candidate charges and return ex
   the same inputs.
 - A refund that is not explained by the charge legs MUST produce `I-REFUND-LAG` with reason `REFUND_LAG`; it MUST
   NOT be absorbed into a partial allocation.
-- A currency difference MUST NOT be converted or netted. An ineligible-currency charge is excluded, and a payout
-  with no eligible candidate MUST return `EXCEPTION` with `I-PAYOUT` and reason `CURRENCY_MISMATCH`.
-- A payout spanning more than one currency MUST return `REQUIRES_HUMAN` with reason `FX_UNSUPPORTED`; FX rates are
-  never applied.
+- A currency difference MUST NOT be converted or netted. A deposit whose currency differs from any candidate charge
+  MUST raise `CurrencyMismatch` and produce no allocation, mirroring `reconcile()`.
+- FX rates are never applied anywhere on the path; a caller needing cross-currency settlement must pre-split the
+  payout per currency. `FX_UNSUPPORTED` is reserved for a payout that itself spans currencies.
 - `REQUIRES_HUMAN` MUST be returned when the candidate count exceeds the allocation bound or an ambiguity was
   reported.
 - Tolerance MUST be injected per call and MUST default to zero; the system MUST NOT hardcode a tolerance.
