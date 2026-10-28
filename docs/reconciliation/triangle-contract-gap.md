@@ -47,10 +47,50 @@ be paid, Stripe says what was charged, a bank statement says what landed.
 3. **Dedup ordering.** `duplicate=True` only reaches `classify` after the
    tolerance check fails, so an exact-matching duplicate closes as `MATCHED`.
    Dedup must run before `reconcile`; the core does not enforce that order.
+   The three-source workflow supplies that order (see below).
 
 Bank-statement ingestion is available through
 `finance/reconciliation/bank.py` (`normalize_bank_statement`), not through the
 pairwise core.
+
+## Composed three-source workflow
+
+`finance/reconciliation/statement_workflow.py` wires the three edges without
+changing any frozen module:
+
+```bash
+python -m finance.reconciliation.statement_workflow \
+  --cases tests/fixtures/reconciliation/triangle/cases.json \
+  [--scenario s6_duplicate] [--window-seconds 259200] [--out report.json]
+```
+
+- **invoice → charge** — `reconcile()` per link. Links are chosen by
+  `(currency, gross)` and the nearest `occurred_at`, so a pure fee difference
+  stays `I-FEE-DRIFT` and never becomes a refund lag. Leftovers are reported as
+  `unlinked_invoices` / `unlinked_charges`.
+- **charge → deposit** — `normalize_bank_statement()` then
+  `allocate_deposit()`. Statement rows sharing an id are grouped before
+  allocation: exact re-imports become `duplicate_groups`, differing amounts
+  become `drift_groups`, and the group delegates one record with
+  `duplicate=True`.
+- **invoice → deposit** — derived from the two edges above, never compared
+  directly and never used to overwrite them. It is emitted only when the
+  allocated legs resolve back to linked invoices, so a deposit without
+  processor evidence has no derived comparison instead of a fabricated one.
+- **report** — `to_dict()` carries `edges`, duplicate/drift groups, rejects,
+  warnings, and a fingerprint over the canonical payload; money is rendered at
+  the statement's minor-unit exponent without rounding.
+
+All nine fixture scenarios reproduce their recorded outcomes. The two
+Milestone 2 defects now compose correctly: `s4b_partial_payment` is
+`PENDING_EVIDENCE` / `NO_CANDIDATE` with the whole 600.00 deposit unallocated,
+and `s6_duplicate` is `EXCEPTION` / `I-DUPLICATE` with 148.00 allocated and
+2.00 open, alongside both the duplicate and drift groups.
+
+The two documented pairwise gaps stay visible: `s2_fee_invoice_vs_naive_bank`
+still needs the bank leg enriched from the processor (otherwise a fee gap reads
+as `I-REFUND-LAG`), and `s4b_partial_payment` has no `reconcile()` counterpart
+because pairwise has no partial-payment code.
 
 ## Implemented contract
 
