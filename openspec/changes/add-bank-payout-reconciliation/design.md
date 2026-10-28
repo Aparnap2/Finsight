@@ -115,3 +115,21 @@ A statement where any row is rejected yields an ingest result that names the rej
    separate, explicitly-signed field so `difference` keeps its existing meaning on the pair path.
 2. Is `MAX_ALLOCATION_CANDIDATES = 20` acceptable for the largest real tenant, or should the bound be configurable
    per tenant?
+
+## Acceptance Conditions (approval S0.6)
+
+Approval is conditional on the specification enforcing these. Each maps to a requirement and a test.
+
+| # | Condition | Requirement | Enforcing test |
+|---|---|---|---|
+| 1 | Conservation: allocated + fees + residual reconcile to the deposit; no residual silently discarded | Monetary Conservation and Rounding Policy | `test_conservation_holds_across_three_charges`, `test_unexplained_remainder_is_reported` |
+| 2 | Provenance: every allocation links deposit, statement line, charge, and fingerprints | Allocation Provenance and Idempotency | `test_allocation_carries_provenance`, `test_replay_is_byte_identical` |
+| 3 | Tenant isolation: declared by trusted context, enforced in allocation | Tenant Isolation for Import and Allocation | `test_cross_tenant_charge_rejected`, `test_row_tenant_is_ignored` |
+| 4 | Ambiguity unresolved | Ambiguity Is an Outcome | `test_s7_ambiguous_allocation_is_reported_as_ambiguous` |
+| 5 | Partial evidence distinct from mismatch | Payout Reconciliation Outcomes | `test_s5b_missing_deposit_yields_an_unmatched_expected_state` |
+| 6 | Idempotency: re-import and replay create no duplicates | Allocation Provenance and Idempotency | `test_reimport_is_deduplicated`, `test_replay_yields_one_allocation` |
+
+Deterministic reasons cover the cases that previously surfaced as implicit exceptions: unexplained fee (`FEE_DRIFT`),
+refund not explained by the legs (`REFUND_LAG`), currency difference (`CURRENCY_MISMATCH`), missing payout record
+(`NO_DEPOSIT`), outside the settlement window (`OUTSIDE_WINDOW`), candidate cap (`CANDIDATE_LIMIT`), ambiguity
+(`AMBIGUOUS`), and mixed-currency payout (`FX_UNSUPPORTED`, `REQUIRES_HUMAN`).

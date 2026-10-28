@@ -28,6 +28,9 @@ The system SHALL normalize bank CSV statements using a mapping declared per tena
 
 - The mapping MUST declare column names, amount unit (`MAJOR | MINOR`), sign convention (`SIGNED`, or
   `DEBIT_CREDIT` with a separate credit column), date format, and the statement currency.
+- `tenant_id` MUST be supplied by trusted calling context (the authenticated tenant) and MUST NOT be read from, or
+  overridden by, row content. A row that carries a tenant-like column is untrusted and MUST be ignored for tenancy.
+- The mapping MUST be resolved in the caller's tenant scope; a mapping from another tenant MUST be rejected.
 - The system MUST reject a mapping that omits any required field, and MUST reject a row whose currency disagrees
   with the mapping.
 - The system MUST NOT guess a column by fuzzy header match, MUST NOT coercing an unparsable amount to zero, and
@@ -124,6 +127,16 @@ The system SHALL reconcile a deposit against its candidate charges and return ex
 - `EXCEPTION` MUST carry exactly one code: `I-PARTIAL` when an open balance remains after the deposit is absorbed,
   `I-FEE-DRIFT` when the allocated fees do not explain the gap, `I-DUPLICATE` when duplicate legs remain after
   deduplication, and `I-PAYOUT` otherwise.
+- Every non-closing outcome MUST also carry exactly one deterministic `reason`, distinguishing at minimum
+  `PARTIAL`, `FEE_DRIFT`, `REFUND_LAG`, `DUPLICATE`, `CURRENCY_MISMATCH`, `UNALLOCATED_DEPOSIT`, `NO_DEPOSIT`,
+  `OUTSIDE_WINDOW`, `CANDIDATE_LIMIT`, `AMBIGUOUS`, and `FX_UNSUPPORTED`. The reason MUST be stable across runs for
+  the same inputs.
+- A refund that is not explained by the charge legs MUST produce `I-REFUND-LAG` with reason `REFUND_LAG`; it MUST
+  NOT be absorbed into a partial allocation.
+- A currency difference MUST NOT be converted or netted. An ineligible-currency charge is excluded, and a payout
+  with no eligible candidate MUST return `EXCEPTION` with `I-PAYOUT` and reason `CURRENCY_MISMATCH`.
+- A payout spanning more than one currency MUST return `REQUIRES_HUMAN` with reason `FX_UNSUPPORTED`; FX rates are
+  never applied.
 - `REQUIRES_HUMAN` MUST be returned when the candidate count exceeds the allocation bound or an ambiguity was
   reported.
 - Tolerance MUST be injected per call and MUST default to zero; the system MUST NOT hardcode a tolerance.
@@ -192,3 +205,76 @@ The system SHALL extend the exception taxonomy additively with `PARTIAL_SETTLEME
 #### Scenario: Existing codes unchanged
 - **WHEN** an existing persisted record carries `I-REFUND-LAG`, `I-FEE-DRIFT`, or `I-DUPLICATE`
 - **THEN** it deserializes to the same enum member and its `exception_code` string is unchanged
+
+### Requirement: Monetary Conservation and Rounding Policy
+The system SHALL conserve money exactly across normalization, allocation, and reporting. No residual may be
+discarded, rounded away, or absorbed without being named.
+
+- Every allocation MUST satisfy, in exact `Decimal` arithmetic:
+  `allocated_total + unallocated_deposit == deposit.amount`,
+  `open_balance + allocated_total == sum(allocated charge net)`,
+  `fee_total == sum(allocated charge fee)`, `refund_total == sum(allocated charge refund)`, and
+  `sum(allocated charge gross) - fee_total - refund_total == sum(allocated charge net)`.
+- A non-zero `unallocated_deposit` or `open_balance` MUST be reported as its own field and MUST determine the
+  outcome; it MUST NOT be folded into `fee_total`, `refund_total`, or tolerance.
+- One allocation MUST cover exactly one currency. FX conversion MUST NOT occur anywhere on the path.
+- Money MUST be quantized to the currency's minor unit at the normalization boundary, using a declared exponent
+  (2 for USD/EUR/GBP, 0 for JPY, 3 for KWD/BHD; unknown codes require an explicit declared exponent).
+- The allocator MUST NOT quantize or round. A computed amount carrying more precision than the currency minor unit
+  MUST be rejected as an invariant violation rather than rounded.
+- Tolerance MUST NOT be used to hide a residual: a difference inside tolerance changes the outcome only, never the
+  reported amounts.
+
+#### Scenario: Conservation holds for a three-charge payout
+- **WHEN** charges with `net` `388.00`, `291.00`, `291.00` and `fee` `11.00`, `9.00`, `9.00` settle a `970.00` deposit
+- **THEN** `allocated_total` is `970.00`, `fee_total` is `29.00`, `unallocated_deposit` and `open_balance` are
+  `0.00`, and `sum(gross) - fee_total - refund_total` equals `970.00`
+
+#### Scenario: Over-precise residual rejected
+- **WHEN** allocation arithmetic would produce a residual of `0.001` in USD
+- **THEN** the system raises an invariant violation instead of rounding the residual to `0.00`
+
+#### Scenario: Unexplained remainder is named, not absorbed
+- **WHEN** a `971.00` deposit has exactly one visible `900.00` charge
+- **THEN** `unallocated_deposit` is `71.00` and the outcome carries reason `UNALLOCATED_DEPOSIT`, even if `71.00`
+  is inside the injected tolerance
+
+### Requirement: Allocation Provenance and Idempotency
+The system SHALL make every allocation traceable to its inputs and safe to replay.
+
+- An `Allocation` MUST carry the source `deposit_id`, the deposit fingerprint, the statement source digest and line
+  number, and for every leg the charge `payment_id`, charge fingerprint, and allocated amount.
+- The system SHALL compute a deterministic allocation fingerprint over the deposit fingerprint, the sorted leg
+  fingerprints, and the reported totals; the same inputs MUST yield the same fingerprint in any process.
+- Re-importing an already-imported statement MUST NOT create a second `BankDepositRecord`: duplicates are grouped
+  by deposit fingerprint and the ingest result reports them.
+- Re-running allocation for the same deposit fingerprint and leg fingerprints MUST return an identical allocation
+  and MUST NOT produce a second allocation record; the caller receives the same fingerprint.
+- Allocation MUST NOT mutate or consume the input records.
+
+#### Scenario: Re-import is deduplicated
+- **WHEN** the same statement bytes are imported twice under the same tenant and mapping
+- **THEN** the second ingest reports one duplicate group and creates no additional deposit
+
+#### Scenario: Replay yields the same allocation
+- **WHEN** the same deposit and charge set are allocated twice, in separate processes
+- **THEN** both results carry the same allocation fingerprint and identical totals
+
+### Requirement: Tenant Isolation for Import and Allocation
+The system SHALL enforce tenant boundaries at every entry point and MUST fail closed.
+
+- Import MUST take `tenant_id` from trusted context; a mapping or statement that declares a different tenant MUST
+  be rejected before normalization.
+- `allocate_deposit` MUST reject a candidate charge whose `tenant_id` differs from the deposit's, rather than
+  silently filtering it.
+- Candidate visibility MUST be tenant-scoped before enumeration, so a cross-tenant charge cannot influence a subset
+  or an ambiguity count.
+- Reconciliation results MUST carry the tenant identifier of the deposit.
+
+#### Scenario: Cross-tenant charge rejected
+- **WHEN** a deposit for tenant `tenant-a` is allocated against a charge for tenant `tenant-b`
+- **THEN** the call fails with a tenant isolation error and produces no allocation
+
+#### Scenario: Row content cannot set the tenant
+- **WHEN** an imported row contains a column that names a different tenant
+- **THEN** the tenant from trusted context is used, and the row content is treated as opaque data
