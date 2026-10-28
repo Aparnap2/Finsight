@@ -454,8 +454,8 @@ def _validate_inputs(
     charges_value: object = charges
     if not isinstance(charges_value, Sequence) or isinstance(charges_value, (str, bytes)):
         raise InvariantViolation("charges must be a sequence of PaymentRecord.")
-    if not charges_value:
-        raise InvariantViolation("charges must be non-empty.")
+    if not charges_value and deposit_value is None:
+        raise InvariantViolation("charges must be non-empty when no deposit is supplied.")
     tolerance_value: object = tolerance
     if not isinstance(tolerance_value, ReconciliationTolerance):
         raise InvariantViolation("tolerance must be a ReconciliationTolerance.")
@@ -547,13 +547,20 @@ def _classify_residual(
     unallocated: Decimal,
     open_balance: Decimal,
     fee_total: Decimal,
+    *,
+    duplicate: bool,
 ) -> tuple[ExceptionCode, PayoutReason]:
-    """Explain a residual by precedence: partial, refund, fee, over-deposit.
+    """Explain a residual by precedence: duplicate, partial, refund, fee, over-deposit.
 
-    ``I-PARTIAL`` requires a charge to have absorbed part of its net; when
-    nothing fits and there is more than one charge, no partial allocation is
-    invented and ``I-PAYOUT`` is reported instead.
+    Duplicate evidence outranks every residual explanation: a re-import whose
+    amount drifted is unsafe evidence, and reporting it as a partial, fee, or
+    refund outcome would hide the duplicate. ``I-PARTIAL`` requires a charge to
+    have absorbed part of its net; when nothing fits and there is more than one
+    charge, no partial allocation is invented and ``I-PAYOUT`` is reported
+    instead.
     """
+    if duplicate:
+        return ExceptionCode.DUPLICATE_LEDGER_ENTRY, PayoutReason.DUPLICATE
     refunds = {charge.refund for charge in eligible if charge.refund > ZERO}
     if open_balance > ZERO and allocated_total > ZERO:
         return ExceptionCode.PARTIAL_SETTLEMENT, PayoutReason.PARTIAL
@@ -603,6 +610,19 @@ def allocate_deposit(
         duplicate=duplicate,
         max_candidates=max_candidates,
     )
+    if not charges:
+        return _build(
+            outcome=PayoutOutcome.PENDING_EVIDENCE,
+            reason=PayoutReason.NO_CANDIDATE,
+            exception_code=None,
+            deposit=deposit,
+            tenant_id=tenant,
+            currency=currency,
+            legs=(),
+            candidates=(),
+            scope=(),
+            unallocated_deposit=deposit.amount,
+        )
     in_window = tuple(charge for charge in charges if _in_window(deposit, charge, window_seconds))
     if not in_window:
         return _build(
@@ -682,10 +702,19 @@ def allocate_deposit(
         return _ambiguous(search.best_ties, eligible, deposit, tenant, currency, in_window)
     if len(eligible) == 1 and deposit.amount < eligible[0].net:
         leg = _leg_for(eligible[0], deposit.amount)
+        code, reason = _classify_residual(
+            eligible,
+            deposit,
+            deposit.amount,
+            ZERO,
+            eligible[0].net - deposit.amount,
+            leg.fee,
+            duplicate=duplicate,
+        )
         return _build(
             outcome=PayoutOutcome.EXCEPTION,
-            reason=PayoutReason.PARTIAL,
-            exception_code=ExceptionCode.PARTIAL_SETTLEMENT,
+            reason=reason,
+            exception_code=code,
             deposit=deposit,
             tenant_id=tenant,
             currency=currency,
@@ -705,6 +734,7 @@ def allocate_deposit(
         unallocated,
         open_balance,
         _total(leg.fee for leg in legs),
+        duplicate=duplicate,
     )
     return _build(
         outcome=PayoutOutcome.EXCEPTION,

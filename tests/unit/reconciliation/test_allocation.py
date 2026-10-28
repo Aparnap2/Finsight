@@ -314,9 +314,12 @@ class TestIsolationAndValidation:
         with pytest.raises(CurrencyMismatch):
             allocate_deposit(_deposit("300.00"), [charge], _STRICT)
 
-    def test_empty_charges_raise(self) -> None:
+    def test_empty_charges_still_validate_policy(self) -> None:
+        """A deposit-only call skips allocation, not policy validation."""
         with pytest.raises(InvariantViolation):
-            reconcile_payout(_deposit("300.00"), [], _STRICT)
+            reconcile_payout(_deposit("300.00"), [], _STRICT, window_seconds=-1)
+        with pytest.raises(InvariantViolation):
+            reconcile_payout(_deposit("300.00"), [], _STRICT, max_candidates=0)
 
     def test_bad_window_and_candidate_limit_raise(self) -> None:
         charge = _charge("ch_1", gross="300.00")
@@ -378,3 +381,54 @@ class TestInvariants:
         first = allocate_deposit(_deposit("300.00"), [charge], _STRICT)
         second = allocate_deposit(_deposit("300.00"), [charge], _STRICT)
         assert first.fingerprint == second.fingerprint
+
+
+class TestEvidenceEdgeCases:
+    """Adjudicated edge cases: absent evidence vs. duplicate evidence."""
+
+    def test_deposit_with_no_processor_legs_is_pending_evidence(self) -> None:
+        result = reconcile_payout(_deposit("600.00"), [], _STRICT)
+        assert result.outcome is PayoutOutcome.PENDING_EVIDENCE
+        assert result.reason is PayoutReason.NO_CANDIDATE
+        assert result.exception_code is None
+        assert result.allocated_total == Decimal("0.00")
+        assert result.eligible_net_total == Decimal("0.00")
+        assert result.open_balance == Decimal("0.00")
+        assert result.unallocated_deposit == Decimal("600.00")
+        assert result.legs == ()
+
+    def test_empty_charges_without_deposit_still_rejected(self) -> None:
+        with pytest.raises(InvariantViolation):
+            reconcile_payout(None, [], _STRICT)
+
+    def test_duplicate_flag_does_not_override_missing_charge_evidence(self) -> None:
+        result = reconcile_payout(_deposit("600.00"), [], _STRICT, duplicate=True)
+        assert result.outcome is PayoutOutcome.PENDING_EVIDENCE
+        assert result.reason is PayoutReason.NO_CANDIDATE
+        assert result.unallocated_deposit == Decimal("600.00")
+
+    def test_drifted_duplicate_is_flagged_before_partial(self) -> None:
+        result = allocate_deposit(
+            _deposit("148.00"), [_charge("ch_1", gross="150.00")], _STRICT, duplicate=True
+        )
+        assert result.outcome is PayoutOutcome.EXCEPTION
+        assert result.exception_code is ExceptionCode.DUPLICATE_LEDGER_ENTRY
+        assert result.reason is PayoutReason.DUPLICATE
+        assert result.allocated_total == Decimal("148.00")
+        assert result.open_balance == Decimal("2.00")
+        assert result.unallocated_deposit == Decimal("0.00")
+        assert tuple(leg.payment_id for leg in result.legs) == ("ch_1",)
+        assert result.legs[0].allocated == Decimal("148.00")
+
+    def test_duplicate_precedes_fee_drift_classification(self) -> None:
+        charge = _charge("ch_1", gross="1000.00", fee="29.00")
+        control = allocate_deposit(_deposit("990.00"), [charge], _STRICT)
+        assert control.exception_code is ExceptionCode.FEE_MISMATCH
+
+        result = allocate_deposit(_deposit("990.00"), [charge], _STRICT, duplicate=True)
+        assert result.outcome is PayoutOutcome.EXCEPTION
+        assert result.exception_code is ExceptionCode.DUPLICATE_LEDGER_ENTRY
+        assert result.reason is PayoutReason.DUPLICATE
+        assert result.allocated_total == Decimal("971.00")
+        assert result.unallocated_deposit == Decimal("19.00")
+        assert result.fee_total == Decimal("29.00")
