@@ -129,7 +129,7 @@ The system SHALL reconcile a deposit against its candidate charges and return ex
   deduplication, and `I-PAYOUT` otherwise.
 - Every non-closing outcome MUST also carry exactly one deterministic `reason`, distinguishing at minimum
   `PARTIAL`, `FEE_DRIFT`, `REFUND_LAG`, `DUPLICATE`, `CURRENCY_MISMATCH`, `UNALLOCATED_DEPOSIT`, `NO_DEPOSIT`,
-  `OUTSIDE_WINDOW`, `CANDIDATE_LIMIT`, `AMBIGUOUS`, and `FX_UNSUPPORTED`. The reason MUST be stable across runs for
+  `OUTSIDE_WINDOW`, `NO_CANDIDATE`, `CANDIDATE_LIMIT`, `AMBIGUOUS`, and `FX_UNSUPPORTED`. The reason MUST be stable across runs for
   the same inputs.
 - A refund that is not explained by the charge legs MUST produce `I-REFUND-LAG` with reason `REFUND_LAG`; it MUST
   NOT be absorbed into a partial allocation.
@@ -212,9 +212,11 @@ discarded, rounded away, or absorbed without being named.
 
 - Every allocation MUST satisfy, in exact `Decimal` arithmetic:
   `allocated_total + unallocated_deposit == deposit.amount`,
-  `open_balance + allocated_total == sum(allocated charge net)`,
-  `fee_total == sum(allocated charge fee)`, `refund_total == sum(allocated charge refund)`, and
-  `sum(allocated charge gross) - fee_total - refund_total == sum(allocated charge net)`.
+  `allocated_total + open_balance == sum(net of every eligible charge)`,
+  `fee_total == sum(allocated leg fee)`, `refund_total == sum(allocated leg refund)`, and
+  `sum(allocated leg gross) - fee_total - refund_total == allocated_total`.
+- `unallocated_deposit` and `open_balance` are signed; a negative value is a real shortfall and is reported, never
+  clamped away.
 - A non-zero `unallocated_deposit` or `open_balance` MUST be reported as its own field and MUST determine the
   outcome; it MUST NOT be folded into `fee_total`, `refund_total`, or tolerance.
 - One allocation MUST cover exactly one currency. FX conversion MUST NOT occur anywhere on the path.
