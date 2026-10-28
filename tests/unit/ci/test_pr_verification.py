@@ -8,6 +8,7 @@ exception-only report.
 
 from __future__ import annotations
 
+import fnmatch
 import importlib.util
 import json
 import subprocess
@@ -1231,6 +1232,25 @@ def test_probe_paths_preserve_prefix_and_glob_classification(
     """Prefix and glob rules classify their probes as they do real files."""
     probe = verification._probe_path(pattern)
     assert verification.classify_path(probe, policy) == expected
+
+
+@pytest.mark.parametrize(
+    "pattern",
+    ["[abc]", "[abc].py", "[!p]", "[a-z]/*.cfg", "docs/[0-9]/", "lib/?.so", "*/"],
+)
+def test_probe_paths_cover_character_classes_and_directory_globs(
+    verification: ModuleType, pattern: str
+) -> None:
+    """A satisfiable pattern yields a probe the rule it came from actually governs."""
+    probe = verification._probe_path(pattern)
+    matchable = pattern.rstrip("/")
+    candidate = probe.rsplit("/", 1)[0] if pattern.endswith("/") else probe
+    if any(char in matchable for char in "*?["):
+        assert fnmatch.fnmatchcase(candidate, matchable), (pattern, probe)
+    else:
+        assert verification._path_matches(candidate, matchable), (pattern, probe)
+    if pattern.endswith("/"):
+        assert probe.endswith("/__probe__.txt")
 
 
 @pytest.mark.parametrize("pattern", ["[abc", "[!]"])
