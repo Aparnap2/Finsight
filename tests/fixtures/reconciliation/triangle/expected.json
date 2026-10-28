@@ -1,0 +1,96 @@
+{
+  "note": "Expected results for the frozen core at the time this fixture was written. 'supported' records whether the three-source triangle is expressible today; 'gap' names what is missing. Assertions live in tests/unit/finance/test_reconciliation_triangle.py.",
+  "checks": {
+    "s1_exact_match": {
+      "outcome": "MATCHED",
+      "exception_code": null,
+      "difference": "0.00",
+      "supported": true,
+      "gap": null
+    },
+    "s2_fee_invoice_vs_charge": {
+      "outcome": "EXCEPTION",
+      "exception_code": "I-FEE-DRIFT",
+      "difference": "-29.00",
+      "supported": true,
+      "gap": null
+    },
+    "s2_fee_charge_vs_bank": {
+      "outcome": "MATCHED",
+      "exception_code": null,
+      "difference": "0.00",
+      "supported": true,
+      "gap": null
+    },
+    "s2_fee_invoice_vs_naive_bank": {
+      "outcome": "EXCEPTION",
+      "exception_code": "I-REFUND-LAG",
+      "difference": "-29.00",
+      "supported": false,
+      "gap": "A bank row has no fee column, so a 29.00 fee difference lands in the gross component and is classified as a refund lag. Fee-aware matching needs the processor's gross/fee bound to the deposit."
+    },
+    "s2_fee_invoice_vs_enriched_bank": {
+      "outcome": "EXCEPTION",
+      "exception_code": "I-FEE-DRIFT",
+      "difference": "-29.00",
+      "supported": true,
+      "gap": null
+    },
+    "s3_many_to_one": {
+      "outcome": null,
+      "exception_code": null,
+      "difference": null,
+      "supported": false,
+      "gap": "reconcile() has exactly one processor leg and one ledger leg. No type, allocator, or entry point accepts N charges against one deposit, so a payout cannot be expressed at all."
+    },
+    "s4a_refund_folded": {
+      "outcome": "MATCHED",
+      "exception_code": null,
+      "difference": "0.00",
+      "supported": true,
+      "gap": null
+    },
+    "s4b_partial_payment": {
+      "outcome": "EXCEPTION",
+      "exception_code": "I-REFUND-LAG",
+      "difference": "-400.00",
+      "supported": false,
+      "gap": "A 400.00 shortfall with no refund is classified as a refund/capture lag. There is no partial-payment code, so underpayment is indistinguishable from refund timing."
+    },
+    "s5_delayed_deposit": {
+      "outcome": "MATCHED",
+      "exception_code": null,
+      "difference": "0.00",
+      "supported": true,
+      "gap": null
+    },
+    "s5b_missing_deposit": {
+      "outcome": null,
+      "exception_code": null,
+      "difference": null,
+      "supported": false,
+      "gap": "reconcile() requires a ledger leg. A charge with no bank line produces nothing, so 'missing' and 'not yet arrived' share the same non-result."
+    },
+    "s6_duplicate_bank_row": {
+      "outcome": "MATCHED",
+      "exception_code": null,
+      "difference": "0.00",
+      "supported": true,
+      "gap": "The duplicate flag cannot fire once nets agree (exact_match wins), so dedup must run before reconcile; find_duplicates/ensure_unique do catch the pair."
+    },
+    "s6_duplicate_drifted": {
+      "outcome": "EXCEPTION",
+      "exception_code": "I-DUPLICATE",
+      "difference": "-2.00",
+      "supported": true,
+      "gap": null
+    },
+    "s7_ambiguous_allocation": {
+      "outcome": null,
+      "exception_code": null,
+      "difference": null,
+      "supported": false,
+      "gap": "970.00 could come from three charges or one; find_match() returns the first equal-net candidate and reports no ambiguity, so a wrong-but-plausible allocation is silently accepted."
+    }
+  }
+}
