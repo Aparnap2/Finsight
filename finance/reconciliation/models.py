@@ -58,11 +58,32 @@ class MaterialityVerdict(StrEnum):
 
 
 class ExceptionCode(StrEnum):
-    """Versioned P0 break-classification codes (the 3 P1 exception types)."""
+    """Versioned break-classification codes.
+
+    The three P1 codes are unchanged; the bank payout contract adds two
+    additive codes. Every code keeps a single deterministic meaning.
+    """
 
     PARTIAL_REFUND_ACCOUNTING_LAG = "I-REFUND-LAG"
     FEE_MISMATCH = "I-FEE-DRIFT"
     DUPLICATE_LEDGER_ENTRY = "I-DUPLICATE"
+    PARTIAL_SETTLEMENT = "I-PARTIAL"
+    PAYOUT_MISMATCH = "I-PAYOUT"
+
+
+class PayoutOutcome(StrEnum):
+    """Terminal verdict of a deposit-to-charge allocation.
+
+    ``PENDING_EVIDENCE`` means required evidence is absent, not that the
+    money mismatched. ``REQUIRES_HUMAN`` covers ambiguity and the
+    candidate bound, where no deterministic choice is permitted.
+    """
+
+    MATCHED = "MATCHED"
+    TOLERANCE_MATCHED = "TOLERANCE_MATCHED"
+    EXCEPTION = "EXCEPTION"
+    PENDING_EVIDENCE = "PENDING_EVIDENCE"
+    REQUIRES_HUMAN = "REQUIRES_HUMAN"
 
 
 def _require_decimal(field_name: str, value: object) -> Decimal:
