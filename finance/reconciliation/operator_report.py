@@ -8,18 +8,25 @@ loaded from the checked-in fixture table, while conservation, duplicate-safety,
 tenant-scoping, determinism, and immutability checks are computed from the
 inputs and the frozen core's own invariants.
 
-Run with::
+Run the demo with no arguments::
+
+    python -m finance.reconciliation.operator_report
+
+That loads the checked-in triangle fixture, runs the workflow, and prints the
+Markdown report to stdout. Fixture paths resolve from this module, not from the
+shell's working directory, so the command works from any checkout location.
+
+To write artifacts (the evidence bundle uses this form)::
 
     python -m finance.reconciliation.operator_report \
-        --cases tests/fixtures/reconciliation/triangle/cases.json \
-        --expected tests/fixtures/reconciliation/triangle/operator_expected.json \
         --markdown docs/evidence/operator-run/report.md \
         --json docs/evidence/operator-run/report.json \
         --evidence docs/evidence/operator-run/run.json \
         --source-commit "$(git rev-parse HEAD)"
 
-The process exits 0 only when every expected result, cross-check, and
-invariant passes. A deliberately wrong ``--expected`` value therefore exits 1.
+Exit codes: 0 when every expected result, cross-check, and invariant passes;
+1 when a check fails (for example a deliberately wrong ``--expected`` value);
+2 when an input file is missing, empty, malformed, or structurally wrong.
 All fixture data is synthetic; no customer or production financial data is
 read, written, or logged.
 """
@@ -53,6 +60,18 @@ STATUS_LEGEND: Mapping[str, str] = {
     "pending_evidence": "Pending evidence — the run cannot decide yet; do not book as settled.",
     "ambiguous": "Ambiguous — more than one valid allocation; a human must choose.",
 }
+
+_REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
+_DEFAULT_FIXTURE_DIR = _REPOSITORY_ROOT / "tests" / "fixtures" / "reconciliation" / "triangle"
+_DEFAULT_CASES = _DEFAULT_FIXTURE_DIR / "cases.json"
+_DEFAULT_EXPECTED = _DEFAULT_FIXTURE_DIR / "operator_expected.json"
+_DEFAULT_PAIRWISE = _DEFAULT_FIXTURE_DIR / "expected.json"
+_OPERATOR_COMMAND = "python -m finance.reconciliation.operator_report"
+
+
+class OperatorInputError(Exception):
+    """A fixture input is missing, empty, malformed, or structurally wrong."""
+
 
 _STATUS_BY_OUTCOME: Mapping[str, str] = {
     ReconciliationOutcome.MATCHED.value: "reconciled",
@@ -145,12 +164,28 @@ def _check(
     return CheckResult(scenario=scenario, kind=kind, name=name, passed=passed, detail=detail)
 
 
-def _read_json(path: Path) -> tuple[dict[str, Any], str]:
-    """Read a JSON object and return it with its sha256 digest."""
-    raw = path.read_bytes()
-    payload = json.loads(raw)
+def _read_json(path: Path, *, label: str = "input") -> tuple[dict[str, Any], str]:
+    """Read a JSON object and return it with its sha256 digest.
+
+    Raises ``OperatorInputError`` with the exact path for anything an operator
+    can fix (missing, directory, unreadable, empty, malformed, non-object).
+    """
+    if not path.exists():
+        raise OperatorInputError(f"{label} not found: {path}")
+    if path.is_dir():
+        raise OperatorInputError(f"{label} is a directory, expected a JSON file: {path}")
+    try:
+        raw = path.read_bytes()
+    except PermissionError as exc:
+        raise OperatorInputError(f"{label} is not readable: {path}") from exc
+    if not raw.strip():
+        raise OperatorInputError(f"{label} is empty: {path}")
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise OperatorInputError(f"{label} is not valid JSON: {path}: {exc}") from exc
     if not isinstance(payload, dict):
-        raise InvariantViolation(f"{path} must contain a JSON object.")
+        raise OperatorInputError(f"{label} must contain a JSON object at the top level: {path}")
     return payload, hashlib.sha256(raw).hexdigest()
 
 
@@ -317,6 +352,27 @@ def _compare_cross_check(
     return checks
 
 
+def _difference_reason(
+    derived: Any,
+    fee_total: Decimal,
+    refund_total: Decimal,
+) -> str | None:
+    """Label a derived difference only when the evidence explains it."""
+    if derived is None:
+        return None
+    difference = derived.difference
+    if difference == 0:
+        return None
+    explained = fee_total + refund_total
+    if explained != 0 and difference == -explained:
+        if refund_total and fee_total:
+            return "Refund + fee"
+        if refund_total:
+            return "Refund"
+        return "Fee"
+    return "Unexplained"
+
+
 def _scenario_row(
     name: str,
     case: Mapping[str, Any],
@@ -380,6 +436,7 @@ def _scenario_row(
         deposit.comparison for deposit in report.deposits if deposit.comparison is not None
     ]
     derived = comparisons[0] if len(comparisons) == 1 else None
+    difference_reason = _difference_reason(derived, fee_total, refund_total)
 
     deposit_evidence = [
         {
@@ -431,6 +488,7 @@ def _scenario_row(
                 _money(derived.difference, exponent) if derived is not None else None
             ),
         },
+        "difference_reason": difference_reason,
         "evidence": {
             "invoices": [
                 {
@@ -752,6 +810,7 @@ def _scenario_limitations(
     name: str,
     case: Mapping[str, Any],
     report: ReconciliationReport,
+    exponent: int,
 ) -> list[str]:
     """Name the reasons this scenario cannot be read as fully settled."""
     notes: list[str] = []
@@ -768,8 +827,14 @@ def _scenario_limitations(
                 "the money is unallocated, not lost."
             )
         if allocation.outcome is PayoutOutcome.REQUIRES_HUMAN:
-            note = f"{deposit.deposit_id}: {len(allocation.candidates)} candidate allocations"
-            notes.append(note + "; a human must choose one.")
+            open_value = _money(allocation.open_balance, exponent)
+            record = allocation.deposit
+            deposit_value = _money(record.amount, exponent) if record is not None else "unknown"
+            notes.append(
+                f"{deposit.deposit_id}: {len(allocation.candidates)} candidate allocations; "
+                f"{open_value} of charge value is unmatched against a {deposit_value} deposit, "
+                "which is not a liability or a payout; a human must choose one."
+            )
         if allocation.outcome is PayoutOutcome.EXCEPTION and allocation.exception_code:
             notes.append(
                 f"{deposit.deposit_id}: {allocation.exception_code.value} recorded for review; "
@@ -805,8 +870,8 @@ def _render_markdown(document: Mapping[str, Any]) -> str:
         "## Summary",
         "",
         "| Scenario | Status | Outcome | Classification | Allocated | Open | "
-        "Unallocated | Difference |",
-        "|---|---|---|---|---|---|---|---|",
+        "Unallocated | Difference | Reason |",
+        "|---|---|---|---|---|---|---|---|---|",
     ]
     for row in document["scenarios"]:
         amounts = row["amounts"]
@@ -814,7 +879,7 @@ def _render_markdown(document: Mapping[str, Any]) -> str:
         label = classification["exception_code"] or classification["reason"] or "—"
         lines.append(
             "| `{scenario}` | {status} | {outcome} | {label} | {allocated} | {open} | "
-            "{unallocated} | {difference} |".format(
+            "{unallocated} | {difference} | {reason} |".format(
                 scenario=row["scenario"],
                 status=STATUS_LEGEND[row["status"]].split(" — ")[0],
                 outcome=row["outcome"] or "—",
@@ -823,6 +888,7 @@ def _render_markdown(document: Mapping[str, Any]) -> str:
                 open=amounts["open_balance"],
                 unallocated=amounts["unallocated_deposit"],
                 difference=amounts["derived_difference"] or "—",
+                reason=row["difference_reason"] or "—",
             )
         )
     lines.extend(
@@ -834,6 +900,10 @@ def _render_markdown(document: Mapping[str, Any]) -> str:
     )
     for status in ("reconciled", "exception", "pending_evidence", "ambiguous"):
         lines.append(f"- **{status}** — {STATUS_LEGEND[status]}")
+    lines.append(
+        "- **open balance** — charge value that no deposit has matched yet; "
+        "it is not a liability or a payout."
+    )
 
     for row in document["scenarios"]:
         amounts = row["amounts"]
@@ -920,22 +990,53 @@ def _render_markdown(document: Mapping[str, Any]) -> str:
 
 
 def build_operator_run(
-    cases_path: Path,
-    expected_path: Path,
+    cases_path: Path | None = None,
+    expected_path: Path | None = None,
     *,
     pairwise_expected_path: Path | None = None,
     window_seconds: int | None = None,
     command: str | None = None,
 ) -> OperatorRun:
     """Run every fixture scenario and produce the operator evidence bundle."""
-    cases_document, cases_digest = _read_json(cases_path)
-    expected_document, operator_digest = _read_json(expected_path)
-    pairwise_path = pairwise_expected_path or cases_path.with_name("expected.json")
-    pairwise_document, pairwise_digest = _read_json(pairwise_path)
+    resolved_cases = _DEFAULT_CASES if cases_path is None else Path(cases_path)
+    resolved_expected = _DEFAULT_EXPECTED if expected_path is None else Path(expected_path)
+    resolved_pairwise = (
+        _DEFAULT_PAIRWISE if pairwise_expected_path is None else Path(pairwise_expected_path)
+    )
+
+    cases_document, cases_digest = _read_json(resolved_cases, label="cases fixture")
+    expected_document, operator_digest = _read_json(
+        resolved_expected, label="operator expectations"
+    )
+    pairwise_document, pairwise_digest = _read_json(
+        resolved_pairwise, label="pairwise expectations"
+    )
 
     if expected_document.get("surface") != "statement_workflow":
-        raise InvariantViolation(
-            "operator expectations must target the statement_workflow surface."
+        raise OperatorInputError(
+            f"operator expectations must declare surface 'statement_workflow': {resolved_expected}"
+        )
+
+    if not isinstance(cases_document.get("scenarios"), dict) or not cases_document["scenarios"]:
+        raise OperatorInputError(
+            f"cases fixture 'scenarios' must be a non-empty JSON object: {resolved_cases}"
+        )
+    for key in ("tenant_id", "currency"):
+        if key not in cases_document:
+            raise OperatorInputError(
+                f"cases fixture is missing required key {key!r}: {resolved_cases}"
+            )
+    if (
+        not isinstance(expected_document.get("scenarios"), dict)
+        or not expected_document["scenarios"]
+    ):
+        raise OperatorInputError(
+            "operator expectations 'scenarios' must be a non-empty JSON object: "
+            f"{resolved_expected}"
+        )
+    if not isinstance(pairwise_document.get("checks"), dict) or not pairwise_document["checks"]:
+        raise OperatorInputError(
+            f"pairwise expectations 'checks' must be a non-empty JSON object: {resolved_pairwise}"
         )
 
     tenant_id = str(cases_document["tenant_id"])
@@ -991,13 +1092,13 @@ def build_operator_run(
                 name,
                 "safety",
                 "source_integrity",
-                hashlib.sha256(cases_path.read_bytes()).hexdigest() == cases_digest,
+                hashlib.sha256(resolved_cases.read_bytes()).hexdigest() == cases_digest,
                 "fixture file changed during the run",
             )
         )
 
         row = _scenario_row(name, case, report, report.exponent)
-        row["limitations"] = _scenario_limitations(name, case, report)
+        row["limitations"] = _scenario_limitations(name, case, report, report.exponent)
         rows.append(row)
 
         expected = expectations[name]
@@ -1074,6 +1175,7 @@ def _evidence_record(
         "module_sha256": module_digest,
         "fixture": document["fixture"],
         "command": list(argv),
+        "operator_command": _OPERATOR_COMMAND,
         "exit_code": exit_code,
         "verdict": document["verdict"],
         "checks": document["checks"],
@@ -1082,13 +1184,43 @@ def _evidence_record(
     }
 
 
+def _resolve_fixture(value: Path | None, default: Path, label: str) -> Path:
+    """Return the explicit path, or the default when the flag was omitted."""
+    if value is not None:
+        return value
+    if not default.exists():
+        raise OperatorInputError(
+            f"default {label} is missing: {default}; this checkout is incomplete "
+            "(the demo needs tests/fixtures/reconciliation/triangle)"
+        )
+    return default
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the operator evidence pass; return 0 only when everything passes."""
     raw_argv = list(sys.argv[1:] if argv is None else argv)
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--cases", type=Path, required=True)
-    parser.add_argument("--expected", type=Path, required=True)
-    parser.add_argument("--pairwise-expected", type=Path, default=None)
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "--cases",
+        type=Path,
+        default=None,
+        help="scenario fixture (default: the checked-in triangle cases.json)",
+    )
+    parser.add_argument(
+        "--expected",
+        type=Path,
+        default=None,
+        help="workflow expectations (default: the checked-in operator_expected.json)",
+    )
+    parser.add_argument(
+        "--pairwise-expected",
+        type=Path,
+        default=None,
+        help="pairwise expectations (default: the checked-in expected.json)",
+    )
     parser.add_argument("--markdown", type=Path, default=None)
     parser.add_argument("--json", type=Path, dest="json_path", default=None)
     parser.add_argument("--evidence", type=Path, default=None)
@@ -1098,13 +1230,23 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     invocation = ["python", "-m", "finance.reconciliation.operator_report", *raw_argv]
     command = shlex.join(invocation)
-    run = build_operator_run(
-        args.cases,
-        args.expected,
-        pairwise_expected_path=args.pairwise_expected,
-        window_seconds=args.window_seconds,
-        command=command,
-    )
+
+    try:
+        cases_path = _resolve_fixture(args.cases, _DEFAULT_CASES, "cases fixture")
+        expected_path = _resolve_fixture(args.expected, _DEFAULT_EXPECTED, "operator expectations")
+        pairwise_path = _resolve_fixture(
+            args.pairwise_expected, _DEFAULT_PAIRWISE, "pairwise expectations"
+        )
+        run = build_operator_run(
+            cases_path,
+            expected_path,
+            pairwise_expected_path=pairwise_path,
+            window_seconds=args.window_seconds,
+            command=command,
+        )
+    except OperatorInputError as exc:
+        sys.stderr.write(f"error: {exc}\n")
+        return 2
 
     rendered = json.dumps(run.document, indent=2, sort_keys=True)
     if args.markdown is not None:

@@ -17,7 +17,9 @@ from typing import Any
 
 import pytest
 
+from finance.reconciliation import operator_report
 from finance.reconciliation.operator_report import (
+    OperatorInputError,
     build_operator_run,
     main,
 )
@@ -197,6 +199,7 @@ def test_evidence_record_binds_commit_inputs_and_outcome(tmp_path: Path) -> None
     assert exit_code == 0
     record = json.loads(evidence.read_text(encoding="utf-8"))
     assert record["source_commit"] == "ebbe8d8"
+    assert record["operator_command"] == "python -m finance.reconciliation.operator_report"
     assert record["exit_code"] == 0
     assert record["verdict"] == "pass"
     assert record["scenario_statuses"] == {
@@ -219,5 +222,161 @@ def test_evidence_record_binds_commit_inputs_and_outcome(tmp_path: Path) -> None
 
 
 def test_missing_expectation_file_is_an_error(tmp_path: Path) -> None:
-    with pytest.raises(FileNotFoundError):
+    with pytest.raises(OperatorInputError, match="operator expectations not found"):
         build_operator_run(_CASES, tmp_path / "absent.json")
+
+
+def test_default_build_records_the_documented_command() -> None:
+    run = build_operator_run()
+    assert run.passed is True
+    assert run.document["fixture"]["command"] == (
+        "python -m finance.reconciliation.operator_report"
+    )
+
+
+def test_default_invocation_prints_markdown(capsys: pytest.CaptureFixture[str]) -> None:
+    assert main([]) == 0
+    out = capsys.readouterr().out
+    assert out.startswith("# Operator reconciliation report")
+    assert "Verdict: **PASS**" in out
+    assert "python -m finance.reconciliation.operator_report" in out
+
+
+def test_default_invocation_ignores_the_working_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    assert main([]) == 0
+    assert "Verdict: **PASS**" in capsys.readouterr().out
+
+
+def test_missing_default_fixture_reports_an_incomplete_checkout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(operator_report, "_DEFAULT_CASES", tmp_path / "absent.json")
+    assert main([]) == 2
+    err = capsys.readouterr().err
+    assert "default cases fixture is missing" in err
+    assert "checkout is incomplete" in err
+    assert "absent.json" in err
+
+
+def test_explicit_missing_fixture_never_falls_back(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    missing = tmp_path / "absent.json"
+    assert main(["--cases", str(missing)]) == 2
+    err = capsys.readouterr().err
+    assert "cases fixture not found" in err
+    assert str(missing) in err
+
+
+def test_empty_fixture_fails_clearly(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    empty = tmp_path / "empty.json"
+    empty.write_text("", encoding="utf-8")
+    assert main(["--cases", str(empty)]) == 2
+    assert "cases fixture is empty" in capsys.readouterr().err
+
+
+def test_invalid_json_fails_clearly(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    broken = tmp_path / "broken.json"
+    broken.write_text("{not json", encoding="utf-8")
+    assert main(["--cases", str(broken)]) == 2
+    assert "is not valid JSON" in capsys.readouterr().err
+
+
+def test_directory_instead_of_file_fails_clearly(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert main(["--cases", str(tmp_path)]) == 2
+    err = capsys.readouterr().err
+    assert "is a directory" in err
+    assert str(tmp_path) in err
+
+
+def test_empty_argument_fails_instead_of_reverting_to_default(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert main(["--cases", ""]) == 2
+    assert "is a directory" in capsys.readouterr().err
+
+
+def test_non_object_json_fails_clearly(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    array = tmp_path / "array.json"
+    array.write_text("[1, 2, 3]", encoding="utf-8")
+    assert main(["--cases", str(array)]) == 2
+    assert "JSON object at the top level" in capsys.readouterr().err
+
+
+def test_wrong_top_level_structure_fails_clearly(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    wrong = tmp_path / "wrong.json"
+    wrong.write_text(json.dumps({"scenarios": []}), encoding="utf-8")
+    assert main(["--cases", str(wrong)]) == 2
+    assert "must be a non-empty JSON object" in capsys.readouterr().err
+
+
+def test_expected_override_is_honored(tmp_path: Path) -> None:
+    override = tmp_path / "operator_expected.json"
+    override.write_bytes(_EXPECTED.read_bytes())
+    report = tmp_path / "report.json"
+    assert main(["--expected", str(override), "--json", str(report)]) == 0
+    document = json.loads(report.read_text(encoding="utf-8"))
+    assert (
+        document["fixture"]["operator_expected_sha256"]
+        == hashlib.sha256(override.read_bytes()).hexdigest()
+    )
+
+
+def test_mixed_overrides_keep_the_other_defaults(tmp_path: Path) -> None:
+    cases_override = tmp_path / "cases.json"
+    cases_override.write_bytes(_CASES.read_bytes())
+    report = tmp_path / "report.json"
+    assert main(["--cases", str(cases_override), "--json", str(report)]) == 0
+    document = json.loads(report.read_text(encoding="utf-8"))
+    assert (
+        document["fixture"]["cases_sha256"]
+        == hashlib.sha256(cases_override.read_bytes()).hexdigest()
+    )
+    assert (
+        document["fixture"]["operator_expected_sha256"]
+        == hashlib.sha256(_EXPECTED.read_bytes()).hexdigest()
+    )
+
+
+def test_pairwise_override_is_honored(tmp_path: Path) -> None:
+    override = tmp_path / "expected.json"
+    override.write_bytes(_PAIRWISE.read_bytes())
+    assert main(["--pairwise-expected", str(override)]) == 0
+
+
+def test_difference_reasons_are_evidence_based() -> None:
+    rows = _rows(_run())
+    assert rows["s1_exact_match"]["difference_reason"] is None
+    assert rows["s2_fee_explained"]["difference_reason"] == "Fee"
+    assert rows["s3_many_to_one"]["difference_reason"] == "Fee"
+    assert rows["s4a_refund_folded"]["difference_reason"] == "Refund + fee"
+    assert rows["s6_duplicate"]["difference_reason"] == "Unexplained"
+    assert rows["s7_ambiguous_allocation"]["difference_reason"] is None
+
+
+def test_ambiguous_note_explains_the_open_value() -> None:
+    row = _rows(_run())["s7_ambiguous_allocation"]
+    text = " ".join(row["limitations"])
+    assert "1940.00" in text
+    assert "970.00" in text
+    assert "not a liability" in text
+
+
+def test_markdown_summary_carries_the_reason_column() -> None:
+    markdown = _run().markdown
+    assert (
+        "| Scenario | Status | Outcome | Classification | Allocated | Open | "
+        "Unallocated | Difference | Reason |" in markdown
+    )
+    assert (
+        "| `s2_fee_explained` | Reconciled | MATCHED | — | 971.00 | 0.00 | 0.00 | -29.00 | Fee |"
+        in markdown
+    )
+    assert "**open balance** — charge value that no deposit has matched yet" in markdown
