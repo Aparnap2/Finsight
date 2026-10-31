@@ -6,7 +6,7 @@ Synthetic fixture only. No customer or production financial data is involved.
 - Cases sha256: `f642f26cc409bf8fd938e510581995ed705b7f0117fe7cd354f3d9f50bd78988`
 - Expected sha256: `d54beb4770f67dd719c1e590ee661a333a61ed941c0ecfbd4357c4cb71e257a3`
 - Operator expectation sha256: `5b64b1dbc240118df824ae9f1112f8fa17e0deaaac702788e5b4cff2e76d915b`
-- Command: `python -m finance.reconciliation.operator_report --cases tests/fixtures/reconciliation/triangle/cases.json --expected tests/fixtures/reconciliation/triangle/operator_expected.json`
+- Command: `python -m finance.reconciliation.operator_report --cases tests/fixtures/reconciliation/triangle/cases.json --expected tests/fixtures/reconciliation/triangle/operator_expected.json --pairwise-expected tests/fixtures/reconciliation/triangle/expected.json --markdown docs/evidence/operator-run/report.md --json docs/evidence/operator-run/report.json --evidence docs/evidence/operator-run/run.json --source-commit 1bc8bec927ced2e5f2b240263f771116d746b458`
 - Verdict: **PASS**
 
 ## Summary

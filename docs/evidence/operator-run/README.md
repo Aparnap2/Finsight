@@ -77,10 +77,11 @@ output being checked. The run also re-verifies, independently of that table:
 | `run.json` | provenance: source commit, module sha256, fixture digests, argv, exit code, verdict, status counts |
 
 `report.md`, `report.json`, and `run.json` were generated from commit
-`7bb75270a071e47c478fdf268ce175e26b5d4324` (the commit that introduced
-`operator_report.py`, its tests, and `operator_expected.json`). The commit that
-adds this directory changes documentation only, so the recorded
-`source_commit` remains the code under test.
+`1bc8bec927ced2e5f2b240263f771116d746b458`. That commit records the exact
+invocation shown above in `report.json`; it sits on `7bb7527`, which introduced
+`operator_report.py`, its tests, and `operator_expected.json`. The commit that
+updates this directory changes documentation and generated artifacts only, so
+the recorded `source_commit` remains the code under test.
 
 Fixture digests are recorded in `run.json`. Changing `cases.json`,
 `expected.json`, or `operator_expected.json` invalidates the recorded digests and

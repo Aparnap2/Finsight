@@ -21,13 +21,13 @@
     "--evidence",
     "docs/evidence/operator-run/run.json",
     "--source-commit",
-    "7bb75270a071e47c478fdf268ce175e26b5d4324"
+    "1bc8bec927ced2e5f2b240263f771116d746b458"
   ],
   "exit_code": 0,
   "failures": [],
   "fixture": {
     "cases_sha256": "f642f26cc409bf8fd938e510581995ed705b7f0117fe7cd354f3d9f50bd78988",
-    "command": "python -m finance.reconciliation.operator_report --cases tests/fixtures/reconciliation/triangle/cases.json --expected tests/fixtures/reconciliation/triangle/operator_expected.json",
+    "command": "python -m finance.reconciliation.operator_report --cases tests/fixtures/reconciliation/triangle/cases.json --expected tests/fixtures/reconciliation/triangle/operator_expected.json --pairwise-expected tests/fixtures/reconciliation/triangle/expected.json --markdown docs/evidence/operator-run/report.md --json docs/evidence/operator-run/report.json --evidence docs/evidence/operator-run/run.json --source-commit 1bc8bec927ced2e5f2b240263f771116d746b458",
     "currency": "USD",
     "expected_sha256": "d54beb4770f67dd719c1e590ee661a333a61ed941c0ecfbd4357c4cb71e257a3",
     "name": "triangle",
@@ -35,13 +35,13 @@
     "tenant_id": "tenant-triangle",
     "version": 1
   },
-  "module_sha256": "448065b7f148bd67cb0650c3db4245058fa8e7150ba3b92b5f676c1035910005",
+  "module_sha256": "e3c647ee687c5a453df61ca93a17ebe10cb543fc1cd97cb009dd89ff37097d19",
   "scenario_statuses": {
     "ambiguous": 1,
     "exception": 1,
     "pending_evidence": 2,
     "reconciled": 5
   },
-  "source_commit": "7bb75270a071e47c478fdf268ce175e26b5d4324",
+  "source_commit": "1bc8bec927ced2e5f2b240263f771116d746b458",
   "verdict": "pass"
 }
