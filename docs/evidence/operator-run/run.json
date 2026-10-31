@@ -8,12 +8,6 @@
     "python",
     "-m",
     "finance.reconciliation.operator_report",
-    "--cases",
-    "tests/fixtures/reconciliation/triangle/cases.json",
-    "--expected",
-    "tests/fixtures/reconciliation/triangle/operator_expected.json",
-    "--pairwise-expected",
-    "tests/fixtures/reconciliation/triangle/expected.json",
     "--markdown",
     "docs/evidence/operator-run/report.md",
     "--json",
@@ -21,13 +15,13 @@
     "--evidence",
     "docs/evidence/operator-run/run.json",
     "--source-commit",
-    "1bc8bec927ced2e5f2b240263f771116d746b458"
+    "86550e18ea779e26d48a5e161f19670eb212b930"
   ],
   "exit_code": 0,
   "failures": [],
   "fixture": {
     "cases_sha256": "f642f26cc409bf8fd938e510581995ed705b7f0117fe7cd354f3d9f50bd78988",
-    "command": "python -m finance.reconciliation.operator_report --cases tests/fixtures/reconciliation/triangle/cases.json --expected tests/fixtures/reconciliation/triangle/operator_expected.json --pairwise-expected tests/fixtures/reconciliation/triangle/expected.json --markdown docs/evidence/operator-run/report.md --json docs/evidence/operator-run/report.json --evidence docs/evidence/operator-run/run.json --source-commit 1bc8bec927ced2e5f2b240263f771116d746b458",
+    "command": "python -m finance.reconciliation.operator_report --markdown docs/evidence/operator-run/report.md --json docs/evidence/operator-run/report.json --evidence docs/evidence/operator-run/run.json --source-commit 86550e18ea779e26d48a5e161f19670eb212b930",
     "currency": "USD",
     "expected_sha256": "d54beb4770f67dd719c1e590ee661a333a61ed941c0ecfbd4357c4cb71e257a3",
     "name": "triangle",
@@ -35,13 +29,14 @@
     "tenant_id": "tenant-triangle",
     "version": 1
   },
-  "module_sha256": "e3c647ee687c5a453df61ca93a17ebe10cb543fc1cd97cb009dd89ff37097d19",
+  "module_sha256": "380a6e7bc30563afd8cee1f91e5d83d69d3c655c461611a224bacbc52f5f8b34",
+  "operator_command": "python -m finance.reconciliation.operator_report",
   "scenario_statuses": {
     "ambiguous": 1,
     "exception": 1,
     "pending_evidence": 2,
     "reconciled": 5
   },
-  "source_commit": "1bc8bec927ced2e5f2b240263f771116d746b458",
+  "source_commit": "86550e18ea779e26d48a5e161f19670eb212b930",
   "verdict": "pass"
 }

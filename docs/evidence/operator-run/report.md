@@ -6,22 +6,22 @@ Synthetic fixture only. No customer or production financial data is involved.
 - Cases sha256: `f642f26cc409bf8fd938e510581995ed705b7f0117fe7cd354f3d9f50bd78988`
 - Expected sha256: `d54beb4770f67dd719c1e590ee661a333a61ed941c0ecfbd4357c4cb71e257a3`
 - Operator expectation sha256: `5b64b1dbc240118df824ae9f1112f8fa17e0deaaac702788e5b4cff2e76d915b`
-- Command: `python -m finance.reconciliation.operator_report --cases tests/fixtures/reconciliation/triangle/cases.json --expected tests/fixtures/reconciliation/triangle/operator_expected.json --pairwise-expected tests/fixtures/reconciliation/triangle/expected.json --markdown docs/evidence/operator-run/report.md --json docs/evidence/operator-run/report.json --evidence docs/evidence/operator-run/run.json --source-commit 1bc8bec927ced2e5f2b240263f771116d746b458`
+- Command: `python -m finance.reconciliation.operator_report --markdown docs/evidence/operator-run/report.md --json docs/evidence/operator-run/report.json --evidence docs/evidence/operator-run/run.json --source-commit 86550e18ea779e26d48a5e161f19670eb212b930`
 - Verdict: **PASS**
 
 ## Summary
 
-| Scenario | Status | Outcome | Classification | Allocated | Open | Unallocated | Difference |
-|---|---|---|---|---|---|---|---|
-| `s1_exact_match` | Reconciled | MATCHED | — | 250.00 | 0.00 | 0.00 | 0.00 |
-| `s2_fee_explained` | Reconciled | MATCHED | — | 971.00 | 0.00 | 0.00 | -29.00 |
-| `s3_many_to_one` | Reconciled | MATCHED | — | 970.00 | 0.00 | 0.00 | -30.00 |
-| `s4a_refund_folded` | Reconciled | MATCHED | — | 571.00 | 0.00 | 0.00 | -429.00 |
-| `s4b_partial_payment` | Pending evidence | PENDING_EVIDENCE | NO_CANDIDATE | 0.00 | 0.00 | 600.00 | — |
-| `s5_delayed` | Reconciled | MATCHED | — | 500.00 | 0.00 | 0.00 | 0.00 |
-| `s5b_missing_deposit` | Pending evidence | — | NO_DEPOSIT | 0.00 | 0.00 | 0.00 | — |
-| `s6_duplicate` | Exception | EXCEPTION | I-DUPLICATE | 148.00 | 2.00 | 0.00 | -2.00 |
-| `s7_ambiguous_allocation` | Ambiguous | REQUIRES_HUMAN | AMBIGUOUS | 0.00 | 1940.00 | 970.00 | — |
+| Scenario | Status | Outcome | Classification | Allocated | Open | Unallocated | Difference | Reason |
+|---|---|---|---|---|---|---|---|---|
+| `s1_exact_match` | Reconciled | MATCHED | — | 250.00 | 0.00 | 0.00 | 0.00 | — |
+| `s2_fee_explained` | Reconciled | MATCHED | — | 971.00 | 0.00 | 0.00 | -29.00 | Fee |
+| `s3_many_to_one` | Reconciled | MATCHED | — | 970.00 | 0.00 | 0.00 | -30.00 | Fee |
+| `s4a_refund_folded` | Reconciled | MATCHED | — | 571.00 | 0.00 | 0.00 | -429.00 | Refund + fee |
+| `s4b_partial_payment` | Pending evidence | PENDING_EVIDENCE | NO_CANDIDATE | 0.00 | 0.00 | 600.00 | — | — |
+| `s5_delayed` | Reconciled | MATCHED | — | 500.00 | 0.00 | 0.00 | 0.00 | — |
+| `s5b_missing_deposit` | Pending evidence | — | NO_DEPOSIT | 0.00 | 0.00 | 0.00 | — | — |
+| `s6_duplicate` | Exception | EXCEPTION | I-DUPLICATE | 148.00 | 2.00 | 0.00 | -2.00 | Unexplained |
+| `s7_ambiguous_allocation` | Ambiguous | REQUIRES_HUMAN | AMBIGUOUS | 0.00 | 1940.00 | 970.00 | — | — |
 
 Status meanings:
 
@@ -29,6 +29,7 @@ Status meanings:
 - **exception** — Exception — investigate before treating this deposit as settled.
 - **pending_evidence** — Pending evidence — the run cannot decide yet; do not book as settled.
 - **ambiguous** — Ambiguous — more than one valid allocation; a human must choose.
+- **open balance** — charge value that no deposit has matched yet; it is not a liability or a payout.
 
 ## `s1_exact_match` — Reconciled
 
@@ -275,7 +276,7 @@ Evidence:
 
 Limitations:
 
-- stmt-2026-01:70: 2 candidate allocations; a human must choose one.
+- stmt-2026-01:70: 2 candidate allocations; 1940.00 of charge value is unmatched against a 970.00 deposit, which is not a liability or a payout; a human must choose one.
 
 Warnings:
 
