@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shlex
 from pathlib import Path
 from typing import Any
 
@@ -205,6 +206,14 @@ def test_evidence_record_binds_commit_inputs_and_outcome(tmp_path: Path) -> None
         "reconciled": 5,
     }
     assert len(record["module_sha256"]) == 64
+    assert record["command"][:3] == [
+        "python",
+        "-m",
+        "finance.reconciliation.operator_report",
+    ]
+    assert record["command"][-2:] == ["--source-commit", "ebbe8d8"]
+    document = json.loads((tmp_path / "report.json").read_text(encoding="utf-8"))
+    assert document["fixture"]["command"] == shlex.join(record["command"])
     assert record["fixture"]["cases_sha256"] == hashlib.sha256(_CASES.read_bytes()).hexdigest()
     assert len(record["fixture"]["operator_expected_sha256"]) == 64
 

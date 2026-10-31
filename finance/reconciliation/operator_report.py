@@ -29,6 +29,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import shlex
 import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -1083,6 +1084,7 @@ def _evidence_record(
 
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the operator evidence pass; return 0 only when everything passes."""
+    raw_argv = list(sys.argv[1:] if argv is None else argv)
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--cases", type=Path, required=True)
     parser.add_argument("--expected", type=Path, required=True)
@@ -1092,16 +1094,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--evidence", type=Path, default=None)
     parser.add_argument("--source-commit", default=None)
     parser.add_argument("--window-seconds", type=int, default=None)
-    args = parser.parse_args(argv)
+    args = parser.parse_args(raw_argv)
 
-    command = "python -m finance.reconciliation.operator_report " + " ".join(
-        [
-            "--cases",
-            str(args.cases),
-            "--expected",
-            str(args.expected),
-        ]
-    )
+    invocation = ["python", "-m", "finance.reconciliation.operator_report", *raw_argv]
+    command = shlex.join(invocation)
     run = build_operator_run(
         args.cases,
         args.expected,
@@ -1123,7 +1119,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             run,
             source_commit=args.source_commit,
             module_digest=module_digest,
-            argv=["python", "-m", "finance.reconciliation.operator_report", *sys.argv[1:]],
+            argv=invocation,
             exit_code=0 if run.passed else 1,
         )
         _write_atomic(args.evidence, json.dumps(record, indent=2, sort_keys=True) + "\n")
