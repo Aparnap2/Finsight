@@ -1,0 +1,525 @@
+{
+  "tenant_id": "tenant-triangle",
+  "currency": "USD",
+  "note": "Deterministic three-source fixture: invoice register (expected), Stripe (processor), bank (observed). All money is a decimal string; floats are a fixture defect and are rejected by the test module.",
+  "scenarios": {
+    "s1_exact_match": {
+      "description": "Invoice, charge, and deposit agree to the cent with no fee.",
+      "invoice": [
+        {
+          "payment_id": "INV-1000",
+          "provider": "sheets",
+          "provider_event_id": "sheets:invoice:INV-1000",
+          "idempotency_key": "sheets:invoice:INV-1000",
+          "gross": "250.00",
+          "fee": "0.00",
+          "refund": "0.00",
+          "currency": "USD",
+          "status": "CAPTURED",
+          "occurred_at": "2026-01-02T00:00:00Z",
+          "source_reference": "invoice-register!A2"
+        }
+      ],
+      "stripe": [
+        {
+          "payment_id": "ch_1000",
+          "provider": "stripe",
+          "provider_event_id": "evt_1000",
+          "idempotency_key": "stripe:ch_1000:charge.succeeded",
+          "gross": "250.00",
+          "fee": "0.00",
+          "refund": "0.00",
+          "currency": "USD",
+          "status": "CAPTURED",
+          "occurred_at": "2026-01-02T09:15:00Z",
+          "source_reference": "evt_1000"
+        }
+      ],
+      "bank": [
+        {
+          "payment_id": "dep_1000",
+          "provider": "bank",
+          "provider_event_id": "bank:stmt-2026-01:row-4",
+          "idempotency_key": "bank:stmt-2026-01:row-4",
+          "gross": "250.00",
+          "fee": "0.00",
+          "refund": "0.00",
+          "currency": "USD",
+          "status": "SETTLED",
+          "occurred_at": "2026-01-04T00:00:00Z",
+          "source_reference": "stmt-2026-01:4"
+        }
+      ]
+    },
+    "s2_fee_explained": {
+      "description": "Invoice 1000.00, Stripe charges 1000.00 with a 29.00 fee, bank credits 971.00.",
+      "invoice": [
+        {
+          "payment_id": "INV-1001",
+          "provider": "sheets",
+          "provider_event_id": "sheets:invoice:INV-1001",
+          "idempotency_key": "sheets:invoice:INV-1001",
+          "gross": "1000.00",
+          "fee": "0.00",
+          "refund": "0.00",
+          "currency": "USD",
+          "status": "CAPTURED",
+          "occurred_at": "2026-01-05T00:00:00Z",
+          "source_reference": "invoice-register!A3"
+        }
+      ],
+      "stripe": [
+        {
+          "payment_id": "ch_1001",
+          "provider": "stripe",
+          "provider_event_id": "evt_1001",
+          "idempotency_key": "stripe:ch_1001:charge.succeeded",
+          "gross": "1000.00",
+          "fee": "29.00",
+          "refund": "0.00",
+          "currency": "USD",
+          "status": "CAPTURED",
+          "occurred_at": "2026-01-05T11:00:00Z",
+          "source_reference": "evt_1001"
+        }
+      ],
+      "bank": [
+        {
+          "payment_id": "dep_1001",
+          "provider": "bank",
+          "provider_event_id": "bank:stmt-2026-01:row-9",
+          "idempotency_key": "bank:stmt-2026-01:row-9",
+          "gross": "971.00",
+          "fee": "0.00",
+          "refund": "0.00",
+          "currency": "USD",
+          "status": "SETTLED",
+          "occurred_at": "2026-01-07T00:00:00Z",
+          "source_reference": "stmt-2026-01:9"
+        }
+      ],
+      "bank_enriched": [
+        {
+          "payment_id": "dep_1001_enriched",
+          "provider": "bank",
+          "provider_event_id": "bank:stmt-2026-01:row-9",
+          "idempotency_key": "bank:stmt-2026-01:row-9",
+          "gross": "1000.00",
+          "fee": "29.00",
+          "refund": "0.00",
+          "currency": "USD",
+          "status": "SETTLED",
+          "occurred_at": "2026-01-07T00:00:00Z",
+          "source_reference": "stmt-2026-01:9"
+        }
+      ]
+    },
+    "s3_many_to_one": {
+      "description": "Three charges (388.00 + 291.00 + 291.00) settle as one 970.00 bank deposit.",
+      "invoice": [
+        {
+          "payment_id": "INV-2001",
+          "provider": "sheets",
+          "provider_event_id": "sheets:invoice:INV-2001",
+          "idempotency_key": "sheets:invoice:INV-2001",
+          "gross": "400.00",
+          "currency": "USD",
+          "status": "CAPTURED",
+          "occurred_at": "2026-01-08T00:00:00Z"
+        },
+        {
+          "payment_id": "INV-2002",
+          "provider": "sheets",
+          "provider_event_id": "sheets:invoice:INV-2002",
+          "idempotency_key": "sheets:invoice:INV-2002",
+          "gross": "300.00",
+          "currency": "USD",
+          "status": "CAPTURED",
+          "occurred_at": "2026-01-08T00:00:00Z"
+        },
+        {
+          "payment_id": "INV-2003",
+          "provider": "sheets",
+          "provider_event_id": "sheets:invoice:INV-2003",
+          "idempotency_key": "sheets:invoice:INV-2003",
+          "gross": "300.00",
+          "currency": "USD",
+          "status": "CAPTURED",
+          "occurred_at": "2026-01-08T00:00:00Z"
+        }
+      ],
+      "stripe": [
+        {
+          "payment_id": "ch_2001",
+          "provider": "stripe",
+          "provider_event_id": "evt_2001",
+          "idempotency_key": "stripe:ch_2001:charge.succeeded",
+          "gross": "400.00",
+          "fee": "12.00",
+          "refund": "0.00",
+          "currency": "USD",
+          "status": "CAPTURED",
+          "occurred_at": "2026-01-08T09:00:00Z"
+        },
+        {
+          "payment_id": "ch_2002",
+          "provider": "stripe",
+          "provider_event_id": "evt_2002",
+          "idempotency_key": "stripe:ch_2002:charge.succeeded",
+          "gross": "300.00",
+          "fee": "9.00",
+          "refund": "0.00",
+          "currency": "USD",
+          "status": "CAPTURED",
+          "occurred_at": "2026-01-08T10:00:00Z"
+        },
+        {
+          "payment_id": "ch_2003",
+          "provider": "stripe",
+          "provider_event_id": "evt_2003",
+          "idempotency_key": "stripe:ch_2003:charge.succeeded",
+          "gross": "300.00",
+          "fee": "9.00",
+          "refund": "0.00",
+          "currency": "USD",
+          "status": "CAPTURED",
+          "occurred_at": "2026-01-08T11:00:00Z"
+        }
+      ],
+      "bank": [
+        {
+          "payment_id": "dep_2000",
+          "provider": "bank",
+          "provider_event_id": "bank:stmt-2026-01:row-21",
+          "idempotency_key": "bank:stmt-2026-01:row-21",
+          "gross": "970.00",
+          "fee": "0.00",
+          "refund": "0.00",
+          "currency": "USD",
+          "status": "SETTLED",
+          "occurred_at": "2026-01-10T00:00:00Z",
+          "source_reference": "stmt-2026-01:21"
+        }
+      ]
+    },
+    "s4a_refund_folded": {
+      "description": "1000.00 charge, 29.00 fee, 400.00 refund, 571.00 net deposit.",
+      "invoice": [
+        {
+          "payment_id": "INV-1004",
+          "provider": "sheets",
+          "provider_event_id": "sheets:invoice:INV-1004",
+          "idempotency_key": "sheets:invoice:INV-1004",
+          "gross": "1000.00",
+          "currency": "USD",
+          "status": "CAPTURED",
+          "occurred_at": "2026-01-11T00:00:00Z"
+        }
+      ],
+      "stripe": [
+        {
+          "payment_id": "ch_1004",
+          "provider": "stripe",
+          "provider_event_id": "evt_1004",
+          "idempotency_key": "stripe:ch_1004:charge.succeeded",
+          "gross": "1000.00",
+          "fee": "29.00",
+          "refund": "400.00",
+          "currency": "USD",
+          "status": "PARTIALLY_REFUNDED",
+          "occurred_at": "2026-01-11T09:00:00Z"
+        }
+      ],
+      "bank": [
+        {
+          "payment_id": "dep_1004",
+          "provider": "bank",
+          "provider_event_id": "bank:stmt-2026-01:row-33",
+          "idempotency_key": "bank:stmt-2026-01:row-33",
+          "gross": "571.00",
+          "fee": "0.00",
+          "refund": "0.00",
+          "currency": "USD",
+          "status": "SETTLED",
+          "occurred_at": "2026-01-13T00:00:00Z",
+          "source_reference": "stmt-2026-01:33"
+        }
+      ]
+    },
+    "s4b_partial_payment": {
+      "description": "Invoice 1000.00 but only 600.00 arrives, with no refund or fee.",
+      "invoice": [
+        {
+          "payment_id": "INV-1005",
+          "provider": "sheets",
+          "provider_event_id": "sheets:invoice:INV-1005",
+          "idempotency_key": "sheets:invoice:INV-1005",
+          "gross": "1000.00",
+          "currency": "USD",
+          "status": "CAPTURED",
+          "occurred_at": "2026-01-14T00:00:00Z"
+        }
+      ],
+      "stripe": [],
+      "bank": [
+        {
+          "payment_id": "dep_1005",
+          "provider": "bank",
+          "provider_event_id": "bank:stmt-2026-01:row-41",
+          "idempotency_key": "bank:stmt-2026-01:row-41",
+          "gross": "600.00",
+          "fee": "0.00",
+          "refund": "0.00",
+          "currency": "USD",
+          "status": "SETTLED",
+          "occurred_at": "2026-01-16T00:00:00Z",
+          "source_reference": "stmt-2026-01:41"
+        }
+      ]
+    },
+    "s5_delayed": {
+      "description": "Deposit arrives three days after the charge; 500.00 in both.",
+      "invoice": [
+        {
+          "payment_id": "INV-1006",
+          "provider": "sheets",
+          "provider_event_id": "sheets:invoice:INV-1006",
+          "idempotency_key": "sheets:invoice:INV-1006",
+          "gross": "500.00",
+          "currency": "USD",
+          "status": "CAPTURED",
+          "occurred_at": "2026-01-17T00:00:00Z"
+        }
+      ],
+      "stripe": [
+        {
+          "payment_id": "ch_1006",
+          "provider": "stripe",
+          "provider_event_id": "evt_1006",
+          "idempotency_key": "stripe:ch_1006:charge.succeeded",
+          "gross": "500.00",
+          "fee": "0.00",
+          "refund": "0.00",
+          "currency": "USD",
+          "status": "CAPTURED",
+          "occurred_at": "2026-01-17T10:00:00Z"
+        }
+      ],
+      "bank": [
+        {
+          "payment_id": "dep_1006",
+          "provider": "bank",
+          "provider_event_id": "bank:stmt-2026-01:row-52",
+          "idempotency_key": "bank:stmt-2026-01:row-52",
+          "gross": "500.00",
+          "fee": "0.00",
+          "refund": "0.00",
+          "currency": "USD",
+          "status": "SETTLED",
+          "occurred_at": "2026-01-20T10:00:00Z",
+          "source_reference": "stmt-2026-01:52"
+        }
+      ]
+    },
+    "s5b_missing_deposit": {
+      "description": "Charge settles in Stripe but no bank line ever arrives for it.",
+      "invoice": [
+        {
+          "payment_id": "INV-1007",
+          "provider": "sheets",
+          "provider_event_id": "sheets:invoice:INV-1007",
+          "idempotency_key": "sheets:invoice:INV-1007",
+          "gross": "300.00",
+          "currency": "USD",
+          "status": "CAPTURED",
+          "occurred_at": "2026-01-21T00:00:00Z"
+        }
+      ],
+      "stripe": [
+        {
+          "payment_id": "ch_1007",
+          "provider": "stripe",
+          "provider_event_id": "evt_1007",
+          "idempotency_key": "stripe:ch_1007:charge.succeeded",
+          "gross": "300.00",
+          "fee": "0.00",
+          "refund": "0.00",
+          "currency": "USD",
+          "status": "CAPTURED",
+          "occurred_at": "2026-01-21T10:00:00Z"
+        }
+      ],
+      "bank": []
+    },
+    "s6_duplicate": {
+      "description": "The same bank line is imported twice, plus a re-import that was edited to 148.00.",
+      "invoice": [
+        {
+          "payment_id": "INV-1008",
+          "provider": "sheets",
+          "provider_event_id": "sheets:invoice:INV-1008",
+          "idempotency_key": "sheets:invoice:INV-1008",
+          "gross": "150.00",
+          "currency": "USD",
+          "status": "CAPTURED",
+          "occurred_at": "2026-01-22T00:00:00Z"
+        }
+      ],
+      "stripe": [
+        {
+          "payment_id": "ch_1008",
+          "provider": "stripe",
+          "provider_event_id": "evt_1008",
+          "idempotency_key": "stripe:ch_1008:charge.succeeded",
+          "gross": "150.00",
+          "fee": "0.00",
+          "refund": "0.00",
+          "currency": "USD",
+          "status": "CAPTURED",
+          "occurred_at": "2026-01-22T10:00:00Z"
+        }
+      ],
+      "bank": [
+        {
+          "payment_id": "dep_1008a",
+          "provider": "bank",
+          "provider_event_id": "bank:stmt-2026-01:row-60",
+          "idempotency_key": "bank:stmt-2026-01:row-60",
+          "gross": "150.00",
+          "fee": "0.00",
+          "refund": "0.00",
+          "currency": "USD",
+          "status": "SETTLED",
+          "occurred_at": "2026-01-24T00:00:00Z",
+          "source_reference": "stmt-2026-01:60"
+        },
+        {
+          "payment_id": "dep_1008b",
+          "provider": "bank",
+          "provider_event_id": "bank:stmt-2026-01:row-60",
+          "idempotency_key": "bank:stmt-2026-01:row-60",
+          "gross": "150.00",
+          "fee": "0.00",
+          "refund": "0.00",
+          "currency": "USD",
+          "status": "SETTLED",
+          "occurred_at": "2026-01-24T00:00:00Z",
+          "source_reference": "stmt-2026-01:60"
+        },
+        {
+          "payment_id": "dep_1008c",
+          "provider": "bank",
+          "provider_event_id": "bank:stmt-2026-01:row-61",
+          "idempotency_key": "bank:stmt-2026-01:row-60",
+          "gross": "148.00",
+          "fee": "0.00",
+          "refund": "0.00",
+          "currency": "USD",
+          "status": "SETTLED",
+          "occurred_at": "2026-01-24T00:00:00Z",
+          "source_reference": "stmt-2026-01:60"
+        }
+      ]
+    },
+    "s7_ambiguous_allocation": {
+      "description": "A 970.00 deposit could be three charges or one 970.00 charge; nothing in the data decides.",
+      "invoice": [
+        {
+          "payment_id": "INV-3001",
+          "provider": "sheets",
+          "provider_event_id": "sheets:invoice:INV-3001",
+          "idempotency_key": "sheets:invoice:INV-3001",
+          "gross": "388.00",
+          "currency": "USD",
+          "status": "CAPTURED",
+          "occurred_at": "2026-01-25T00:00:00Z"
+        },
+        {
+          "payment_id": "INV-3002",
+          "provider": "sheets",
+          "provider_event_id": "sheets:invoice:INV-3002",
+          "idempotency_key": "sheets:invoice:INV-3002",
+          "gross": "291.00",
+          "currency": "USD",
+          "status": "CAPTURED",
+          "occurred_at": "2026-01-25T00:00:00Z"
+        },
+        {
+          "payment_id": "INV-3003",
+          "provider": "sheets",
+          "provider_event_id": "sheets:invoice:INV-3003",
+          "idempotency_key": "sheets:invoice:INV-3003",
+          "gross": "291.00",
+          "currency": "USD",
+          "status": "CAPTURED",
+          "occurred_at": "2026-01-25T00:00:00Z"
+        }
+      ],
+      "stripe": [
+        {
+          "payment_id": "ch_3001",
+          "provider": "stripe",
+          "provider_event_id": "evt_3001",
+          "idempotency_key": "stripe:ch_3001:charge.succeeded",
+          "gross": "388.00",
+          "fee": "0.00",
+          "refund": "0.00",
+          "currency": "USD",
+          "status": "CAPTURED",
+          "occurred_at": "2026-01-25T09:00:00Z"
+        },
+        {
+          "payment_id": "ch_3002",
+          "provider": "stripe",
+          "provider_event_id": "evt_3002",
+          "idempotency_key": "stripe:ch_3002:charge.succeeded",
+          "gross": "291.00",
+          "fee": "0.00",
+          "refund": "0.00",
+          "currency": "USD",
+          "status": "CAPTURED",
+          "occurred_at": "2026-01-25T09:30:00Z"
+        },
+        {
+          "payment_id": "ch_3003",
+          "provider": "stripe",
+          "provider_event_id": "evt_3003",
+          "idempotency_key": "stripe:ch_3003:charge.succeeded",
+          "gross": "291.00",
+          "fee": "0.00",
+          "refund": "0.00",
+          "currency": "USD",
+          "status": "CAPTURED",
+          "occurred_at": "2026-01-25T10:00:00Z"
+        },
+        {
+          "payment_id": "ch_3004",
+          "provider": "stripe",
+          "provider_event_id": "evt_3004",
+          "idempotency_key": "stripe:ch_3004:charge.succeeded",
+          "gross": "970.00",
+          "fee": "0.00",
+          "refund": "0.00",
+          "currency": "USD",
+          "status": "CAPTURED",
+          "occurred_at": "2026-01-25T11:00:00Z"
+        }
+      ],
+      "bank": [
+        {
+          "payment_id": "dep_3000",
+          "provider": "bank",
+          "provider_event_id": "bank:stmt-2026-01:row-70",
+          "idempotency_key": "bank:stmt-2026-01:row-70",
+          "gross": "970.00",
+          "fee": "0.00",
+          "refund": "0.00",
+          "currency": "USD",
+          "status": "SETTLED",
+          "occurred_at": "2026-01-27T00:00:00Z",
+          "source_reference": "stmt-2026-01:70"
+        }
+      ]
+    }
+  }
+}

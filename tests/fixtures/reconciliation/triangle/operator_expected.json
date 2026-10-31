@@ -1,0 +1,141 @@
+{
+  "fixture": "triangle",
+  "surface": "statement_workflow",
+  "version": 1,
+  "note": "Workflow-surface expectations for the composed three-source run. Each row states what the operator report must show for the frozen fixture; the values were fixed by the adjudicated Milestone 1 decisions and are re-verified by the independent conservation, duplicate-safety, tenancy, determinism, and immutability checks in operator_report.py. Where the pairwise fixture (expected.json) tests the same evidence, 'cross_check' binds the workflow edge to it. Divergences are listed under 'notes' and are not silently relaxed.",
+  "scenarios": {
+    "s1_exact_match": {
+      "status": "reconciled",
+      "outcome": "MATCHED",
+      "reason": null,
+      "exception_code": null,
+      "deposits": 1,
+      "allocated_total": "250.00",
+      "open_balance": "0.00",
+      "unallocated_deposit": "0.00",
+      "derived_difference": "0.00",
+      "cross_check": {
+        "invoice_to_charge": "s1_exact_match",
+        "charge_to_deposit": "s1_exact_match"
+      }
+    },
+    "s2_fee_explained": {
+      "status": "reconciled",
+      "outcome": "MATCHED",
+      "reason": null,
+      "exception_code": null,
+      "deposits": 1,
+      "allocated_total": "971.00",
+      "open_balance": "0.00",
+      "unallocated_deposit": "0.00",
+      "derived_difference": "-29.00",
+      "cross_check": {
+        "invoice_to_charge": "s2_fee_invoice_vs_charge",
+        "charge_to_deposit": "s2_fee_charge_vs_bank"
+      }
+    },
+    "s3_many_to_one": {
+      "status": "reconciled",
+      "outcome": "MATCHED",
+      "reason": null,
+      "exception_code": null,
+      "deposits": 1,
+      "allocated_total": "970.00",
+      "open_balance": "0.00",
+      "unallocated_deposit": "0.00",
+      "derived_difference": "-30.00",
+      "cross_check": {
+        "charge_to_deposit": "s3_many_to_one"
+      }
+    },
+    "s4a_refund_folded": {
+      "status": "reconciled",
+      "outcome": "MATCHED",
+      "reason": null,
+      "exception_code": null,
+      "deposits": 1,
+      "allocated_total": "571.00",
+      "open_balance": "0.00",
+      "unallocated_deposit": "0.00",
+      "derived_difference": "-429.00",
+      "cross_check": {
+        "charge_to_deposit": "s4a_refund_folded"
+      }
+    },
+    "s4b_partial_payment": {
+      "status": "pending_evidence",
+      "outcome": "PENDING_EVIDENCE",
+      "reason": "NO_CANDIDATE",
+      "exception_code": null,
+      "deposits": 1,
+      "allocated_total": "0.00",
+      "open_balance": "0.00",
+      "unallocated_deposit": "600.00",
+      "derived_difference": null,
+      "cross_check": {}
+    },
+    "s5_delayed": {
+      "status": "reconciled",
+      "outcome": "MATCHED",
+      "reason": null,
+      "exception_code": null,
+      "deposits": 1,
+      "allocated_total": "500.00",
+      "open_balance": "0.00",
+      "unallocated_deposit": "0.00",
+      "derived_difference": "0.00",
+      "cross_check": {
+        "charge_to_deposit": "s5_delayed_deposit"
+      }
+    },
+    "s5b_missing_deposit": {
+      "status": "pending_evidence",
+      "outcome": null,
+      "reason": "NO_DEPOSIT",
+      "exception_code": null,
+      "deposits": 0,
+      "cross_check": {}
+    },
+    "s6_duplicate": {
+      "status": "exception",
+      "outcome": "EXCEPTION",
+      "reason": "DUPLICATE",
+      "exception_code": "I-DUPLICATE",
+      "deposits": 1,
+      "allocated_total": "148.00",
+      "open_balance": "2.00",
+      "unallocated_deposit": "0.00",
+      "derived_difference": "-2.00",
+      "duplicate_groups": 1,
+      "drift_groups": 1,
+      "cross_check": {
+        "charge_to_deposit": "s6_duplicate_drifted"
+      }
+    },
+    "s7_ambiguous_allocation": {
+      "status": "ambiguous",
+      "outcome": "REQUIRES_HUMAN",
+      "reason": "AMBIGUOUS",
+      "exception_code": null,
+      "deposits": 1,
+      "allocated_total": "0.00",
+      "open_balance": "1940.00",
+      "unallocated_deposit": "970.00",
+      "derived_difference": null,
+      "candidates": [
+        ["ch_3001", "ch_3002", "ch_3003"],
+        ["ch_3004"]
+      ],
+      "cross_check": {
+        "charge_to_deposit": "s7_ambiguous_allocation"
+      }
+    }
+  },
+  "notes": [
+    "s2_fee_invoice_vs_naive_bank remains an unsupported pairwise expectation: a bank row carries no fee column, so the composed workflow reconciles the processor's net (971.00) to the deposit and reports the invoice-to-deposit difference of -29.00 as a fee explanation, not as a refund.",
+    "s4b_partial_payment remains unsupported pairwise. The composed workflow reports PENDING_EVIDENCE / NO_CANDIDATE because the processor leg is empty; the 600.00 deposit is unallocated and is not treated as settled.",
+    "s6_duplicate_bank_row is MATCHED pairwise only because equal nets win before the duplicate flag can fire. The composed workflow deduplicates before allocation, reports exactly one result, retains both the exact-duplicate group (lines 2 and 3) and the drifted group (line 4), allocates 148.00 once, and keeps the 2.00 difference open as I-DUPLICATE.",
+    "s5b_missing_deposit has no deposit result; the workflow emits the absence as pending evidence with reason NO_DEPOSIT rather than inventing a bank amount.",
+    "All amounts are synthetic fixture values in USD. No customer, production, or personally identifying financial data is used."
+  ]
+}

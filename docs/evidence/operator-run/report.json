@@ -1,0 +1,805 @@
+{
+  "checks": {
+    "failed": 0,
+    "passed": 266,
+    "total": 266
+  },
+  "failures": [],
+  "fixture": {
+    "cases_sha256": "f642f26cc409bf8fd938e510581995ed705b7f0117fe7cd354f3d9f50bd78988",
+    "command": "python -m finance.reconciliation.operator_report --markdown docs/evidence/operator-run/report.md --json docs/evidence/operator-run/report.json --evidence docs/evidence/operator-run/run.json --source-commit 86550e18ea779e26d48a5e161f19670eb212b930",
+    "currency": "USD",
+    "expected_sha256": "d54beb4770f67dd719c1e590ee661a333a61ed941c0ecfbd4357c4cb71e257a3",
+    "name": "triangle",
+    "operator_expected_sha256": "5b64b1dbc240118df824ae9f1112f8fa17e0deaaac702788e5b4cff2e76d915b",
+    "tenant_id": "tenant-triangle",
+    "version": 1
+  },
+  "notes": [
+    "s2_fee_invoice_vs_naive_bank remains an unsupported pairwise expectation: a bank row carries no fee column, so the composed workflow reconciles the processor's net (971.00) to the deposit and reports the invoice-to-deposit difference of -29.00 as a fee explanation, not as a refund.",
+    "s4b_partial_payment remains unsupported pairwise. The composed workflow reports PENDING_EVIDENCE / NO_CANDIDATE because the processor leg is empty; the 600.00 deposit is unallocated and is not treated as settled.",
+    "s6_duplicate_bank_row is MATCHED pairwise only because equal nets win before the duplicate flag can fire. The composed workflow deduplicates before allocation, reports exactly one result, retains both the exact-duplicate group (lines 2 and 3) and the drifted group (line 4), allocates 148.00 once, and keeps the 2.00 difference open as I-DUPLICATE.",
+    "s5b_missing_deposit has no deposit result; the workflow emits the absence as pending evidence with reason NO_DEPOSIT rather than inventing a bank amount.",
+    "All amounts are synthetic fixture values in USD. No customer, production, or personally identifying financial data is used."
+  ],
+  "scenarios": [
+    {
+      "amounts": {
+        "allocated_total": "250.00",
+        "deposit_recorded": "250.00",
+        "derived_difference": "0.00",
+        "fee_total": "0.00",
+        "invoice_expected_net": "250.00",
+        "open_balance": "0.00",
+        "processor_evidence_net": "250.00",
+        "refund_total": "0.00",
+        "unallocated_deposit": "0.00"
+      },
+      "classification": {
+        "exception_code": null,
+        "reason": null
+      },
+      "deposit_results": 1,
+      "description": "Invoice, charge, and deposit agree to the cent with no fee.",
+      "difference_reason": null,
+      "evidence": {
+        "allocation": {
+          "allocated_total": "250.00",
+          "open_balance": "0.00",
+          "outcome": "MATCHED",
+          "unallocated_deposit": "0.00"
+        },
+        "candidates": [],
+        "charges": [
+          {
+            "fee": "0.00",
+            "gross": "250.00",
+            "payment_id": "ch_1000",
+            "provider_event_id": "evt_1000",
+            "refund": "0.00",
+            "source_reference": "evt_1000"
+          }
+        ],
+        "deposits": [
+          {
+            "amount": "250.00",
+            "deposit_id": "stmt-2026-01:4",
+            "line_number": 2,
+            "statement_reference": "f642f26cc409bf8fd938e510581995ed705b7f0117fe7cd354f3d9f50bd78988:2"
+          }
+        ],
+        "drift_groups": [],
+        "duplicate_groups": [],
+        "invoices": [
+          {
+            "fee": "0.00",
+            "gross": "250.00",
+            "payment_id": "INV-1000",
+            "refund": "0.00",
+            "source_reference": "invoice-register!A2"
+          }
+        ],
+        "links": [
+          {
+            "charge_id": "ch_1000",
+            "difference": "0.00",
+            "exception_code": null,
+            "invoice_id": "INV-1000",
+            "outcome": "MATCHED"
+          }
+        ]
+      },
+      "limitations": [],
+      "outcome": "MATCHED",
+      "scenario": "s1_exact_match",
+      "status": "reconciled",
+      "warnings": []
+    },
+    {
+      "amounts": {
+        "allocated_total": "971.00",
+        "deposit_recorded": "971.00",
+        "derived_difference": "-29.00",
+        "fee_total": "29.00",
+        "invoice_expected_net": "1000.00",
+        "open_balance": "0.00",
+        "processor_evidence_net": "971.00",
+        "refund_total": "0.00",
+        "unallocated_deposit": "0.00"
+      },
+      "classification": {
+        "exception_code": null,
+        "reason": null
+      },
+      "deposit_results": 1,
+      "description": "Invoice 1000.00, Stripe charges 1000.00 with a 29.00 fee, bank credits 971.00.",
+      "difference_reason": "Fee",
+      "evidence": {
+        "allocation": {
+          "allocated_total": "971.00",
+          "open_balance": "0.00",
+          "outcome": "MATCHED",
+          "unallocated_deposit": "0.00"
+        },
+        "candidates": [],
+        "charges": [
+          {
+            "fee": "29.00",
+            "gross": "1000.00",
+            "payment_id": "ch_1001",
+            "provider_event_id": "evt_1001",
+            "refund": "0.00",
+            "source_reference": "evt_1001"
+          }
+        ],
+        "deposits": [
+          {
+            "amount": "971.00",
+            "deposit_id": "stmt-2026-01:9",
+            "line_number": 2,
+            "statement_reference": "f642f26cc409bf8fd938e510581995ed705b7f0117fe7cd354f3d9f50bd78988:2"
+          }
+        ],
+        "drift_groups": [],
+        "duplicate_groups": [],
+        "invoices": [
+          {
+            "fee": "0.00",
+            "gross": "1000.00",
+            "payment_id": "INV-1001",
+            "refund": "0.00",
+            "source_reference": "invoice-register!A3"
+          }
+        ],
+        "links": [
+          {
+            "charge_id": "ch_1001",
+            "difference": "-29.00",
+            "exception_code": "I-FEE-DRIFT",
+            "invoice_id": "INV-1001",
+            "outcome": "EXCEPTION"
+          }
+        ]
+      },
+      "limitations": [],
+      "outcome": "MATCHED",
+      "scenario": "s2_fee_explained",
+      "status": "reconciled",
+      "warnings": []
+    },
+    {
+      "amounts": {
+        "allocated_total": "970.00",
+        "deposit_recorded": "970.00",
+        "derived_difference": "-30.00",
+        "fee_total": "30.00",
+        "invoice_expected_net": "1000.00",
+        "open_balance": "0.00",
+        "processor_evidence_net": "970.00",
+        "refund_total": "0.00",
+        "unallocated_deposit": "0.00"
+      },
+      "classification": {
+        "exception_code": null,
+        "reason": null
+      },
+      "deposit_results": 1,
+      "description": "Three charges (388.00 + 291.00 + 291.00) settle as one 970.00 bank deposit.",
+      "difference_reason": "Fee",
+      "evidence": {
+        "allocation": {
+          "allocated_total": "970.00",
+          "open_balance": "0.00",
+          "outcome": "MATCHED",
+          "unallocated_deposit": "0.00"
+        },
+        "candidates": [],
+        "charges": [
+          {
+            "fee": "12.00",
+            "gross": "400.00",
+            "payment_id": "ch_2001",
+            "provider_event_id": "evt_2001",
+            "refund": "0.00",
+            "source_reference": null
+          },
+          {
+            "fee": "9.00",
+            "gross": "300.00",
+            "payment_id": "ch_2002",
+            "provider_event_id": "evt_2002",
+            "refund": "0.00",
+            "source_reference": null
+          },
+          {
+            "fee": "9.00",
+            "gross": "300.00",
+            "payment_id": "ch_2003",
+            "provider_event_id": "evt_2003",
+            "refund": "0.00",
+            "source_reference": null
+          }
+        ],
+        "deposits": [
+          {
+            "amount": "970.00",
+            "deposit_id": "stmt-2026-01:21",
+            "line_number": 2,
+            "statement_reference": "f642f26cc409bf8fd938e510581995ed705b7f0117fe7cd354f3d9f50bd78988:2"
+          }
+        ],
+        "drift_groups": [],
+        "duplicate_groups": [],
+        "invoices": [
+          {
+            "fee": "0.00",
+            "gross": "400.00",
+            "payment_id": "INV-2001",
+            "refund": "0.00",
+            "source_reference": null
+          },
+          {
+            "fee": "0.00",
+            "gross": "300.00",
+            "payment_id": "INV-2002",
+            "refund": "0.00",
+            "source_reference": null
+          },
+          {
+            "fee": "0.00",
+            "gross": "300.00",
+            "payment_id": "INV-2003",
+            "refund": "0.00",
+            "source_reference": null
+          }
+        ],
+        "links": [
+          {
+            "charge_id": "ch_2001",
+            "difference": "-12.00",
+            "exception_code": "I-FEE-DRIFT",
+            "invoice_id": "INV-2001",
+            "outcome": "EXCEPTION"
+          },
+          {
+            "charge_id": "ch_2002",
+            "difference": "-9.00",
+            "exception_code": "I-FEE-DRIFT",
+            "invoice_id": "INV-2002",
+            "outcome": "EXCEPTION"
+          },
+          {
+            "charge_id": "ch_2003",
+            "difference": "-9.00",
+            "exception_code": "I-FEE-DRIFT",
+            "invoice_id": "INV-2003",
+            "outcome": "EXCEPTION"
+          }
+        ]
+      },
+      "limitations": [],
+      "outcome": "MATCHED",
+      "scenario": "s3_many_to_one",
+      "status": "reconciled",
+      "warnings": []
+    },
+    {
+      "amounts": {
+        "allocated_total": "571.00",
+        "deposit_recorded": "571.00",
+        "derived_difference": "-429.00",
+        "fee_total": "29.00",
+        "invoice_expected_net": "1000.00",
+        "open_balance": "0.00",
+        "processor_evidence_net": "571.00",
+        "refund_total": "400.00",
+        "unallocated_deposit": "0.00"
+      },
+      "classification": {
+        "exception_code": null,
+        "reason": null
+      },
+      "deposit_results": 1,
+      "description": "1000.00 charge, 29.00 fee, 400.00 refund, 571.00 net deposit.",
+      "difference_reason": "Refund + fee",
+      "evidence": {
+        "allocation": {
+          "allocated_total": "571.00",
+          "open_balance": "0.00",
+          "outcome": "MATCHED",
+          "unallocated_deposit": "0.00"
+        },
+        "candidates": [],
+        "charges": [
+          {
+            "fee": "29.00",
+            "gross": "1000.00",
+            "payment_id": "ch_1004",
+            "provider_event_id": "evt_1004",
+            "refund": "400.00",
+            "source_reference": null
+          }
+        ],
+        "deposits": [
+          {
+            "amount": "571.00",
+            "deposit_id": "stmt-2026-01:33",
+            "line_number": 2,
+            "statement_reference": "f642f26cc409bf8fd938e510581995ed705b7f0117fe7cd354f3d9f50bd78988:2"
+          }
+        ],
+        "drift_groups": [],
+        "duplicate_groups": [],
+        "invoices": [
+          {
+            "fee": "0.00",
+            "gross": "1000.00",
+            "payment_id": "INV-1004",
+            "refund": "0.00",
+            "source_reference": null
+          }
+        ],
+        "links": [
+          {
+            "charge_id": "ch_1004",
+            "difference": "-429.00",
+            "exception_code": "I-REFUND-LAG",
+            "invoice_id": "INV-1004",
+            "outcome": "EXCEPTION"
+          }
+        ]
+      },
+      "limitations": [],
+      "outcome": "MATCHED",
+      "scenario": "s4a_refund_folded",
+      "status": "reconciled",
+      "warnings": []
+    },
+    {
+      "amounts": {
+        "allocated_total": "0.00",
+        "deposit_recorded": "600.00",
+        "derived_difference": null,
+        "fee_total": "0.00",
+        "invoice_expected_net": "1000.00",
+        "open_balance": "0.00",
+        "processor_evidence_net": "0.00",
+        "refund_total": "0.00",
+        "unallocated_deposit": "600.00"
+      },
+      "classification": {
+        "exception_code": null,
+        "reason": "NO_CANDIDATE"
+      },
+      "deposit_results": 1,
+      "description": "Invoice 1000.00 but only 600.00 arrives, with no refund or fee.",
+      "difference_reason": null,
+      "evidence": {
+        "allocation": {
+          "allocated_total": "0.00",
+          "open_balance": "0.00",
+          "outcome": "PENDING_EVIDENCE",
+          "unallocated_deposit": "600.00"
+        },
+        "candidates": [],
+        "charges": [],
+        "deposits": [
+          {
+            "amount": "600.00",
+            "deposit_id": "stmt-2026-01:41",
+            "line_number": 2,
+            "statement_reference": "f642f26cc409bf8fd938e510581995ed705b7f0117fe7cd354f3d9f50bd78988:2"
+          }
+        ],
+        "drift_groups": [],
+        "duplicate_groups": [],
+        "invoices": [
+          {
+            "fee": "0.00",
+            "gross": "1000.00",
+            "payment_id": "INV-1005",
+            "refund": "0.00",
+            "source_reference": null
+          }
+        ],
+        "links": []
+      },
+      "limitations": [
+        "stmt-2026-01:41: no candidate charge matched the deposit; the money is unallocated, not lost."
+      ],
+      "outcome": "PENDING_EVIDENCE",
+      "scenario": "s4b_partial_payment",
+      "status": "pending_evidence",
+      "warnings": [
+        "no processor legs: the invoice_to_charge and charge_to_deposit edges have no evidence",
+        "deposit 'stmt-2026-01:41' is pending evidence (NO_CANDIDATE)",
+        "unlinked invoices: INV-1005"
+      ]
+    },
+    {
+      "amounts": {
+        "allocated_total": "500.00",
+        "deposit_recorded": "500.00",
+        "derived_difference": "0.00",
+        "fee_total": "0.00",
+        "invoice_expected_net": "500.00",
+        "open_balance": "0.00",
+        "processor_evidence_net": "500.00",
+        "refund_total": "0.00",
+        "unallocated_deposit": "0.00"
+      },
+      "classification": {
+        "exception_code": null,
+        "reason": null
+      },
+      "deposit_results": 1,
+      "description": "Deposit arrives three days after the charge; 500.00 in both.",
+      "difference_reason": null,
+      "evidence": {
+        "allocation": {
+          "allocated_total": "500.00",
+          "open_balance": "0.00",
+          "outcome": "MATCHED",
+          "unallocated_deposit": "0.00"
+        },
+        "candidates": [],
+        "charges": [
+          {
+            "fee": "0.00",
+            "gross": "500.00",
+            "payment_id": "ch_1006",
+            "provider_event_id": "evt_1006",
+            "refund": "0.00",
+            "source_reference": null
+          }
+        ],
+        "deposits": [
+          {
+            "amount": "500.00",
+            "deposit_id": "stmt-2026-01:52",
+            "line_number": 2,
+            "statement_reference": "f642f26cc409bf8fd938e510581995ed705b7f0117fe7cd354f3d9f50bd78988:2"
+          }
+        ],
+        "drift_groups": [],
+        "duplicate_groups": [],
+        "invoices": [
+          {
+            "fee": "0.00",
+            "gross": "500.00",
+            "payment_id": "INV-1006",
+            "refund": "0.00",
+            "source_reference": null
+          }
+        ],
+        "links": [
+          {
+            "charge_id": "ch_1006",
+            "difference": "0.00",
+            "exception_code": null,
+            "invoice_id": "INV-1006",
+            "outcome": "MATCHED"
+          }
+        ]
+      },
+      "limitations": [],
+      "outcome": "MATCHED",
+      "scenario": "s5_delayed",
+      "status": "reconciled",
+      "warnings": []
+    },
+    {
+      "amounts": {
+        "allocated_total": "0.00",
+        "deposit_recorded": null,
+        "derived_difference": null,
+        "fee_total": "0.00",
+        "invoice_expected_net": "300.00",
+        "open_balance": "0.00",
+        "processor_evidence_net": "300.00",
+        "refund_total": "0.00",
+        "unallocated_deposit": "0.00"
+      },
+      "classification": {
+        "exception_code": null,
+        "reason": "NO_DEPOSIT"
+      },
+      "deposit_results": 0,
+      "description": "Charge settles in Stripe but no bank line ever arrives for it.",
+      "difference_reason": null,
+      "evidence": {
+        "allocation": {},
+        "candidates": [],
+        "charges": [
+          {
+            "fee": "0.00",
+            "gross": "300.00",
+            "payment_id": "ch_1007",
+            "provider_event_id": "evt_1007",
+            "refund": "0.00",
+            "source_reference": null
+          }
+        ],
+        "deposits": [],
+        "drift_groups": [],
+        "duplicate_groups": [],
+        "invoices": [
+          {
+            "fee": "0.00",
+            "gross": "300.00",
+            "payment_id": "INV-1007",
+            "refund": "0.00",
+            "source_reference": null
+          }
+        ],
+        "links": [
+          {
+            "charge_id": "ch_1007",
+            "difference": "0.00",
+            "exception_code": null,
+            "invoice_id": "INV-1007",
+            "outcome": "MATCHED"
+          }
+        ]
+      },
+      "limitations": [
+        "No bank statement rows are present, so the bank leg is absent; the scenario is pending evidence, not reconciled."
+      ],
+      "outcome": null,
+      "scenario": "s5b_missing_deposit",
+      "status": "pending_evidence",
+      "warnings": [
+        "no bank evidence: the charge_to_deposit edge has no deposits"
+      ]
+    },
+    {
+      "amounts": {
+        "allocated_total": "148.00",
+        "deposit_recorded": "148.00",
+        "derived_difference": "-2.00",
+        "fee_total": "0.00",
+        "invoice_expected_net": "150.00",
+        "open_balance": "2.00",
+        "processor_evidence_net": "150.00",
+        "refund_total": "0.00",
+        "unallocated_deposit": "0.00"
+      },
+      "classification": {
+        "exception_code": "I-DUPLICATE",
+        "reason": "DUPLICATE"
+      },
+      "deposit_results": 1,
+      "description": "The same bank line is imported twice, plus a re-import that was edited to 148.00.",
+      "difference_reason": "Unexplained",
+      "evidence": {
+        "allocation": {
+          "allocated_total": "148.00",
+          "open_balance": "2.00",
+          "outcome": "EXCEPTION",
+          "unallocated_deposit": "0.00"
+        },
+        "candidates": [],
+        "charges": [
+          {
+            "fee": "0.00",
+            "gross": "150.00",
+            "payment_id": "ch_1008",
+            "provider_event_id": "evt_1008",
+            "refund": "0.00",
+            "source_reference": null
+          }
+        ],
+        "deposits": [
+          {
+            "amount": "150.00",
+            "deposit_id": "stmt-2026-01:60",
+            "line_number": 2,
+            "statement_reference": "f642f26cc409bf8fd938e510581995ed705b7f0117fe7cd354f3d9f50bd78988:2"
+          },
+          {
+            "amount": "148.00",
+            "deposit_id": "stmt-2026-01:60",
+            "line_number": 4,
+            "statement_reference": "f642f26cc409bf8fd938e510581995ed705b7f0117fe7cd354f3d9f50bd78988:4"
+          }
+        ],
+        "drift_groups": [
+          [
+            {
+              "amount": "150.00",
+              "line_number": 2,
+              "statement_reference": "f642f26cc409bf8fd938e510581995ed705b7f0117fe7cd354f3d9f50bd78988:2"
+            },
+            {
+              "amount": "148.00",
+              "line_number": 4,
+              "statement_reference": "f642f26cc409bf8fd938e510581995ed705b7f0117fe7cd354f3d9f50bd78988:4"
+            }
+          ]
+        ],
+        "duplicate_groups": [
+          [
+            {
+              "amount": "150.00",
+              "line_number": 2,
+              "statement_reference": "f642f26cc409bf8fd938e510581995ed705b7f0117fe7cd354f3d9f50bd78988:2"
+            },
+            {
+              "amount": "150.00",
+              "line_number": 3,
+              "statement_reference": "f642f26cc409bf8fd938e510581995ed705b7f0117fe7cd354f3d9f50bd78988:3"
+            }
+          ]
+        ],
+        "invoices": [
+          {
+            "fee": "0.00",
+            "gross": "150.00",
+            "payment_id": "INV-1008",
+            "refund": "0.00",
+            "source_reference": null
+          }
+        ],
+        "links": [
+          {
+            "charge_id": "ch_1008",
+            "difference": "0.00",
+            "exception_code": null,
+            "invoice_id": "INV-1008",
+            "outcome": "MATCHED"
+          }
+        ]
+      },
+      "limitations": [
+        "stmt-2026-01:60: I-DUPLICATE recorded for review; the deposit is not settled.",
+        "A repeated statement line carried a different amount; the latest line was reconciled once with duplicate evidence and the difference stays visible.",
+        "Exact duplicate statement lines were reported once and never allocated twice."
+      ],
+      "outcome": "EXCEPTION",
+      "scenario": "s6_duplicate",
+      "status": "exception",
+      "warnings": [
+        "exact duplicate statement rows: f642f26cc409bf8fd938e510581995ed705b7f0117fe7cd354f3d9f50bd78988:2@150.00, f642f26cc409bf8fd938e510581995ed705b7f0117fe7cd354f3d9f50bd78988:3@150.00",
+        "statement rows share an id with differing amounts: f642f26cc409bf8fd938e510581995ed705b7f0117fe7cd354f3d9f50bd78988:2@150.00, f642f26cc409bf8fd938e510581995ed705b7f0117fe7cd354f3d9f50bd78988:4@148.00"
+      ]
+    },
+    {
+      "amounts": {
+        "allocated_total": "0.00",
+        "deposit_recorded": "970.00",
+        "derived_difference": null,
+        "fee_total": "0.00",
+        "invoice_expected_net": "970.00",
+        "open_balance": "1940.00",
+        "processor_evidence_net": "1940.00",
+        "refund_total": "0.00",
+        "unallocated_deposit": "970.00"
+      },
+      "classification": {
+        "exception_code": null,
+        "reason": "AMBIGUOUS"
+      },
+      "deposit_results": 1,
+      "description": "A 970.00 deposit could be three charges or one 970.00 charge; nothing in the data decides.",
+      "difference_reason": null,
+      "evidence": {
+        "allocation": {
+          "allocated_total": "0.00",
+          "open_balance": "1940.00",
+          "outcome": "REQUIRES_HUMAN",
+          "unallocated_deposit": "970.00"
+        },
+        "candidates": [
+          [
+            "ch_3001",
+            "ch_3002",
+            "ch_3003"
+          ],
+          [
+            "ch_3004"
+          ]
+        ],
+        "charges": [
+          {
+            "fee": "0.00",
+            "gross": "388.00",
+            "payment_id": "ch_3001",
+            "provider_event_id": "evt_3001",
+            "refund": "0.00",
+            "source_reference": null
+          },
+          {
+            "fee": "0.00",
+            "gross": "291.00",
+            "payment_id": "ch_3002",
+            "provider_event_id": "evt_3002",
+            "refund": "0.00",
+            "source_reference": null
+          },
+          {
+            "fee": "0.00",
+            "gross": "291.00",
+            "payment_id": "ch_3003",
+            "provider_event_id": "evt_3003",
+            "refund": "0.00",
+            "source_reference": null
+          },
+          {
+            "fee": "0.00",
+            "gross": "970.00",
+            "payment_id": "ch_3004",
+            "provider_event_id": "evt_3004",
+            "refund": "0.00",
+            "source_reference": null
+          }
+        ],
+        "deposits": [
+          {
+            "amount": "970.00",
+            "deposit_id": "stmt-2026-01:70",
+            "line_number": 2,
+            "statement_reference": "f642f26cc409bf8fd938e510581995ed705b7f0117fe7cd354f3d9f50bd78988:2"
+          }
+        ],
+        "drift_groups": [],
+        "duplicate_groups": [],
+        "invoices": [
+          {
+            "fee": "0.00",
+            "gross": "388.00",
+            "payment_id": "INV-3001",
+            "refund": "0.00",
+            "source_reference": null
+          },
+          {
+            "fee": "0.00",
+            "gross": "291.00",
+            "payment_id": "INV-3002",
+            "refund": "0.00",
+            "source_reference": null
+          },
+          {
+            "fee": "0.00",
+            "gross": "291.00",
+            "payment_id": "INV-3003",
+            "refund": "0.00",
+            "source_reference": null
+          }
+        ],
+        "links": [
+          {
+            "charge_id": "ch_3001",
+            "difference": "0.00",
+            "exception_code": null,
+            "invoice_id": "INV-3001",
+            "outcome": "MATCHED"
+          },
+          {
+            "charge_id": "ch_3002",
+            "difference": "0.00",
+            "exception_code": null,
+            "invoice_id": "INV-3002",
+            "outcome": "MATCHED"
+          },
+          {
+            "charge_id": "ch_3003",
+            "difference": "0.00",
+            "exception_code": null,
+            "invoice_id": "INV-3003",
+            "outcome": "MATCHED"
+          }
+        ]
+      },
+      "limitations": [
+        "stmt-2026-01:70: 2 candidate allocations; 1940.00 of charge value is unmatched against a 970.00 deposit, which is not a liability or a payout; a human must choose one."
+      ],
+      "outcome": "REQUIRES_HUMAN",
+      "scenario": "s7_ambiguous_allocation",
+      "status": "ambiguous",
+      "warnings": [
+        "unlinked charges: ch_3004"
+      ]
+    }
+  ],
+  "verdict": "pass"
+}
