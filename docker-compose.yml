@@ -139,7 +139,10 @@ services:
       - ./python_runtime:/app/python_runtime
       - ./tests:/app/tests
     environment:
-      - DATABASE_URL=postgresql+asyncpg://finsight:finsight@postgres:5432/finsight
+      # ``shared.config.Settings`` reads POSTGRES_URI; the driver is psycopg3
+      # (psycopg2 is not installed in the image). ``DATABASE_URL`` is read by
+      # nothing in this repository and was silently ignored here.
+      - POSTGRES_URI=postgresql+psycopg://finsight:finsight@postgres:5432/finsight
       - REDIS_URL=redis://redis:6379/0
       - PYTHONPATH=/app
     deploy:
