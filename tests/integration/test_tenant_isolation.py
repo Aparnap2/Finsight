@@ -123,6 +123,11 @@ def _apply_migrations() -> None:
     """
     _apply_alembic_base()
     migrations = discover_migrations(MIGRATIONS_DIR)
+    if not migrations:
+        # Fail loudly instead of running against a schema without RLS: this is
+        # how a missing database/ directory in the image used to look (zero
+        # migrations, confusing tenant-isolation failures).
+        raise RuntimeError(f"no SQL migrations discovered under {MIGRATIONS_DIR}")
     pre = [m for m in migrations if m.version <= "010"]
     post = [m for m in migrations if m.version > "010"]
     results = []
