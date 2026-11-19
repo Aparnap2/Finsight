@@ -268,8 +268,12 @@ Services:
 
 | Artifact | Dockerfile | Key layers |
 |---|---|---|
-| Backend API | `Dockerfile.backend` (18 lines) | `python:3.12-slim`, `uv sync --no-dev`, uvicorn on port 8000 |
+| Backend API (FastAPI + Compute Runtime) | `Dockerfile` | `python:3.12-slim`, `uv sync --extra compute`, non-root uid 10001, uvicorn `apps.api.main:app` on 8000 |
 | Frontend | `Dockerfile.frontend` (14 lines) | `node:22-alpine`, pnpm frozen lockfile, static build |
+
+`Dockerfile.backend` was removed: it built a `backend/` package that does not
+exist in this repository, so it could never have produced a working image. The
+API image is `Dockerfile` (see `docs/release/LOCAL_DEPLOYMENT.md`).
 
 **Database migrations (Alembic):**
 
