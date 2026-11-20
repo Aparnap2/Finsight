@@ -18,7 +18,7 @@ The **last major engineering phase** before release. Goal: prove the platform is
 
 ## Repository layout (baseline)
 
-- Layers: `shared` ← `finance` ← `agents` ← `apps`, plus `finplatform` (layer-0 config), `business`, `contracts`, `reference-data`, `database/migrations`, `alembic`.
+- Layers: `shared` ← `finance` ← `agents` ← `apps`, plus `finplatform` (layer-0 config), `contracts`, `reference-data`, `database/migrations`, `alembic`.
 - Money = `decimal.Decimal` (never float). 100-char line limit. mypy strict. Ruff `E,F,I,N,UP,B,A,SIM`.
 - Full suite baseline (pre-verification): **767 passed / 6 failed / 6 skipped**.
 - ruff baseline: 268 errors → **0 (DONE via Issue #6)**.
