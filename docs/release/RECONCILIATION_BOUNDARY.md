@@ -92,7 +92,7 @@ boundary is re-verified in the commit that deletes it.
 | `finplatform/` (except `rbac.matrix`) | 304 LOC unreachable | Delete |
 | `frontend/` + `Dockerfile.frontend` | zero references in CI, compose, or `Makefile`; the deployed UI is `apps/api/operator_console.py` (`/gui`) | Decide: adopt or delete |
 | `docs/architecture/*_{CONTRACT,GAP_*}.md` (21 files) | phase documents for the excluded generations | Archive under `docs/archive/` |
-| root `PRD.md`, `FinSight_PRD_v1.md`, `FinSight_Technical_Architecture.md`, `IMPLEMENTATION_PLAN.md` | four competing product definitions; `IMPLEMENTATION_PLAN.md` describes a deleted `backend/` package | Replace with one canonical spec, archive the rest |
+| root `PRD.md`, `FinSight_PRD_v1.md`, `FinSight_Technical_Architecture.md`, `IMPLEMENTATION_PLAN.md` | four competing product definitions; `IMPLEMENTATION_PLAN.md` describes a deleted `backend/` package | **Archived** under `docs/archive/`; `docs/PRODUCT.md` is now the canonical spec |
 
 `apps/` is **not** excluded. It is the currently deployed FP&A application and
 stays until the reconciliation API replaces it; deleting it first would leave

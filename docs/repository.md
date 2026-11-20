@@ -214,7 +214,8 @@ python -m pytest tests/unit/test_finance/test_formula_engine.py  # Specific file
 
 ```
 docs/
-├── SYSTEM_ARCHITECTURE.md     # System architecture & data flow
+├── PRODUCT.md                 # Canonical product specification (normative)
+├── archive/                   # Superseded product documents (historical)
 ├── testing.md                 # Testing strategy
 ├── development.md             # Developer guide
 ├── decisions.md               # Decision log
@@ -244,9 +245,8 @@ alembic/
 | File | Purpose |
 |------|---------|
 | `pyproject.toml` | Project metadata, dependencies, tool config (ruff, mypy, pytest) |
-| `README.md` | Project overview, quick start, core principles |
-| `PRD.md` | Product Requirements Document |
-| `ROADMAP.md` | Development roadmap |
+| `README.md` | Entry point: what FinSight is, how to see it run |
+| `docs/PRODUCT.md` | **Canonical product specification** (normative) |
 | `CHANGELOG.md` | Version history |
 | `CONTRIBUTING.md` | Contribution guidelines |
 | `SECURITY.md` | Security posture & policies |
