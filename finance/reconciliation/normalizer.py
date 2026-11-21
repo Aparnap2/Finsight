@@ -66,6 +66,36 @@ def _normalize_currency(value: Any) -> str:
     return code
 
 
+def minor_unit_exponent(currency: str, override: int | None = None) -> int:
+    """Return the ISO 4217 minor-unit exponent for ``currency``.
+
+    The declared override wins; otherwise the common-table value is used
+    and unknown codes default to 2. This is the single source of truth
+    for the quantization boundary shared with bank normalization.
+
+    Args:
+        currency: ISO 4217 code (any case).
+        override: Optional explicit exponent for exotic currencies.
+
+    Returns:
+        The number of decimal places the currency's minor unit uses.
+
+    Raises:
+        InvariantViolation: For a bad currency code or a negative override.
+    """
+    code = _normalize_currency(currency)
+    if override is None:
+        return _MINOR_EXPONENTS.get(code, _DEFAULT_EXPONENT)
+    candidate: Any = override
+    if isinstance(candidate, bool) or not isinstance(candidate, int):
+        raise InvariantViolation(
+            f"Minor-unit exponent must be an int, got {type(candidate).__name__}."
+        )
+    if candidate < 0:
+        raise InvariantViolation(f"Minor-unit exponent must be >= 0, got {candidate}.")
+    return candidate
+
+
 def _resolve_exponent(currency: str, raw: Mapping[str, Any], override: int | None) -> int:
     """Resolve the minor-unit exponent: override, payload, table, default."""
     if override is not None:

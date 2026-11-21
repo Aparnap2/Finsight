@@ -1,0 +1,111 @@
+{
+  "note": "Expected results for the frozen core at the time this fixture was written. 'supported' records whether the three-source triangle is expressible today; 'gap' names what is missing. Assertions live in tests/unit/finance/test_reconciliation_triangle.py.",
+  "checks": {
+    "s1_exact_match": {
+      "outcome": "MATCHED",
+      "exception_code": null,
+      "difference": "0.00",
+      "supported": true,
+      "gap": null
+    },
+    "s2_fee_invoice_vs_charge": {
+      "outcome": "EXCEPTION",
+      "exception_code": "I-FEE-DRIFT",
+      "difference": "-29.00",
+      "supported": true,
+      "gap": null
+    },
+    "s2_fee_charge_vs_bank": {
+      "outcome": "MATCHED",
+      "exception_code": null,
+      "difference": "0.00",
+      "supported": true,
+      "gap": null
+    },
+    "s2_fee_invoice_vs_naive_bank": {
+      "outcome": "EXCEPTION",
+      "exception_code": "I-REFUND-LAG",
+      "difference": "-29.00",
+      "supported": false,
+      "gap": "A bank row has no fee column, so a 29.00 fee difference lands in the gross component and is classified as a refund lag. Fee-aware matching needs the processor's gross/fee bound to the deposit."
+    },
+    "s2_fee_invoice_vs_enriched_bank": {
+      "outcome": "EXCEPTION",
+      "exception_code": "I-FEE-DRIFT",
+      "difference": "-29.00",
+      "supported": true,
+      "gap": null
+    },
+    "s3_many_to_one": {
+      "outcome": "MATCHED",
+      "exception_code": null,
+      "difference": "0.00",
+      "supported": true,
+      "surface": "reconcile_payout",
+      "allocated_total": "970.00",
+      "open_balance": "0.00"
+    },
+    "s4a_refund_folded": {
+      "outcome": "MATCHED",
+      "exception_code": null,
+      "difference": "0.00",
+      "supported": true,
+      "gap": null
+    },
+    "s4b_partial_payment": {
+      "outcome": "EXCEPTION",
+      "exception_code": "I-REFUND-LAG",
+      "difference": "-400.00",
+      "supported": false,
+      "gap": "Pairwise reconcile() still has no partial-payment code, so an underpayment is indistinguishable from refund timing. The payout surface (reconcile_payout) reports I-PARTIAL; this check keeps characterizing the pairwise surface."
+    },
+    "s5_delayed_deposit": {
+      "outcome": "MATCHED",
+      "exception_code": null,
+      "difference": "0.00",
+      "supported": true,
+      "gap": null
+    },
+    "s5b_missing_deposit": {
+      "outcome": "PENDING_EVIDENCE",
+      "exception_code": null,
+      "difference": null,
+      "supported": true,
+      "surface": "reconcile_payout",
+      "reason": "NO_DEPOSIT",
+      "open_balance": "300.00"
+    },
+    "s6_duplicate_bank_row": {
+      "outcome": "MATCHED",
+      "exception_code": null,
+      "difference": "0.00",
+      "supported": true,
+      "gap": "The duplicate flag cannot fire once nets agree (exact_match wins), so dedup must run before reconcile; find_duplicates/ensure_unique do catch the pair."
+    },
+    "s6_duplicate_drifted": {
+      "outcome": "EXCEPTION",
+      "exception_code": "I-DUPLICATE",
+      "difference": "-2.00",
+      "supported": true,
+      "gap": null
+    },
+    "s7_ambiguous_allocation": {
+      "outcome": "REQUIRES_HUMAN",
+      "exception_code": null,
+      "difference": null,
+      "supported": true,
+      "surface": "reconcile_payout",
+      "reason": "AMBIGUOUS",
+      "candidates": [
+        [
+          "ch_3001",
+          "ch_3002",
+          "ch_3003"
+        ],
+        [
+          "ch_3004"
+        ]
+      ]
+    }
+  }
+}

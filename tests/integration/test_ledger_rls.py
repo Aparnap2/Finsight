@@ -62,6 +62,10 @@ def engine() -> Generator[sqlalchemy.Engine, None, None]:
     command.upgrade(cfg, "head")
     psycopg_dsn = DSN.replace("postgresql+psycopg://", "postgresql://", 1)
     migrations = discover_migrations(MIGRATIONS_DIR)
+    if not migrations:
+        # Packaging guard: a missing database/ directory in the image yields
+        # zero migrations and an RLS-less schema (see test_tenant_isolation).
+        raise RuntimeError(f"no SQL migrations discovered under {MIGRATIONS_DIR}")
     pre = [m for m in migrations if m.version <= "010"]
     post = [m for m in migrations if m.version > "010"]
     with psycopg.connect(psycopg_dsn, autocommit=True) as conn:

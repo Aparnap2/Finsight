@@ -26,7 +26,8 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=postgresql+asyncpg://finsight:finsight@postgres:5432/finsight
+      # Same URI variable the runtime reads (see shared/config/config.py).
+      - POSTGRES_URI=postgresql+psycopg://finsight:finsight@postgres:5432/finsight
       - PYTHONPATH=/app
     depends_on:
       postgres:
@@ -48,6 +49,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      # Dev-tooling stage: the runtime image ships without pytest by design.
+      target: test
     # The runtime image does not COPY tests/, so mount them read-only.
     volumes:
       - ./tests:/app/tests:ro

@@ -202,11 +202,10 @@ class TestRecommendationImpact:
     def test_high_precision_impact_preserved(self) -> None:
         """MoneyDecimal does not enforce 4-dp precision at the model boundary.
 
-        Unlike ``business.canonical_types.Money`` (which quantizes to 4
-        decimal places), the finance-domain ``MoneyDecimal`` alias only
-        rejects ``float``. A 5-dp impact is therefore preserved as-is.
-        This is a documented residual risk: precision is not normalized
-        until a downstream engine quantizes.
+        The finance-domain ``MoneyDecimal`` alias only rejects ``float``,
+        so a 5-dp impact is preserved as-is. This is a documented residual
+        risk: precision is not normalized until a downstream engine
+        quantizes.
         """
         rec = _recommendation(expected_impact="1.00001")
         assert str(rec.expected_impact) == "1.00001"

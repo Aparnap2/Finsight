@@ -70,7 +70,6 @@ apps  →  agents  →  finance  →  shared
 | Folder | Responsibility |
 |--------|---------------|
 | `apps/api/` | FastAPI routes, request/response schemas, serializers, WebSocket handlers. |
-| `apps/frontend/` | Frontend application (if applicable). |
 | `agents/` | LangGraph state machine, agent nodes (commentary, variance, root cause, scenario). |
 | `finance/` | All financial domain logic — formula engine, KPI engine, variance engine, scenario engine, forecast engine, driver engine, recommendation engine, validation, assertion pipeline, ingestion. |
 | `shared/` | Config, base models (database, assertions, state), utilities (LLM client, confidence, tools, validators), shared prompts and schemas. |

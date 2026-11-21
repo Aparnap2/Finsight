@@ -193,7 +193,8 @@
       "patterns": [
         "finance/",
         "shared/",
-        "agents/"
+        "agents/",
+        "business/"
       ]
     },
     {
@@ -220,7 +221,11 @@
       "patterns": [
         ".gitignore",
         ".gitattributes",
-        ".editorconfig"
+        ".editorconfig",
+        ".env.example",
+        "*.env.example",
+        "frontend/",
+        "contracts/"
       ]
     }
   ],
