@@ -224,7 +224,8 @@
         ".editorconfig",
         ".env.example",
         "*.env.example",
-        "frontend/"
+        "frontend/",
+        "contracts/"
       ]
     }
   ],
