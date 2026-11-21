@@ -223,7 +223,8 @@
         ".gitattributes",
         ".editorconfig",
         ".env.example",
-        "*.env.example"
+        "*.env.example",
+        "frontend/"
       ]
     }
   ],
