@@ -84,6 +84,11 @@ jobs:
         # Runs the documented operator command and records scenario id,
         # expected versus actual, invariant totals, commit, and environment.
         # Exits 1 on any divergence, so it is a gate, not just an artifact.
+        env:
+          # A pull_request run checks out a synthetic merge commit; record the
+          # head commit so the evidence stays resolvable after the merge ref
+          # disappears.
+          FINSIGHT_CONTRACT_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
         run: uv run python scripts/reconciliation_contract_report.py --out reconciliation-contract.json
 
       - name: Upload reconciliation contract report

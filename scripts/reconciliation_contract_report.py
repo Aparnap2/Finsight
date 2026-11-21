@@ -29,6 +29,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import platform
 import subprocess
 import sys
@@ -56,7 +57,7 @@ def _digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def _commit() -> str | None:
+def _checked_out_commit() -> str | None:
     """Return the checked-out commit, or ``None`` outside a git checkout."""
     try:
         completed = subprocess.run(
@@ -71,6 +72,18 @@ def _commit() -> str | None:
         return None
     sha = completed.stdout.strip()
     return sha if completed.returncode == 0 and sha else None
+
+
+def _commit() -> str | None:
+    """Return the commit this record describes.
+
+    On a pull-request CI run GitHub checks out a synthetic merge commit, whose
+    SHA exists only for that run. ``FINSIGHT_CONTRACT_COMMIT`` lets the workflow
+    declare the head commit the evidence belongs to, so the record stays
+    resolvable after the merge ref is garbage-collected.
+    """
+    declared = os.environ.get("FINSIGHT_CONTRACT_COMMIT", "").strip()
+    return declared or _checked_out_commit()
 
 
 def _read_object(path: Path) -> dict[str, Any]:
@@ -217,6 +230,7 @@ def build_report() -> dict[str, Any]:
     return {
         "schema_version": SCHEMA_VERSION,
         "commit": _commit(),
+        "checked_out_commit": _checked_out_commit(),
         "environment": {
             "python": platform.python_version(),
             "implementation": platform.python_implementation(),

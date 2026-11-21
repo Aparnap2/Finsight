@@ -29,6 +29,13 @@ versus actual status / outcome / exception code / amounts, invariant totals,
 fixture digests, commit SHA, and environment. It exits non-zero on any
 divergence, so it is a gate and not only a report.
 
+Two commit fields are recorded because they can differ: `commit` is the head
+commit the evidence belongs to, and `checked_out_commit` is the tree that
+actually ran. A `pull_request` CI run checks out a synthetic merge commit, whose
+SHA is discarded after the run, so the workflow declares the head SHA through
+`FINSIGHT_CONTRACT_COMMIT` and the artifact stays resolvable. Locally the two
+fields are identical.
+
 ---
 
 ## 1. Scenario catalogue
@@ -117,7 +124,7 @@ wrong:
 
 ## 3. What was added
 
-`tests/unit/reconciliation/test_financial_contract.py` — 110 tests. It reads the
+`tests/unit/reconciliation/test_financial_contract.py` — 111 tests. It reads the
 engine's public outputs and asserts the invariants directly, instead of trusting
 `operator_report._invariants`, which is computed by the module under test. New
 coverage:
@@ -141,6 +148,7 @@ coverage:
 | `test_generated_sweep_*` (3 tests) | A, B, D, E over 40 deterministic generated allocations |
 | `test_a_deposit_outside_the_window_*` (2 tests) | S06 window gate |
 | `test_the_contract_report_script_verifies_the_fixture` | the report script itself |
+| `test_the_contract_report_records_the_declared_head_commit` | CI evidence resolves to a real commit |
 
 The sweep is property-based without a new dependency: a seeded
 `random.Random(20260101)` generates charge sets and deposits, so it is
@@ -182,9 +190,9 @@ change set (2026-11-21), Python 3.12.3.
 
 | Gate | Command | Result |
 |---|---|---|
-| Reconciliation suite | `pytest tests/unit/reconciliation -q` | **351 passed** (was 241; +110) |
-| Contract module | `pytest tests/unit/reconciliation/test_financial_contract.py -q` | 110 passed |
-| Fast suite | `pytest tests/unit tests/contract -q` | 3446 passed, 1 skipped |
+| Reconciliation suite | `pytest tests/unit/reconciliation -q` | **352 passed** (was 241; +111) |
+| Contract module | `pytest tests/unit/reconciliation/test_financial_contract.py -q` | 111 passed |
+| Fast suite | `pytest tests/unit tests/contract -q` | 3447 passed, 1 skipped |
 | Operator demo | `python -m finance.reconciliation.operator_report` | exit 0, 266/266 checks, `Verdict: PASS` |
 | Contract record | `python scripts/reconciliation_contract_report.py` | `verdict: pass`, 9 scenarios, 266/266 checks |
 | Boundary | `python scripts/reconciliation_boundary.py --check` | exit 0 |

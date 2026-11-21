@@ -28,6 +28,7 @@ No production code is modified, no fixture is edited, and no test is removed.
 from __future__ import annotations
 
 import json
+import os
 import random
 import subprocess
 import sys
@@ -653,3 +654,24 @@ def test_the_contract_report_script_verifies_the_fixture(tmp_path: Path) -> None
     assert payload["checks"]["failed"] == 0
     assert [row["id"] for row in payload["scenarios"]] == list(_SCENARIO_IDS)
     assert all(row["match"] for row in payload["scenarios"])
+
+
+def test_the_contract_report_records_the_declared_head_commit(tmp_path: Path) -> None:
+    """A CI run on a merge ref records the head commit, not the merge commit."""
+    script = Path(__file__).resolve().parents[3] / "scripts" / "reconciliation_contract_report.py"
+    output = tmp_path / "contract.json"
+    declared = "1" * 40
+    completed = subprocess.run(
+        [sys.executable, str(script), "--out", str(output)],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=300,
+        env={**os.environ, "FINSIGHT_CONTRACT_COMMIT": declared},
+    )
+    assert completed.returncode == 0, completed.stderr
+    payload = cast("dict[str, Any]", json.loads(output.read_text(encoding="utf-8")))
+    assert payload["commit"] == declared
+    # The checkout is recorded separately, so the record still says what ran.
+    assert payload["checked_out_commit"] != declared
+    assert len(payload["checked_out_commit"]) == 40
