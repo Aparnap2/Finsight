@@ -85,7 +85,7 @@ boundary is re-verified in the commit that deletes it.
 | `business/` | 68 modules, 19,511 LOC, **zero** importers in production code; 16 test files / 281 tests that pass but are never collected (`pyproject.toml` `testpaths = ["tests"]`, CI runs `pytest tests/unit tests/contract`) | **Deleted** (see deletion log) |
 | `contracts/` | 349 LOC of empty `__init__` packages | Delete |
 | `finance/legacy_execution/` | 3,215 LOC; only `handoff` is imported, by `apps/api/execution_routes.py` | Delete with the FP&A surface |
-| `finance/ml/`, `finance/evaluation/`, `finance/feature_store/`, `finance/investigation/`, `finance/cognition/` | 0 importers outside their own tests | Delete with their tests |
+| `finance/evaluation/`, `finance/feature_store/`, `finance/investigation/`, `finance/cognition/` | 0 importers outside their own tests | Delete with their tests |
 | `agents/p8_runtime/` (except `contract`) | 2,090 LOC unreachable; `contract` is live | Split, then delete |
 | `shared/llm/` | 1,211 LOC unreachable; the live LLM path is `shared/utils/llm_client.py` | Evaluate reuse, then delete |
 | `shared/tracing/` | 1,895 LOC unreachable | Delete |
@@ -102,7 +102,7 @@ the repository with no HTTP surface.
 
 | Tree | Boundary check | Effect |
 |---|---|---|
-| `business/` | no `from business`/`import business` outside the tree except 8 test modules; 6 of those tested only `business/`, and 2 mixed files were trimmed to keep their `finance.domain` coverage (`test_variance.py`, `test_money.py`) | 87 files, 19,511 LOC, 293 collected tests; boundary unchanged; reconciliation suite, operator demo, and integration tier unchanged |
+| `business/` | no `from business`/`import business` outside the tree except 8 test modules; 6 of those tested only `business/`, and 2 mixed files were trimmed to keep their `finance.domain` coverage (`test_variance.py`, `test_money.py`) | 87 files, 19,511 LOC, 293 collected tests; boundary unchanged; reconciliation suite, operator demo, and integration tier unchanged |\n| `finance/ml/` | zero importers in production code or dynamic references; one orphaned test module (`tests/unit/test_finance/test_ml.py`, 20 tests) | 8 files, 1,931 LOC, 20 collected tests; boundary unchanged; reconciliation suite, operator demo, fast suite (3,427 passed), contract report, and integration tier unchanged |
 
 `business/` was the only tree that no production module imported, and its own
 test suite was never collected by CI. The remaining trees in the table need
