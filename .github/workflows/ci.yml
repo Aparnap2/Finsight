@@ -79,3 +79,16 @@ jobs:
 
       - name: Completeness gate (fail green-but-incomplete runs)
         run: uv run python scripts/ci_gate.py pytest-unit.log --max-skips 5
+
+      - name: Reconciliation contract report
+        # Runs the documented operator command and records scenario id,
+        # expected versus actual, invariant totals, commit, and environment.
+        # Exits 1 on any divergence, so it is a gate, not just an artifact.
+        run: uv run python scripts/reconciliation_contract_report.py --out reconciliation-contract.json
+
+      - name: Upload reconciliation contract report
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: reconciliation-contract
+          path: reconciliation-contract.json
+          if-no-files-found: error
