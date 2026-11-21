@@ -269,11 +269,15 @@ Services:
 | Artifact | Dockerfile | Key layers |
 |---|---|---|
 | Backend API (FastAPI + Compute Runtime) | `Dockerfile` | `python:3.12-slim`, `uv sync --extra compute`, non-root uid 10001, uvicorn `apps.api.main:app` on 8000 |
-| Frontend | `Dockerfile.frontend` (14 lines) | `node:22-alpine`, pnpm frozen lockfile, static build |
 
 `Dockerfile.backend` was removed: it built a `backend/` package that does not
 exist in this repository, so it could never have produced a working image. The
 API image is `Dockerfile` (see `docs/release/LOCAL_DEPLOYMENT.md`).
+
+`Dockerfile.frontend` was removed together with `frontend/`: the Next.js UI
+generation is no longer part of the product. The canonical UI is the NiceGUI
+console mounted at `/gui` by `apps/api/operator_console.py` (see
+`docs/PRODUCT.md`).
 
 **Database migrations (Alembic):**
 

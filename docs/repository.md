@@ -27,7 +27,6 @@ apps/
     ├── routes.py         # REST endpoints (/api/v1/*)
     ├── schemas.py        # Pydantic request/response schemas with MoneyDecimal
     ├── serializers.py    # Decimal-to-string serialization helpers
-    └── frontend/         # Frontend application (if applicable)
 ```
 
 **Rules:**

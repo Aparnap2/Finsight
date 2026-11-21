@@ -90,7 +90,7 @@ boundary is re-verified in the commit that deletes it.
 | `shared/llm/` | 1,211 LOC unreachable; the live LLM path is `shared/utils/llm_client.py` | Evaluate reuse, then delete |
 | `shared/tracing/` | 1,895 LOC unreachable | Delete |
 | `finplatform/` (except `rbac.matrix`) | 304 LOC unreachable | Delete |
-| `frontend/` + `Dockerfile.frontend` | zero references in CI, compose, or `Makefile`; the deployed UI is `apps/api/operator_console.py` (`/gui`) | Decide: adopt or delete |
+| `frontend/` + `Dockerfile.frontend` | zero references in CI, compose, or `Makefile`; the deployed UI is `apps/api/operator_console.py` (`/gui`) | **Deleted**: Next.js generation removed; NiceGUI at `/gui` is the canonical UI (see `docs/PRODUCT.md`) |
 | `docs/architecture/*_{CONTRACT,GAP_*}.md` (21 files) | phase documents for the excluded generations | Archive under `docs/archive/` |
 | root `PRD.md`, `FinSight_PRD_v1.md`, `FinSight_Technical_Architecture.md`, `IMPLEMENTATION_PLAN.md` | four competing product definitions; `IMPLEMENTATION_PLAN.md` describes a deleted `backend/` package | **Archived** under `docs/archive/`; `docs/PRODUCT.md` is now the canonical spec |
 
@@ -102,7 +102,7 @@ the repository with no HTTP surface.
 
 | Tree | Boundary check | Effect |
 |---|---|---|
-| `business/` | no `from business`/`import business` outside the tree except 8 test modules; 6 of those tested only `business/`, and 2 mixed files were trimmed to keep their `finance.domain` coverage (`test_variance.py`, `test_money.py`) | 87 files, 19,511 LOC, 293 collected tests; boundary unchanged; reconciliation suite, operator demo, and integration tier unchanged |\n| `finance/ml/` | zero importers in production code or dynamic references; one orphaned test module (`tests/unit/test_finance/test_ml.py`, 20 tests) | 8 files, 1,931 LOC, 20 collected tests; boundary unchanged; reconciliation suite, operator demo, fast suite (3,427 passed), contract report, and integration tier unchanged |
+| `business/` | no `from business`/`import business` outside the tree except 8 test modules; 6 of those tested only `business/`, and 2 mixed files were trimmed to keep their `finance.domain` coverage (`test_variance.py`, `test_money.py`) | 87 files, 19,511 LOC, 293 collected tests; boundary unchanged; reconciliation suite, operator demo, and integration tier unchanged |\n| `finance/ml/` | zero importers in production code or dynamic references; one orphaned test module (`tests/unit/test_finance/test_ml.py`, 20 tests) | 8 files, 1,931 LOC, 20 collected tests; boundary unchanged; reconciliation suite, operator demo, fast suite (3,427 passed), contract report, and integration tier unchanged |\n| `frontend/` + `Dockerfile.frontend` | zero references in CI, compose, Makefile, or any deployment workflow; the canonical UI is `apps/api/operator_console.py` at `/gui` (NiceGUI) | 25 files (including pnpm-lock.yaml, 2,200+ LOC) and 1 Dockerfile removed; API image build path unchanged; NiceGUI `/gui` route untouched; reconciliation contract, operator demo, fast suite, and integration tier unchanged |
 
 `business/` was the only tree that no production module imported, and its own
 test suite was never collected by CI. The remaining trees in the table need
