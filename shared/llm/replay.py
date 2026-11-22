@@ -72,6 +72,23 @@ class ReplayProvider:
     def model_metadata(self) -> ModelMetadata:
         return ModelMetadata(provider="replay", model=self._model)
 
+    def generate(self, prompt: str, max_tokens: int = 512, temperature: float = 0.3) -> str:
+        """Return the recorded response as text."""
+        self._call_count += 1
+        response = self._fixture.get("response", "{}")
+        text = response if isinstance(response, str) else json.dumps(response)
+        self._call_log.append(
+            ProviderCallLog(
+                provider="replay",
+                model=self._model,
+                success=True,
+                latency_ms=0.0,
+                input_chars=len(prompt),
+                output_chars=len(text),
+            )
+        )
+        return text
+
     def generate_structured[T: BaseModel](
         self, prompt: InvestigationPrompt | str, response_schema: type[T]
     ) -> T:

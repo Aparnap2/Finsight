@@ -28,6 +28,11 @@ from dataclasses import dataclass
 # Provider-specific defaults ------------------------------------------------
 
 _PROVIDER_DEFAULTS: dict[str, dict[str, str]] = {
+    "poolside": {
+        "base_url": "https://inference.poolside.ai/v1",
+        "model": "poolside/laguna-m.1",
+        "key_env": "POOLSIDE_API_KEY",
+    },
     "groq": {
         "base_url": "https://api.groq.com/openai/v1",
         "model": "openai/gpt-oss-20b",
@@ -168,6 +173,8 @@ def resolve_config(
 
 def _infer_provider_from_key(env: Mapping[str, str]) -> str | None:
     """Infer provider from which API key env var is set."""
+    if env.get("POOLSIDE_API_KEY", ""):
+        return "poolside"
     if env.get("GROQ_API_KEY", ""):
         return "groq"
     if env.get("OPENROUTER_API_KEY", ""):

@@ -28,6 +28,7 @@ class FakeLLM:
         fail_all: BaseException | None = None,
         healthy: bool = True,
         model: str = "fake-llm-1",
+        scripted_text: str = "{}",
     ) -> None:
         """Create a fake provider.
 
@@ -44,6 +45,7 @@ class FakeLLM:
         self._fail_all = fail_all
         self._healthy = healthy
         self._model = model
+        self._scripted_text = scripted_text
         self.journal: list[ProviderCallLog] = []
 
     def __repr__(self) -> str:
@@ -108,6 +110,20 @@ class FakeLLM:
             raise
         self._record(True, start, input_chars, self._output_chars(payload), None)
         return result
+
+    def generate(self, prompt: str, max_tokens: int = 512, temperature: float = 0.3) -> str:
+        """Return canned text for plain-text call sites (no schema)."""
+        self.journal.append(
+            ProviderCallLog(
+                provider="fake",
+                model=self._model,
+                success=True,
+                latency_ms=0.0,
+                input_chars=len(prompt),
+                output_chars=len(self._scripted_text),
+            )
+        )
+        return self._scripted_text
 
     def _record(
         self,

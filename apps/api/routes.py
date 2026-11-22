@@ -40,10 +40,10 @@ from finance.driver_engine.bridge_analysis import decompose_bridge
 from finance.ingestion.ingestion_agent import ingestion_node
 from finance.validation.data_quality import assess_batch
 from shared.config import get_settings
+from shared.llm.factory import create_provider_from_settings
 from shared.models.action import ActionDomain, ActionImpact, ActionItem, create_action
 from shared.models.assertions import Assertion
 from shared.models.state import PipelineState
-from shared.utils.llm_client import LLMClient
 from shared.utils.policy import evaluate_from_pipeline_result
 from shared.utils.tools.tool_result import ToolResult
 
@@ -97,7 +97,7 @@ async def trigger_pipeline(
         var_result = variance_node(state)
         state["variances"] = var_result["variances"]
 
-        llm_client = LLMClient()
+        llm_client = create_provider_from_settings()
 
         material = [v for v in state["variances"] if v.is_material]
         findings = investigate_root_causes(material, llm_client=llm_client, tenant_id=req.tenant_id)
@@ -340,7 +340,7 @@ def _run_full_pipeline(period: str, tenant_id: str) -> dict[str, Any]:
     state["variances"] = var_result["variances"]
 
     # 3. Root cause investigation
-    llm_client = LLMClient()
+    llm_client = create_provider_from_settings()
     material = [v for v in state["variances"] if v.is_material]
     findings = investigate_root_causes(material, llm_client=llm_client, tenant_id=tenant_id)
     state["root_causes"] = findings
