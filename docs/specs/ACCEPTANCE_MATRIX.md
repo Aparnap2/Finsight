@@ -32,14 +32,14 @@ This is the controlling specification. Every requirement in the other seven file
 | Req ID | Requirement | Component | Test Location | Test Type | Expected Behavior | Failure Scenario | Acceptance Criterion |
 |---|---|---|---|---|---|---|---|
 | IN-01 | Create import session | `finance/ingestion/service.py` (new) | `tests/integration/test_ingestion.py` (new) | Integration | Session created with status CREATED | Invalid period | 400 error |
-| IN-02 | Upload invoice CSV | `finance/ingestion/service.py` (new) | `tests/integration/test_ingestion.py` (new) | Integration | File stored, rows parsed, status UPLOADING | Wrong format | 400 INVALID_FILE |
-| IN-03 | Upload Stripe CSV | Same as IN-02 | Same | Integration | Same | Same | Same |
-| IN-04 | Upload bank CSV | Same as IN-02 | Same | Integration | Same | Same | Same |
+| IN-02 | Upload invoice source file | `finance/ingestion/service.py` (new) | `tests/integration/test_ingestion.py` (new) | Integration | File stored, rows parsed, status UPLOADING | Wrong format | 400 INVALID_FILE |
+| IN-03 | Upload Stripe source file | Same as IN-02 | Same | Integration | Same | Same | Same |
+| IN-04 | Upload bank source file | Same as IN-02 | Same | Integration | Same | Same | Same |
 | IN-05 | Validate import | `finance/ingestion/validator.py` (new) | `tests/integration/test_ingestion.py` (new) | Integration | Per-row errors returned, status READY/REJECTED | Missing columns | 400 INVALID_SCHEMA |
 | IN-06 | Duplicate file detection | `finance/ingestion/service.py` (new) | `tests/integration/test_ingestion.py` (new) | Integration | Same content hash returns existing file | Re-upload same file | 409 DUPLICATE_IMPORT |
 | IN-07 | File size limit | `finance/ingestion/validator.py` (new) | `tests/integration/test_ingestion.py` (new) | Integration | Reject oversized files | Upload 11MB file | 413 error |
 | IN-08 | Empty file handling | `finance/ingestion/validator.py` (new) | `tests/integration/test_ingestion.py` (new) | Integration | Reject empty files | Upload 0-byte file | 400 INVALID_FILE |
-| IN-09 | Malformed CSV handling | `finance/ingestion/parser.py` (new) | `tests/integration/test_ingestion.py` (new) | Integration | Row-level errors, not crash | Mixed valid/invalid rows | Partial success with errors |
+| IN-09 | Malformed source handling | `finance/ingestion/parser.py` (new) | `tests/integration/test_ingestion.py` (new) | Integration | Row-level errors, not crash | Mixed valid/invalid rows | Partial success with errors |
 | IN-10 | Preview before accept | `finance/ingestion/service.py` (new) | `tests/integration/test_ingestion.py` (new) | Integration | Preview endpoint returns parsed rows | — | 200 with row preview |
 
 ---

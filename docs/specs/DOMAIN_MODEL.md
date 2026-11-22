@@ -304,7 +304,30 @@ Generated report from a reconciliation run.
 
 ## 3. Public Service Interfaces
 
-### 3.1 Ingestion Service
+### 3.0 Source Adapter Interface (NEW)
+
+```python
+class SourceAdapter(Protocol):
+    \"\"\"Common interface for all source adapters (CSV, Google Sheets, etc.).
+
+    Adapters parse raw source data into canonical records. They do NOT
+    validate or persist — that is the ingestion service's responsibility.
+    \"\"\"
+
+    def parse(self, raw: bytes | str, *, encoding: str = "utf-8") -> list[dict[str, Any]]:
+        \"\"\"Parse raw source data into a list of row dicts.\"\"\"
+
+    def headers(self, raw: bytes | str, *, encoding: str = "utf-8") -> list[str]:
+        \"\"\"Return the header row of the source.\"\"\"
+
+    def source_type(self) -> SourceType:
+        \"\"\"Return the source type this adapter handles.\"\"\"
+
+    def supported_formats(self) -> list[str]:
+        \"\"\"Return supported file extensions (e.g., ['.csv']).\"\"\"
+```
+
+### 3.1 Ingestion Service (source-independent)
 
 ```python
 def create_import_session(
@@ -321,7 +344,7 @@ def upload_source_file(
     file: UploadedFile,
     idempotency_key: str,
 ) -> SourceFile:
-    """Upload and store a source CSV file. Idempotent on content hash."""
+    """Upload and store a source file (CSV or any supported format). Idempotent on content hash."""
 
 def validate_import(session_id: UUID) -> ImportValidationResult:
     """Validate all uploaded files. Returns per-row errors."""

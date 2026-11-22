@@ -75,7 +75,7 @@ Create a new import session.
 
 #### POST /api/v1/import-sessions/{session_id}/files/{source_type}
 
-Upload a source CSV file.
+Upload a source file (CSV or any supported format).
 
 **Path params:** `source_type` ∈ {INVOICE, STRIPE, BANK}
 
