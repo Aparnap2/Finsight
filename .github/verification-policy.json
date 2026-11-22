@@ -194,7 +194,8 @@
         "finance/",
         "shared/",
         "agents/",
-        "business/"
+        "business/",
+        "finplatform/"
       ]
     },
     {
