@@ -65,7 +65,7 @@
 | `finance/feature_store/` | 1,514 | `finance/analytics/diagnostic.py`, `descriptive.py` | CONSOLIDATE (slice 8) | Deterministic feature engineering; assess consumers |
 | `finance/forecast_engine/` | 0 (empty) | 0 | REMOVE | Empty |
 | `finance/formula_engine/` | 470 | 0 | REMOVE (slice 8) | FP&A formula engine |
-| `finance/ingestion/` | 461 | `finance/ingestion/publisher.py` imports shared.tracing | REMOVE (slice 8) | FP&A ingestion; publisher uses tracing |
+| `finance/ingestion/` | 461 | `finance/ingestion/publisher.py` imports shared.tracing | REMOVE (slice 8) | FP&A ingestion; publisher uses tracing. **Do not confuse with `finance/source_ingestion/`, which is reconciliation ingestion and must be preserved.** |
 | `finance/integration/` | 575 | 0 | REMOVE (slice 8) | FP&A integration layer |
 | `finance/investigation/` | 1,322 | 0 | REMOVE (slice 8) | FP&A investigation (not reconciliation AI) |
 | `finance/kpi_engine/` | 0 (empty) | 0 | REMOVE | Empty |
@@ -512,9 +512,10 @@
 - Alembic migrations (7, head b7e2d9f4a516)
 - S3 adapter (finance/object_store/s3_adapter.py)
 - Docker build (verified)
+- Source ingestion and normalization (`finance/source_ingestion/`, P1): three
+  canonical schemas, CSV + table adapters, deterministic validation, provenance
 
 **What is missing (must be built):**
-- CSV ingestion (parser, normalizer, validator, preview)
 - Reconciliation persistence (tables, repository, migration)
 - Reconciliation API (routes, schemas, service layer)
 - Exception lifecycle (state machine, decisions, audit)

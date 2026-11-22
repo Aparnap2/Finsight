@@ -31,16 +31,47 @@ This is the controlling specification. Every requirement in the other seven file
 
 | Req ID | Requirement | Component | Test Location | Test Type | Expected Behavior | Failure Scenario | Acceptance Criterion |
 |---|---|---|---|---|---|---|---|
-| IN-01 | Create import session | `finance/ingestion/service.py` (new) | `tests/integration/test_ingestion.py` (new) | Integration | Session created with status CREATED | Invalid period | 400 error |
-| IN-02 | Upload invoice source file | `finance/ingestion/service.py` (new) | `tests/integration/test_ingestion.py` (new) | Integration | File stored, rows parsed, status UPLOADING | Wrong format | 400 INVALID_FILE |
-| IN-03 | Upload Stripe source file | Same as IN-02 | Same | Integration | Same | Same | Same |
-| IN-04 | Upload bank source file | Same as IN-02 | Same | Integration | Same | Same | Same |
-| IN-05 | Validate import | `finance/ingestion/validator.py` (new) | `tests/integration/test_ingestion.py` (new) | Integration | Per-row errors returned, status READY/REJECTED | Missing columns | 400 INVALID_SCHEMA |
-| IN-06 | Duplicate file detection | `finance/ingestion/service.py` (new) | `tests/integration/test_ingestion.py` (new) | Integration | Same content hash returns existing file | Re-upload same file | 409 DUPLICATE_IMPORT |
-| IN-07 | File size limit | `finance/ingestion/validator.py` (new) | `tests/integration/test_ingestion.py` (new) | Integration | Reject oversized files | Upload 11MB file | 413 error |
-| IN-08 | Empty file handling | `finance/ingestion/validator.py` (new) | `tests/integration/test_ingestion.py` (new) | Integration | Reject empty files | Upload 0-byte file | 400 INVALID_FILE |
-| IN-09 | Malformed source handling | `finance/ingestion/parser.py` (new) | `tests/integration/test_ingestion.py` (new) | Integration | Row-level errors, not crash | Mixed valid/invalid rows | Partial success with errors |
-| IN-10 | Preview before accept | `finance/ingestion/service.py` (new) | `tests/integration/test_ingestion.py` (new) | Integration | Preview endpoint returns parsed rows | — | 200 with row preview |
+| IN-01 | Create import session | `finance/source_ingestion/service.py` (P1 library), session store (P2) | `tests/integration/test_ingestion.py` (P2) | Integration | Session created with status CREATED | Invalid period | 400 error |
+| IN-02 | Upload invoice source file | `finance/source_ingestion/service.py`, `schemas.py` | `tests/unit/source_ingestion/test_source_ingestion.py` | Unit | Rows parsed to canonical `PaymentRecord`; HTTP upload is P2 | Wrong format | 400 INVALID_FILE |
+| IN-03 | Upload Stripe source file | `finance/source_ingestion/schemas.py` (`STRIPE_SCHEMA`) | `tests/unit/source_ingestion/test_source_ingestion.py` | Unit | Rows parsed to canonical `PaymentRecord` | Wrong format | 400 INVALID_FILE |
+| IN-04 | Upload bank source file | `finance/source_ingestion/schemas.py` (`BANK_SCHEMA`) | `tests/unit/source_ingestion/test_source_ingestion.py` | Unit | Rows parsed to canonical `BankDepositRecord` | Wrong format | 400 INVALID_FILE |
+| IN-05 | Validate import | `finance/source_ingestion/normalizer.py`, `issues.py` | `tests/unit/source_ingestion/test_source_ingestion_validation.py` | Unit | Per-row issues returned; session READY/REJECTED is P2 | Missing columns | 400 INVALID_SCHEMA |
+| IN-06 | Duplicate file detection | `finance/source_ingestion/adapters.py` (`content_digest`) | `tests/unit/source_ingestion/test_source_ingestion.py` | Unit | sha256 content digest computed; persistence lookup is P2 | Re-upload same file | 409 DUPLICATE_IMPORT |
+| IN-07 | File size limit | HTTP boundary (P2) | `tests/integration/test_ingestion.py` (P2) | Integration | Reject oversized files | Upload 11MB file | 413 error |
+| IN-08 | Empty file handling | `finance/source_ingestion/adapters.py` | `tests/unit/source_ingestion/test_source_ingestion_validation.py` | Unit | `IngestionError(INVALID_FILE)` | Upload 0-byte file | 400 INVALID_FILE |
+| IN-09 | Malformed source handling | `finance/source_ingestion/normalizer.py` | `tests/unit/source_ingestion/test_source_ingestion_validation.py` | Unit | Row-level issues, not a crash | Mixed valid/invalid rows | Partial success with errors |
+| IN-10 | Preview before accept | `finance/source_ingestion/service.py` (`IngestionReport.to_dict`) | `tests/unit/source_ingestion/test_source_ingestion.py` | Unit | JSON-safe preview with records and issues; HTTP endpoint is P2 | — | 200 with row preview |
+
+### 2.1 P1 delivery status
+
+P1 delivers the source-independent ingestion library only. It adds no
+persistence, HTTP endpoint, UI, or reconciliation decision.
+
+**Verified by unit tests (`tests/unit/source_ingestion/`, 68 tests):**
+
+- IN-02, IN-03, IN-04 — three canonical schemas resolve aliased headers and
+  produce `PaymentRecord` / `BankDepositRecord` values with `Decimal` money.
+- IN-05 — per-row issues with line number, field, reason code, and original
+  cells; nothing is silently dropped (`row_count == accepted + rejected +
+  skipped_debits`).
+- IN-06 — `content_digest` is the sha256 of the raw source bytes; the
+  parsed-table digest is separate and transport-independent.
+- IN-08 — empty, whitespace-only, and header-only sources raise
+  `IngestionError(INVALID_FILE)`.
+- IN-09 — malformed rows produce row-level issues while valid rows in the same
+  file are still accepted.
+- IN-10 — `IngestionReport.to_dict()` is the JSON-safe validation preview.
+- Provenance — every record carries source type, transport, content digest,
+  table digest, and 1-based physical line; original cells are preserved.
+- Source independence — identical cells through a CSV adapter and a table
+  adapter yield equal canonical records and equal table digests.
+
+**Planned for P2 (not yet implemented, must not be reported as passing):**
+
+- IN-01 — import session creation and lifecycle state.
+- IN-06 — duplicate-file lookup against persisted `SourceFile.content_hash`.
+- IN-07 — 10 MB file-size limit at the HTTP boundary.
+- IN-02..IN-05, IN-10 — the HTTP endpoints themselves.
 
 ---
 

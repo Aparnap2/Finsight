@@ -190,8 +190,14 @@ Browser (NiceGUI /gui)
 - Observability (add metrics, tracing, structured logs)
 - Tracing (consolidate shared/tracing/)
 
+### Delivered in P1 (2026-11)
+- Source ingestion and normalization (`finance/source_ingestion/`): three
+  canonical schemas, `SourceAdapter` protocol, CSV adapter, in-memory table
+  adapter, deterministic normalizer/validator, row-level issue reporting with
+  physical line provenance, JSON-safe validation preview. 68 unit tests.
+  No persistence, HTTP endpoint, UI, or reconciliation decision.
+
 ### Missing (must be built)
-- CSV ingestion (parser, normalizer, validator, preview)
 - Reconciliation persistence (tables, repository, migration)
 - Reconciliation API (routes, schemas, service layer)
 - Exception lifecycle (state machine, decisions, audit)

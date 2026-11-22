@@ -317,6 +317,9 @@ class SourceAdapter(Protocol):
     def parse(self, raw: bytes | str, *, encoding: str = "utf-8") -> list[dict[str, Any]]:
         \"\"\"Parse raw source data into a list of row dicts.\"\"\"
 
+    def parse_table(self, raw: bytes | str, *, encoding: str = "utf-8") -> ParsedTable:
+        \"\"\"Parse raw source data into rows with 1-based physical line numbers.\"\"\"
+
     def headers(self, raw: bytes | str, *, encoding: str = "utf-8") -> list[str]:
         \"\"\"Return the header row of the source.\"\"\"
 
@@ -327,7 +330,18 @@ class SourceAdapter(Protocol):
         \"\"\"Return supported file extensions (e.g., ['.csv']).\"\"\"
 ```
 
+> **Amendment (P1, implemented):** `parse_table` was added to the protocol so an
+> adapter can carry the physical line number of each row for provenance without
+> parsing twice. `parse` remains the row-only view required by the original
+> contract. `ParsedTable` is defined in `finance/source_ingestion/adapters.py`.
+
 ### 3.1 Ingestion Service (source-independent)
+
+> **P1 scope:** the pure pipeline below is implemented as
+> `finance/source_ingestion/ingest_source()` and `ingest_table()`. They return an
+> `IngestionReport` (canonical records + row issues + digests) and touch no
+> database. The session/file functions in this section are the P2 surface that
+> wraps that pipeline with persistence.
 
 ```python
 def create_import_session(
