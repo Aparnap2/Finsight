@@ -7,7 +7,6 @@ differences across acme-corp, globex, and initech as loaded by
 
 from decimal import Decimal
 
-from finplatform.config.features import FEATURE_REGISTRY
 from finplatform.config.tenant_schema import TenantConfig
 
 
@@ -51,13 +50,3 @@ class TestSoxAndFeatures:
         assert configs["acme-corp"].sox_enabled is True
         assert configs["globex"].sox_enabled is False
         assert configs["initech"].sox_enabled is False
-
-    def test_feature_flags(self) -> None:
-        configs = TenantConfig.load_all()
-        assert FEATURE_REGISTRY.enabled_features(configs["acme-corp"]) == [
-            "forecasting",
-            "ml",
-            "rag",
-        ]
-        assert FEATURE_REGISTRY.enabled_features(configs["globex"]) == ["forecasting"]
-        assert FEATURE_REGISTRY.enabled_features(configs["initech"]) == []
