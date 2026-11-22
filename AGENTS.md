@@ -72,6 +72,63 @@ The Node.js backend (Next.js) orchestrates but NEVER manipulates dataframes — 
 - **No print()**: Use `logging` instead
 - **No secrets**: Never log or commit credentials
 
+## Testing Standard (Anti-Slop)
+
+Tests must independently establish product behavior, not merely confirm current implementation details. A passing test is not proof unless its assertions can detect representative incorrect behavior.
+
+### Behavioral assertions
+- Assert observable behavior and meaningful side effects: financial results, state transitions, persisted records, API responses, exception classifications, audit evidence, authorization outcomes.
+- Avoid: private helper invocation assertions, internal call-order assertions without contractual reason, tests that merely assert successful execution, excessive mocking of the system under test.
+
+### Independent expected outcomes
+- Expected results must NOT be calculated using the production function under test or a duplicate of its implementation.
+- Use: explicitly specified financial examples, independently derived mathematical invariants, trusted fixture values, metamorphic properties.
+- Do not let tests reproduce an implementation bug as expected behavior.
+
+### Input variation
+- Test normal, boundary, invalid, missing, duplicate, and conflicting inputs.
+- Use Hypothesis for meaningful financial properties (allocation conservation, permutation invariance, replay determinism).
+- Do not generate random data merely to increase test counts.
+
+### Metamorphic testing
+- Verify behavior under transformations: permuting input order, adding unrelated records, replaying identical requests, repeating imports.
+- Define which transformations preserve results and which change them.
+
+### Mutation testing
+- Identify representative defects in important business logic (wrong operator, omitted fee, duplicate allocation, missing refund, currency mismatch, premature settlement, tenant filter bypass).
+- Verify the corresponding test fails for the correct reason.
+- Record surviving mutations as testing gaps. Do not optimize for a percentage score without reviewing survivors.
+
+### Test resilience
+- Tests should survive behavior-preserving refactors (renaming variables/helpers, moving modules, changing internal data structures).
+- Tests must fail when externally observable behavior or a financial invariant is violated.
+- Do not couple tests to: local variable names, private function names, internal module layout, incidental call ordering, unordered collection ordering.
+
+### Test review before deletion
+1. Identify the behavior the test protects.
+2. Determine whether the behavior is obsolete or still required.
+3. Identify unrelated assertions in the same test.
+4. Preserve useful assertions.
+5. Remove only assertions that exclusively protect deleted functionality.
+
+### Constraints
+- Do not weaken existing financial assertions.
+- Do not regenerate golden evidence to make tests pass.
+- Do not inflate test counts.
+- Do not add dependencies without justification.
+- Do not introduce flaky random tests.
+- Do not treat coverage as proof of correctness.
+
+### Required report per slice
+- Behavioral assertions added, modified, removed.
+- Expected outcomes and their independent source.
+- Input variation and boundary cases.
+- Metamorphic properties tested.
+- Mutations attempted and killed.
+- Surviving mutations.
+- Tests dependent on internal implementation details.
+- Test-count change with explanation.
+
 ## Verification Gates
 
 Run in order before every commit:
