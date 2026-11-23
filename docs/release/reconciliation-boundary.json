@@ -39,7 +39,8 @@
     "finance.reconciliation.tolerances"
   ],
   "package_members_outside_closure": [
-    "finance/reconciliation/ledger_resolution.py"
+    "finance/reconciliation/ledger_resolution.py",
+    "finance/reconciliation/persistence.py"
   ],
   "schema_version": 1,
   "third_party_imports": []
