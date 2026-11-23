@@ -7,6 +7,8 @@ record a decision, and retrieve audit events. A second client (different
 tenant) must see none of the first tenant's data.
 """
 
+from __future__ import annotations
+
 import io
 import os
 from typing import Any
@@ -19,26 +21,32 @@ os.environ.setdefault(
 )
 
 import pytest
-from alembic.config import Config as _AlembicConfig
+from sqlalchemy import create_engine, text
 
-from alembic import command as _alembic_command
-
+# Ensure reconciliation tables exist (CI does not run alembic).
 try:
-    _alembic_cfg = _AlembicConfig("alembic.ini")
-    _alembic_command.upgrade(_alembic_cfg, "head")
+    from shared.models.reconciliation import Base as ReconciliationBase
+
+    _engine = create_engine(
+        os.environ.get(
+            "POSTGRES_URI", "postgresql+psycopg://finsight:finsight@localhost:5432/finsight"
+        ),
+        pool_pre_ping=True,
+    )
+    ReconciliationBase.metadata.create_all(_engine)
+    _engine.dispose()
 except Exception:
     pass
 
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, text
 
 from apps.api.main import app
 
 DEFAULT_DSN = "postgresql+psycopg://finsight:finsight@localhost:5432/finsight"
 DSN = os.environ.get("FINSIGHT_TEST_DSN", DEFAULT_DSN)
 
-TENANT_A = "7d6f8b65-5e40-55b5-967f-69b85912dd87"  # acme (demo seed)
-TENANT_B = "ea7639b2-4a8e-5954-84a2-f8630e89d206"  # globex (demo seed)
+TENANT_A = "7d6f8b65-5e40-55b5-967f-69b85912dd87"
+TENANT_B = "ea7639b2-4a8e-5954-84a2-f8630e89d206"
 
 INVOICE_CSV = "invoice_id,amount,currency,issued_at\nINV-1,250.00,USD,2026-01-02\n"
 STRIPE_CSV = "charge_id,amount,currency,created_at,fee\nch_1,250.00,USD,2026-01-02T09:15:00Z,0.00\n"
@@ -77,7 +85,6 @@ def _upload(client: TestClient, session_id: str, source_type: str, csv_text: str
 class TestReconciliationHttpWorkflow:
     def test_full_workflow_import_reconcile_retrieve(self) -> None:
         ca = _client(TENANT_A)
-        # 1. Create session
         r = ca.post(
             "/api/v1/reconciliation/sessions",
             json={"period_start": "2026-01-01", "period_end": "2026-01-31"},
@@ -85,18 +92,15 @@ class TestReconciliationHttpWorkflow:
         assert r.status_code == 200, r.text
         session_id = r.json()["session_id"]
 
-        # 2. Upload three sources
         _upload(ca, session_id, "INVOICE", INVOICE_CSV)
         _upload(ca, session_id, "STRIPE", STRIPE_CSV)
         _upload(ca, session_id, "BANK", BANK_CSV)
 
-        # 3. Validate
         r = ca.post(f"/api/v1/reconciliation/sessions/{session_id}/validate")
         assert r.status_code == 200, r.text
         assert r.json()["status"] == "READY"
         assert r.json()["accepted_count"] >= 3
 
-        # 4. Reconcile
         r = ca.post(
             f"/api/v1/reconciliation/sessions/{session_id}/reconcile",
             json={
@@ -109,14 +113,12 @@ class TestReconciliationHttpWorkflow:
         run_id = r.json()["run_id"]
         assert r.json()["status"] == "SUCCEEDED"
 
-        # 5. Retrieve run
         r = ca.get(f"/api/v1/reconciliation/runs/{run_id}")
         assert r.status_code == 200, r.text
         body = r.json()
         assert body["status"] == "SUCCEEDED"
         assert len(body["matches"]) >= 1
 
-        # 6. Audit retrieval
         r = ca.get(f"/api/v1/reconciliation/runs/{run_id}/audit")
         assert r.status_code == 200, r.text
 
@@ -150,11 +152,9 @@ class TestReconciliationHttpWorkflow:
             "/api/v1/reconciliation/sessions",
             json={"period_start": "2026-03-01", "period_end": "2026-03-31"},
         )
-        # Tenant B cannot see tenant A's session
+        assert r.status_code == 200
         r = cb.get("/api/v1/reconciliation/runs/00000000-0000-0000-0000-000000000000")
         assert r.status_code == 404
-        # Tenant B's session list is empty (no cross-tenant leak)
-        # (sessions are not listed by tenant in this API; verify via direct DB is P2.7 scope)
 
     def test_restart_recovery_retrieves_persisted_run(self) -> None:
         ca = _client(TENANT_A)
@@ -173,7 +173,6 @@ class TestReconciliationHttpWorkflow:
         )
         run_id = r.json()["run_id"]
 
-        # Simulate restart: new client, same DB
         ca2 = _client(TENANT_A)
         r = ca2.get(f"/api/v1/reconciliation/runs/{run_id}")
         assert r.status_code == 200, r.text
