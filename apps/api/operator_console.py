@@ -378,6 +378,24 @@ def evaluation_detail(run_id: str) -> None:
     ui.button("Refresh", on_click=load)
 
 
+@ui.page("/reconciliation")
+def reconciliation() -> None:
+    """Reconciliation workflow: sessions, runs, exceptions."""
+    _chrome("Reconciliation", (_resolve_identity() or {}).get("tenant_id"))
+
+    with ui.column():
+        ui.label("Reconciliation workflow").classes("text-h6")
+        ui.label("Use the REST API at /api/v1/reconciliation/* for full control.")
+        ui.label("This page is a minimal read-only view of persisted runs.")
+
+    async def load() -> None:
+        status, payload = await _fetch("/api/v1/reconciliation/sessions")
+        # Sessions are not listed by tenant in the API; show guidance.
+        ui.label("Create a session via POST /api/v1/reconciliation/sessions.")
+
+    ui.button("Refresh", on_click=load)
+
+
 def mount_console(app: FastAPI) -> None:
     """Mount the console pages at ``/gui`` on the given FastAPI app.
 
