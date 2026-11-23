@@ -21,24 +21,8 @@ os.environ.setdefault(
 )
 
 import pytest
-from sqlalchemy import create_engine, text
-
-# Ensure reconciliation tables exist (CI does not run alembic).
-try:
-    from shared.models.reconciliation import Base as ReconciliationBase
-
-    _engine = create_engine(
-        os.environ.get(
-            "POSTGRES_URI", "postgresql+psycopg://finsight:finsight@localhost:5432/finsight"
-        ),
-        pool_pre_ping=True,
-    )
-    ReconciliationBase.metadata.create_all(_engine)
-    _engine.dispose()
-except Exception:
-    pass
-
 from fastapi.testclient import TestClient
+from sqlalchemy import create_engine, text
 
 from apps.api.main import app
 
