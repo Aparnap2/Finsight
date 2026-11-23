@@ -7,9 +7,16 @@ all three sources, persist them, execute reconciliation, retrieve results, and
 survive a restart.
 
 ## Status
-- Total tasks: 7
-- Completed: 0
-- Remaining: 7
+- P2.1: PostgreSQL schema, RLS, demo seed — COMPLETE
+- P2.2: Plain-function persistence module — COMPLETE
+- P2.3-P2.5: Covered by persistence module + tests — COMPLETE
+- P2.6: Minimal REST endpoints — COMPLETE
+- P2.7: HTTP, idempotency, restart recovery tests — COMPLETE (5 tests)
+- P3: Exception lifecycle — COMPLETE (state machine + validation)
+- P4: AI investigation — COMPLETE (bounded, evidence-grounded)
+- P5: NiceGUI reconciliation page — COMPLETE (minimal)
+- P6: Integration and recovery — COMPLETE (HTTP workflow verified)
+- P7: Portfolio release — IN PROGRESS (documentation updated)
 
 ## Tasks
 

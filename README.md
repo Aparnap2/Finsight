@@ -24,12 +24,17 @@ The deterministic engine and the operator demonstration are complete and frozen.
 | Three-source composition: invoice + processor + bank | working |
 | Operator report: Markdown + JSON + evidence record, 266 checks | working |
 | Byte-reproducible golden evidence | working |
-| Runtime boundary manifest (what must survive cleanup) | working |
-| CSV ingestion, HTTP API, persistence, browser workflow, CSV export | **not built** |
+| Runtime boundary manifest | working |
+| CSV ingestion (source-independent, 3 schemas) | working |
+| PostgreSQL persistence (13 tables, RLS, demo seed) | working |
+| REST API (sessions, sources, validate, reconcile, results, audit) | working |
+| Exception lifecycle and human decisions | working |
+| AI investigation (evidence-grounded, bounded) | working |
+| NiceGUI reconciliation page | working (minimal) |
+| HTTP workflow + restart recovery | verified (5 integration tests) |
 
-Status is tracked honestly in [`docs/PRODUCT.md` §5](docs/PRODUCT.md#5-implementation-status).
-Today the workflow runs from the command line over committed fixtures. Turning it
-into an application — API, database, operator UI, export — is the remaining work.
+Status is tracked in [`docs/PRODUCT.md`](docs/PRODUCT.md). Limitations and deferred
+capabilities are documented in [`docs/release/PRODUCTION_READINESS.md`](docs/release/PRODUCTION_READINESS.md).
 
 ## See it run
 
@@ -62,6 +67,31 @@ The nine frozen scenarios:
 `ambiguous` is a feature: the engine reports every candidate and refuses to
 choose. `pending evidence` means the run cannot decide yet — do not book it as
 settled.
+
+## Run the HTTP workflow
+
+```bash
+# 1. Start Postgres
+docker compose -f docker-compose.test.yml up -d postgres
+
+# 2. Apply migrations
+alembic upgrade head
+
+# 3. Start the API
+uvicorn apps.api.main:app --host 0.0.0.0 --port 8000
+
+# 4. Create a session and upload three sources (demo tenant: acme-corp)
+curl -X POST localhost:8000/api/v1/reconciliation/sessions \\
+  -H "X-Tenant-ID: 7d6f8b65-5e40-55b5-967f-69b85912dd87" \\
+  -H "X-User-ID: demo" -H "X-Role: cfo" \\
+  -H "Content-Type: application/json" \\
+  -d '{"period_start":"2026-01-01","period_end":"2026-01-31"}'
+
+# Upload invoice, stripe, bank CSVs, validate, reconcile, retrieve results
+# See tests/integration/test_reconciliation_http.py for the full sequence.
+```
+
+The NiceGUI console is at `http://localhost:8000/gui`.
 
 ## Deploy
 
