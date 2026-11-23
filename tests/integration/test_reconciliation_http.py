@@ -319,3 +319,168 @@ class TestDiscrepancyWorkflowPersistence:
         assert r.status_code == 200, r.text
         body = r.json()
         assert any(m["outcome"] == "EXCEPTION" for m in body["matches"])
+
+
+class TestPersistenceAtomicity:
+    """A failure mid-run must leave no partial run rows behind.
+
+    The failure is injected at the database, on the last record kind the run
+    writes (exceptions), so matches, allocations and legs have already been
+    flushed into the same transaction. If any of them survive the rollback, the
+    run is not atomic.
+    """
+
+    _TRIGGER = "test_fail_exception_insert"
+
+    def _install_failing_trigger(self, engine: Any) -> None:
+        self._remove_failing_trigger(engine)
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "CREATE OR REPLACE FUNCTION test_fail_exception_insert() "
+                    "RETURNS trigger AS $$ BEGIN "
+                    "RAISE EXCEPTION 'injected failure at exception persistence'; "
+                    "END; $$ LANGUAGE plpgsql;"
+                )
+            )
+            conn.execute(
+                text(
+                    f"CREATE TRIGGER {self._TRIGGER} BEFORE INSERT ON "
+                    "reconciliation_exceptions FOR EACH ROW "
+                    "EXECUTE FUNCTION test_fail_exception_insert();"
+                )
+            )
+
+    def _remove_failing_trigger(self, engine: Any) -> None:
+        with engine.begin() as conn:
+            conn.execute(
+                text(f"DROP TRIGGER IF EXISTS {self._TRIGGER} ON reconciliation_exceptions")
+            )
+            conn.execute(text("DROP FUNCTION IF EXISTS test_fail_exception_insert()"))
+
+    def test_failed_run_rolls_back_and_key_is_reusable(self) -> None:
+        ca = _client(TENANT_A)
+        r = ca.post(
+            "/api/v1/reconciliation/sessions",
+            json={"period_start": "2026-10-01", "period_end": "2026-10-31"},
+        )
+        assert r.status_code == 200, r.text
+        session_id = r.json()["session_id"]
+        _upload(ca, session_id, "INVOICE", TWO_INVOICE_CSV)
+        _upload(ca, session_id, "STRIPE", TWO_STRIPE_CSV)
+        _upload(ca, session_id, "BANK", TWO_BANK_CSV)
+        assert ca.post(f"/api/v1/reconciliation/sessions/{session_id}/validate").status_code == 200
+        idempotency_key = f"atomic-{uuid4()}"
+
+        engine = create_engine(DSN)
+        try:
+            self._install_failing_trigger(engine)
+            failed = ca.post(
+                f"/api/v1/reconciliation/sessions/{session_id}/reconcile",
+                json={
+                    "idempotency_key": idempotency_key,
+                    "tolerance_absolute": "0",
+                    "tolerance_percent": "0",
+                },
+            )
+            assert failed.status_code == 500, failed.text
+
+            with engine.connect() as conn:
+                # Nothing from the aborted run survived: not the run, and not
+                # the matches / allocations / legs that were flushed first.
+                runs_after_failure = conn.execute(
+                    text("SELECT count(*) FROM reconciliation_runs WHERE session_id = :sid"),
+                    {"sid": session_id},
+                ).scalar_one()
+                orphan_matches = conn.execute(
+                    text(
+                        "SELECT count(*) FROM reconciliation_matches m "
+                        "JOIN reconciliation_runs r ON r.run_id = m.run_id "
+                        "WHERE r.session_id = :sid"
+                    ),
+                    {"sid": session_id},
+                ).scalar_one()
+                orphan_allocations = conn.execute(
+                    text(
+                        "SELECT count(*) FROM payout_allocations a "
+                        "JOIN reconciliation_runs r ON r.run_id = a.run_id "
+                        "WHERE r.session_id = :sid"
+                    ),
+                    {"sid": session_id},
+                ).scalar_one()
+                orphan_legs = conn.execute(
+                    text(
+                        "SELECT count(*) FROM allocation_legs l "
+                        "JOIN payout_allocations a ON a.allocation_id = l.allocation_id "
+                        "JOIN reconciliation_runs r ON r.run_id = a.run_id "
+                        "WHERE r.session_id = :sid"
+                    ),
+                    {"sid": session_id},
+                ).scalar_one()
+                orphan_exceptions = conn.execute(
+                    text(
+                        "SELECT count(*) FROM reconciliation_exceptions e "
+                        "JOIN reconciliation_runs r ON r.run_id = e.run_id "
+                        "WHERE r.session_id = :sid"
+                    ),
+                    {"sid": session_id},
+                ).scalar_one()
+                session_status = conn.execute(
+                    text("SELECT status FROM import_sessions WHERE session_id = :sid"),
+                    {"sid": session_id},
+                ).scalar_one()
+            assert runs_after_failure == 0
+            assert orphan_matches == 0
+            assert orphan_allocations == 0
+            assert orphan_legs == 0
+            assert orphan_exceptions == 0
+            # Imports are separate committed transactions and must survive the
+            # failed run: only the run's own rows are rolled back.
+            assert session_status == "READY"
+
+            # The aborted transaction did not consume the idempotency key: a
+            # retry of the identical request succeeds and persists exactly one
+            # complete run.
+            self._remove_failing_trigger(engine)
+            retried = ca.post(
+                f"/api/v1/reconciliation/sessions/{session_id}/reconcile",
+                json={
+                    "idempotency_key": idempotency_key,
+                    "tolerance_absolute": "0",
+                    "tolerance_percent": "0",
+                },
+            )
+            assert retried.status_code == 200, retried.text
+            run_id = retried.json()["run_id"]
+
+            with engine.connect() as conn:
+                runs_for_key = conn.execute(
+                    text(
+                        "SELECT count(*) FROM reconciliation_runs "
+                        "WHERE tenant_id = :tenant AND idempotency_key = :key"
+                    ),
+                    {"tenant": TENANT_A, "key": idempotency_key},
+                ).scalar_one()
+                persisted = (
+                    conn.execute(
+                        text(
+                            "SELECT "
+                            " (SELECT count(*) FROM reconciliation_matches"
+                            "  WHERE run_id = :run) AS matches,"
+                            " (SELECT count(*) FROM payout_allocations"
+                            "  WHERE run_id = :run) AS allocations,"
+                            " (SELECT count(*) FROM reconciliation_exceptions"
+                            "  WHERE run_id = :run) AS exceptions"
+                        ),
+                        {"run": run_id},
+                    )
+                    .mappings()
+                    .one()
+                )
+            assert runs_for_key == 1
+            assert persisted["matches"] == 2
+            assert persisted["allocations"] == 1
+            assert persisted["exceptions"] >= 1
+        finally:
+            self._remove_failing_trigger(engine)
+            engine.dispose()
