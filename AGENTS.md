@@ -20,6 +20,38 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 
 Operating instructions for the coding agent working on this FP&A cognitive runtime.
 
+## Scope Philosophy
+
+**Build a production-quality portfolio application, not an enterprise-ready SaaS
+platform.** Complete one workflow end to end; make financial behavior correct
+and explainable; make failures predictable and recoverable; make the code
+understandable and maintainable; demonstrate security boundaries honestly;
+document what is deliberately not implemented.
+
+### Feature categories
+
+| Category | Treatment |
+|---|---|
+| Essential | Must implement before portfolio release |
+| Risk-dependent | Implement only when the actual architecture or threat model requires it |
+| Enterprise-grade | Explicitly out of scope unless justified |
+
+### Before adding any feature, answer
+
+1. Does the defined workflow actually need it?
+2. What concrete failure or risk does it prevent?
+3. Can an existing component already handle it?
+4. Is there a simpler implementation?
+5. Can we defer it without compromising financial correctness or security?
+
+If the answer to the first two is weak, do not build it.
+
+### Minimum security and reliability baseline
+
+Tenant isolation, financial precision, and auditability are non-negotiable even
+for a portfolio project when the application claims to support multiple
+tenants. But an enterprise IAM platform is not required to demonstrate them.
+
 ## Architecture Boundaries
 
 This project uses a strict layered architecture. Violations cause review rejection.
