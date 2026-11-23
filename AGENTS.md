@@ -275,6 +275,7 @@ Confirm all pass before submitting.
 - `openspec/project.md` — Project conventions and evidence
 - `openspec/evaluation.md` — Evaluation impact template for AI-system changes
 - `docs/09-platform/*.md` — Detailed platform layer documentation
+- `docs/architecture/IMPLEMENTATION_PLAYBOOK.md` — Implementation decision handbook (P2–P7)
 
 ## Linear Workflow (Solo-Agent Engineering Loop)
 
