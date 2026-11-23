@@ -12,10 +12,10 @@ import os
 from typing import Any
 
 os.environ.setdefault(
-    "POSTGRES_URI", "postgresql+psycopg://finsight:finsight@localhost:5433/finsight"
+    "POSTGRES_URI", "postgresql+psycopg://finsight:finsight@localhost:5432/finsight"
 )
 os.environ.setdefault(
-    "MIGRATION_POSTGRES_URI", "postgresql+psycopg://finsight:finsight@localhost:5433/finsight"
+    "MIGRATION_POSTGRES_URI", "postgresql+psycopg://finsight:finsight@localhost:5432/finsight"
 )
 
 import pytest
