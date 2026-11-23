@@ -129,6 +129,53 @@ Tests must independently establish product behavior, not merely confirm current 
 - Tests dependent on internal implementation details.
 - Test-count change with explanation.
 
+## Evidence-Gated Response Protocol (EGRP)
+
+EGRP is an engineering standard, not a separate specification document. It governs
+every factual claim an agent or developer makes about this repository.
+
+### Mandatory rules
+
+1. **Provenance.** Every financial, security, or CI claim must trace to source
+   evidence: an exact commit SHA, file at that SHA, CI run and job conclusion, or
+   database/execution result. No evidence record means no factual assertion.
+2. **No stale evidence.** For GitHub reviews, fetch the current PR head, base SHA,
+   actual diff, CI runs for that exact head, individual job conclusions, and PR
+   merge state. A green run on an older commit does not prove the current commit
+   passes.
+3. **Abstention.** Missing or ambiguous evidence produces an explicit unresolved
+   result (`UNKNOWN`, `INSUFFICIENT_EVIDENCE`), never an invented answer.
+4. **Determinism is authoritative.** LLM output cannot alter reconciliation
+   outcomes, authorization decisions, or financial results.
+5. **Tests challenge behavior.** Tests must detect representative incorrect
+   behavior, not merely confirm expected behavior. Universal negatives
+   ("no defects", "all tests pass") require the inspection scope to be stated.
+6. **Independent verification.** Critical financial and security boundaries
+   require two different verification mechanisms (for example, database
+   constraints plus cross-tenant integration tests). A second LLM agreeing with
+   the first is not independent proof.
+
+### Claim categories
+
+Use four explicit categories and never promote one to another silently:
+
+- **Verified** — directly established through evidence.
+- **Derived** — logical conclusion from verified evidence.
+- **User-reported** — supplied by the user, not independently checked.
+- **Unverified** — not established.
+
+### Action evidence
+
+A tool invocation is not proof of successful execution. Never claim a PR is
+approved because a review comment was posted, merged because it is mergeable, a
+deployment completed because a workflow started, or a file exists because its path
+appeared in generated text.
+
+### Formal versioning
+
+EGRP stays an engineering standard. A separate H0 specification is introduced
+only if the protocol becomes a separately consumed contract.
+
 ## Verification Gates
 
 Run in order before every commit:

@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-# Multi-stage build for FinSight Python Compute Runtime
+# Multi-stage build for FinSight API (FastAPI + NiceGUI)
 #
 # Targets:
 #   runtime (default) — production image, no dev tooling

@@ -167,6 +167,35 @@ Tests must independently establish product behavior, not merely confirm current 
 - Do not introduce flaky random tests.
 - Do not treat coverage as proof of correctness.
 
+## Evidence-Gated Response Protocol (EGRP)
+
+EGRP is an engineering standard, not a separate specification document. It
+governs every factual claim made about this repository.
+
+- **Provenance.** Every financial, security, or CI claim must trace to source
+  evidence: an exact commit SHA, file at that SHA, CI run and job conclusion,
+  or database/execution result. No evidence record means no factual assertion.
+- **No stale evidence.** For GitHub reviews, fetch the current PR head, base
+  SHA, actual diff, CI runs for that exact head, individual job conclusions,
+  and PR merge state. A green run on an older commit does not prove the current
+  commit passes.
+- **Abstention.** Missing or ambiguous evidence produces an explicit unresolved
+  result, never an invented answer.
+- **Determinism is authoritative.** LLM output cannot alter reconciliation
+  outcomes, authorization decisions, or financial results.
+- **Tests challenge behavior.** Tests must detect representative incorrect
+  behavior, not merely confirm expected behavior. Universal negatives require
+  the inspection scope to be stated.
+- **Independent verification.** Critical financial and security boundaries
+  require two different verification mechanisms. A second LLM agreeing with the
+  first is not independent proof.
+- **Claim categories.** Use Verified, Derived, User-reported, and Unverified;
+  never promote one to another silently.
+- **Action evidence.** A tool invocation is not proof of successful execution.
+
+A separate H0 specification is introduced only if the protocol becomes a
+separately consumed contract.
+
 ## Testing Checklist
 
 - [ ] Tests are added alongside new code (same PR, same branch).
