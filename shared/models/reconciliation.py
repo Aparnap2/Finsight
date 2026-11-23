@@ -59,7 +59,7 @@ class Base(DeclarativeBase):
 class Tenant(Base):
     """A tenant (root of all data ownership)."""
 
-    __tablename__ = "tenants"
+    __tablename__ = "reconciliation_tenants"
 
     tenant_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_uuid)
     name: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
@@ -80,7 +80,7 @@ class ImportSession(Base):
 
     session_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_uuid)
     tenant_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("tenants.tenant_id"), nullable=False
+        String(36), ForeignKey("reconciliation_tenants.tenant_id"), nullable=False
     )
     actor_id: Mapped[str] = mapped_column(String(36), nullable=False)
     period_start: Mapped[Any] = mapped_column(Date, nullable=False)
@@ -114,7 +114,7 @@ class SourceFile(Base):
         String(36), ForeignKey("import_sessions.session_id"), nullable=False
     )
     tenant_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("tenants.tenant_id"), nullable=False
+        String(36), ForeignKey("reconciliation_tenants.tenant_id"), nullable=False
     )
     source_type: Mapped[str] = mapped_column(String(20), nullable=False)
     filename: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -155,7 +155,7 @@ class ImportRow(Base):
         String(36), ForeignKey("import_sessions.session_id"), nullable=False
     )
     tenant_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("tenants.tenant_id"), nullable=False
+        String(36), ForeignKey("reconciliation_tenants.tenant_id"), nullable=False
     )
     source_type: Mapped[str] = mapped_column(String(20), nullable=False)
     line_number: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -187,7 +187,7 @@ class ReconciliationRun(Base):
         String(36), ForeignKey("import_sessions.session_id"), nullable=False
     )
     tenant_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("tenants.tenant_id"), nullable=False
+        String(36), ForeignKey("reconciliation_tenants.tenant_id"), nullable=False
     )
     actor_id: Mapped[str] = mapped_column(String(36), nullable=False)
     idempotency_key: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -229,7 +229,7 @@ class ReconciliationMatch(Base):
         String(36), ForeignKey("reconciliation_runs.run_id"), nullable=False
     )
     tenant_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("tenants.tenant_id"), nullable=False
+        String(36), ForeignKey("reconciliation_tenants.tenant_id"), nullable=False
     )
     invoice_id: Mapped[str] = mapped_column(String(255), nullable=False)
     charge_id: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -283,7 +283,7 @@ class PayoutAllocation(Base):
         String(36), ForeignKey("reconciliation_runs.run_id"), nullable=False
     )
     tenant_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("tenants.tenant_id"), nullable=False
+        String(36), ForeignKey("reconciliation_tenants.tenant_id"), nullable=False
     )
     deposit_id: Mapped[str] = mapped_column(String(255), nullable=False)
     outcome: Mapped[str] = mapped_column(String(20), nullable=False)
@@ -332,7 +332,7 @@ class AllocationLeg(Base):
         String(36), ForeignKey("payout_allocations.allocation_id"), nullable=False
     )
     tenant_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("tenants.tenant_id"), nullable=False
+        String(36), ForeignKey("reconciliation_tenants.tenant_id"), nullable=False
     )
     payment_id: Mapped[str] = mapped_column(String(255), nullable=False)
     gross: Mapped[Decimal] = mapped_column(Numeric(19, 4), nullable=False)
@@ -365,7 +365,7 @@ class ReconciliationException(Base):
         String(36), ForeignKey("reconciliation_runs.run_id"), nullable=False
     )
     tenant_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("tenants.tenant_id"), nullable=False
+        String(36), ForeignKey("reconciliation_tenants.tenant_id"), nullable=False
     )
     exception_code: Mapped[str] = mapped_column(String(50), nullable=False)
     severity: Mapped[str] = mapped_column(String(10), nullable=False)
@@ -407,7 +407,7 @@ class ExceptionDecision(Base):
         String(36), ForeignKey("reconciliation_exceptions.exception_id"), nullable=False
     )
     tenant_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("tenants.tenant_id"), nullable=False
+        String(36), ForeignKey("reconciliation_tenants.tenant_id"), nullable=False
     )
     actor_id: Mapped[str] = mapped_column(String(36), nullable=False)
     decision_type: Mapped[str] = mapped_column(String(20), nullable=False)
@@ -440,7 +440,7 @@ class Investigation(Base):
         String(36), ForeignKey("reconciliation_exceptions.exception_id"), nullable=False
     )
     tenant_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("tenants.tenant_id"), nullable=False
+        String(36), ForeignKey("reconciliation_tenants.tenant_id"), nullable=False
     )
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="PENDING")
     provider: Mapped[str | None] = mapped_column(String(50), nullable=True)
@@ -474,7 +474,7 @@ class AuditEvent(Base):
 
     event_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_uuid)
     tenant_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("tenants.tenant_id"), nullable=False
+        String(36), ForeignKey("reconciliation_tenants.tenant_id"), nullable=False
     )
     entity_type: Mapped[str] = mapped_column(String(50), nullable=False)
     entity_id: Mapped[str] = mapped_column(String(36), nullable=False)
@@ -506,7 +506,7 @@ class ExportArtifact(Base):
         String(36), ForeignKey("reconciliation_runs.run_id"), nullable=False
     )
     tenant_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("tenants.tenant_id"), nullable=False
+        String(36), ForeignKey("reconciliation_tenants.tenant_id"), nullable=False
     )
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="PENDING")
     format: Mapped[str] = mapped_column(String(10), nullable=False)

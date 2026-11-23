@@ -50,7 +50,7 @@ def upgrade() -> None:
     """Upgrade schema."""
     # --- tenants (new; FP&A schema uses 'entities', not 'tenants') ---
     op.create_table(
-        "tenants",
+        "reconciliation_tenants",
         sa.Column("tenant_id", sa.String(36), nullable=False, server_default=_UUID_DEFAULT),
         sa.Column("name", sa.String(255), nullable=False),
         sa.Column(
@@ -78,7 +78,7 @@ def upgrade() -> None:
             "updated_at", sa.DateTime(timezone=True), nullable=False, server_default=_NOW_DEFAULT
         ),
         sa.PrimaryKeyConstraint("session_id"),
-        sa.ForeignKeyConstraint(["tenant_id"], ["tenants.tenant_id"]),
+        sa.ForeignKeyConstraint(["tenant_id"], ["reconciliation_tenants.tenant_id"]),
         sa.CheckConstraint(
             "status IN ('CREATED', 'UPLOADING', 'VALIDATING', 'READY', 'REJECTED')",
             name="ck_import_sessions_status",
@@ -106,7 +106,7 @@ def upgrade() -> None:
         sa.Column("uploaded_by", sa.String(36), nullable=False),
         sa.PrimaryKeyConstraint("file_id"),
         sa.ForeignKeyConstraint(["session_id"], ["import_sessions.session_id"]),
-        sa.ForeignKeyConstraint(["tenant_id"], ["tenants.tenant_id"]),
+        sa.ForeignKeyConstraint(["tenant_id"], ["reconciliation_tenants.tenant_id"]),
         sa.UniqueConstraint("session_id", "source_type", name="uq_source_files_session_type"),
         sa.UniqueConstraint(
             "tenant_id", "source_type", "content_hash", name="uq_source_files_tenant_type_hash"
@@ -139,7 +139,7 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("row_id"),
         sa.ForeignKeyConstraint(["file_id"], ["source_files.file_id"]),
         sa.ForeignKeyConstraint(["session_id"], ["import_sessions.session_id"]),
-        sa.ForeignKeyConstraint(["tenant_id"], ["tenants.tenant_id"]),
+        sa.ForeignKeyConstraint(["tenant_id"], ["reconciliation_tenants.tenant_id"]),
         sa.CheckConstraint(
             "validation_status IN ('VALID', 'INVALID')", name="ck_import_rows_status"
         ),
@@ -174,7 +174,7 @@ def upgrade() -> None:
         sa.Column("error_detail", sa.Text(), nullable=True),
         sa.PrimaryKeyConstraint("run_id"),
         sa.ForeignKeyConstraint(["session_id"], ["import_sessions.session_id"]),
-        sa.ForeignKeyConstraint(["tenant_id"], ["tenants.tenant_id"]),
+        sa.ForeignKeyConstraint(["tenant_id"], ["reconciliation_tenants.tenant_id"]),
         sa.UniqueConstraint(
             "tenant_id", "idempotency_key", name="uq_reconciliation_runs_tenant_key"
         ),
@@ -211,7 +211,7 @@ def upgrade() -> None:
         ),
         sa.PrimaryKeyConstraint("match_id"),
         sa.ForeignKeyConstraint(["run_id"], ["reconciliation_runs.run_id"]),
-        sa.ForeignKeyConstraint(["tenant_id"], ["tenants.tenant_id"]),
+        sa.ForeignKeyConstraint(["tenant_id"], ["reconciliation_tenants.tenant_id"]),
         sa.CheckConstraint(
             "outcome IN ('MATCHED', 'TOLERANCE_MATCHED', 'EXCEPTION', 'PENDING_EVIDENCE')",
             name="ck_reconciliation_matches_outcome",
@@ -257,7 +257,7 @@ def upgrade() -> None:
         ),
         sa.PrimaryKeyConstraint("allocation_id"),
         sa.ForeignKeyConstraint(["run_id"], ["reconciliation_runs.run_id"]),
-        sa.ForeignKeyConstraint(["tenant_id"], ["tenants.tenant_id"]),
+        sa.ForeignKeyConstraint(["tenant_id"], ["reconciliation_tenants.tenant_id"]),
         sa.CheckConstraint(
             "outcome IN ('MATCHED', 'TOLERANCE_MATCHED', 'EXCEPTION', "
             "'PENDING_EVIDENCE', 'REQUIRES_HUMAN')",
@@ -294,7 +294,7 @@ def upgrade() -> None:
         sa.Column("fingerprint", sa.String(64), nullable=False),
         sa.PrimaryKeyConstraint("leg_id"),
         sa.ForeignKeyConstraint(["allocation_id"], ["payout_allocations.allocation_id"]),
-        sa.ForeignKeyConstraint(["tenant_id"], ["tenants.tenant_id"]),
+        sa.ForeignKeyConstraint(["tenant_id"], ["reconciliation_tenants.tenant_id"]),
         sa.CheckConstraint("gross >= 0", name="ck_allocation_legs_gross"),
         sa.CheckConstraint("fee >= 0", name="ck_allocation_legs_fee"),
         sa.CheckConstraint("refund >= 0", name="ck_allocation_legs_refund"),
@@ -332,7 +332,7 @@ def upgrade() -> None:
         ),
         sa.PrimaryKeyConstraint("exception_id"),
         sa.ForeignKeyConstraint(["run_id"], ["reconciliation_runs.run_id"]),
-        sa.ForeignKeyConstraint(["tenant_id"], ["tenants.tenant_id"]),
+        sa.ForeignKeyConstraint(["tenant_id"], ["reconciliation_tenants.tenant_id"]),
         sa.CheckConstraint(
             "severity IN ('CRITICAL', 'HIGH', 'MEDIUM', 'LOW')",
             name="ck_reconciliation_exceptions_severity",
@@ -368,7 +368,7 @@ def upgrade() -> None:
         ),
         sa.PrimaryKeyConstraint("decision_id"),
         sa.ForeignKeyConstraint(["exception_id"], ["reconciliation_exceptions.exception_id"]),
-        sa.ForeignKeyConstraint(["tenant_id"], ["tenants.tenant_id"]),
+        sa.ForeignKeyConstraint(["tenant_id"], ["reconciliation_tenants.tenant_id"]),
         sa.CheckConstraint(
             "decision_type IN ('APPROVE', 'REJECT', 'REOPEN', 'ASSIGN')",
             name="ck_exception_decisions_type",
@@ -423,7 +423,7 @@ def upgrade() -> None:
         sa.Column("created_by", sa.String(36), nullable=False),
         sa.PrimaryKeyConstraint("investigation_id"),
         sa.ForeignKeyConstraint(["exception_id"], ["reconciliation_exceptions.exception_id"]),
-        sa.ForeignKeyConstraint(["tenant_id"], ["tenants.tenant_id"]),
+        sa.ForeignKeyConstraint(["tenant_id"], ["reconciliation_tenants.tenant_id"]),
         sa.CheckConstraint(
             "status IN ('PENDING', 'RUNNING', 'COMPLETED', 'FAILED', 'CANCELLED')",
             name="ck_investigations_status",
@@ -450,7 +450,7 @@ def upgrade() -> None:
             "created_at", sa.DateTime(timezone=True), nullable=False, server_default=_NOW_DEFAULT
         ),
         sa.PrimaryKeyConstraint("event_id"),
-        sa.ForeignKeyConstraint(["tenant_id"], ["tenants.tenant_id"]),
+        sa.ForeignKeyConstraint(["tenant_id"], ["reconciliation_tenants.tenant_id"]),
     )
     op.create_index("idx_audit_events_tenant", "audit_events", ["tenant_id"])
     op.create_index("idx_audit_events_entity", "audit_events", ["entity_type", "entity_id"])
@@ -494,7 +494,7 @@ def upgrade() -> None:
         sa.Column("error_code", sa.String(50), nullable=True),
         sa.PrimaryKeyConstraint("export_id"),
         sa.ForeignKeyConstraint(["run_id"], ["reconciliation_runs.run_id"]),
-        sa.ForeignKeyConstraint(["tenant_id"], ["tenants.tenant_id"]),
+        sa.ForeignKeyConstraint(["tenant_id"], ["reconciliation_tenants.tenant_id"]),
         sa.CheckConstraint(
             "status IN ('PENDING', 'GENERATING', 'COMPLETED', 'FAILED')",
             name="ck_export_artifacts_status",
@@ -523,7 +523,7 @@ def upgrade() -> None:
     # stable and reproducible without reading tenants/demo/*/tenant.yaml.
     op.execute(
         sa.text("""
-        INSERT INTO tenants (tenant_id, name, status) VALUES
+        INSERT INTO reconciliation_tenants (tenant_id, name, status) VALUES
             ('7d6f8b65-5e40-55b5-967f-69b85912dd87', 'Acme Corporation', 'ACTIVE'),
             ('ea7639b2-4a8e-5954-84a2-f8630e89d206', 'Globex Corporation', 'ACTIVE'),
             ('f954b80c-b345-5714-985a-6e2f46251ff6', 'Initech', 'ACTIVE')
@@ -570,7 +570,7 @@ def downgrade() -> None:
     # tenant created after this migration.
     op.execute(
         sa.text("""
-        DELETE FROM tenants
+        DELETE FROM reconciliation_tenants
         WHERE tenant_id IN (
             '7d6f8b65-5e40-55b5-967f-69b85912dd87',
             'ea7639b2-4a8e-5954-84a2-f8630e89d206',
@@ -578,4 +578,4 @@ def downgrade() -> None:
         );
     """)
     )
-    op.drop_table("tenants")
+    op.drop_table("reconciliation_tenants")
