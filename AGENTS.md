@@ -52,6 +52,41 @@ Tenant isolation, financial precision, and auditability are non-negotiable even
 for a portfolio project when the application claims to support multiple
 tenants. But an enterprise IAM platform is not required to demonstrate them.
 
+## Standing Execution Policy
+
+Once a phase is authorized, execute its bounded tasks in dependency order without
+requesting approval for every subtask. Make reversible, bounded implementation
+decisions within approved specifications. Pause only for: product scope or core
+architecture changes; material security or financial correctness tradeoffs;
+irreversible destructive actions; contradictions in approved specifications;
+external services, credentials, costs, or public data exposure; merge, release,
+or deployment actions requiring explicit authorization.
+
+### Engineering standard
+
+1. Reuse existing modules before building replacements.
+2. Prefer plain functions and existing application patterns over new frameworks.
+3. Build the smallest implementation that satisfies the requirement.
+4. Do not introduce speculative infrastructure.
+5. Keep deterministic financial computation authoritative.
+6. Use Decimal for financial arithmetic.
+7. Preserve tenant isolation, provenance, and auditability.
+8. LLMs may explain evidence but cannot determine or mutate financial outcomes.
+9. Distinguish implemented, planned, and verified capabilities.
+10. Do not weaken existing tests or protected reconciliation invariants to make CI pass.
+
+### Scope exclusions
+
+No traditional ML, generic multi-agent platform, autonomous money movement,
+Kubernetes, microservices, generic ETL framework, enterprise IAM, or unrelated
+FP&A feature expansion unless separately authorized.
+
+### Completion reporting
+
+At each meaningful milestone report: commit SHA, changed and removed files,
+tests added/removed/executed, type-check and CI results, scope deviations,
+remaining blockers, next task and whether already authorized.
+
 ## Architecture Boundaries
 
 This project uses a strict layered architecture. Violations cause review rejection.
