@@ -98,3 +98,11 @@ survive a restart.
 Demonstrate a real HTTP workflow that imports all three sources, persists them,
 executes reconciliation, retrieves results and survives a restart. Include
 tenant-isolation tests, idempotency tests and failure-recovery tests.
+
+## Deferred backlog (not in this plan)
+
+- Operational control surface (SRE diagnostics → platform admin → business
+  configuration → business operation), bounded and staged:
+  [`docs/architecture/OPERATIONAL_CONTROL_SURFACE.md`](docs/architecture/OPERATIONAL_CONTROL_SURFACE.md).
+  Tracked in `docs/release/PRODUCTION_READINESS.md` §12. Do not start until the
+  core reconciliation workflow is functional; Stage 2+ requires real auth.
