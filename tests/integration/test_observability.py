@@ -160,54 +160,46 @@ class TestReadiness:
 
 
 class TestReadinessMiddlewareExemption:
-    """Readiness answers through the real tenant middleware on a dead DB.
+    """Readiness/liveness bypass the tenant header gate.
 
-    Without the exemption, ``TenantAuthMiddleware`` opens a session to set the
-    RLS tenant context, which turns a legitimate readiness 503 into a 500.
+    Health endpoints are unauthenticated (API_CONTRACT.md §1), so the tenant
+    middleware must not demand ``X-Tenant-ID``/``X-Role`` for them. These tests
+    mount the real middleware so a regression in the exemption shows up as a 401
+    instead of the readiness router's answer.
     """
 
-    def test_ready_returns_503_not_500_on_dead_db(self) -> None:
-        from sqlalchemy import create_engine
-        from sqlalchemy.orm import Session as OrmSession
-
+    def test_ready_returns_503_without_headers(self) -> None:
         from apps.api.middleware import TenantAuthMiddleware
 
-        def _dead_factory() -> Any:
-            engine = create_engine("postgresql+psycopg://finsight:finsight@localhost:5499/finsight")
-            return OrmSession(engine)
-
         app = FastAPI()
-        app.add_middleware(TenantAuthMiddleware, session_factory=_dead_factory)
-        app.include_router(create_readiness_router(probe=lambda: False))
-
-        client = TestClient(app)
-        response = client.get("/ready", headers={"X-Tenant-ID": "TENANT_A", "X-Role": "director"})
-        assert response.status_code == 503, response.text
-
-    def test_ready_returns_503_without_headers(self) -> None:
-        app = FastAPI()
+        app.add_middleware(TenantAuthMiddleware)
         app.include_router(create_readiness_router(probe=lambda: False))
         client = TestClient(app)
         response = client.get("/ready")
         assert response.status_code == 503, response.text
 
-    def test_live_returns_200_on_dead_db(self) -> None:
-        from sqlalchemy import create_engine
-        from sqlalchemy.orm import Session as OrmSession
-
+    def test_ready_returns_200_without_headers_when_probe_ok(self) -> None:
         from apps.api.middleware import TenantAuthMiddleware
 
-        def _dead_factory() -> Any:
-            engine = create_engine("postgresql+psycopg://finsight:finsight@localhost:5499/finsight")
-            return OrmSession(engine)
+        app = FastAPI()
+        app.add_middleware(TenantAuthMiddleware)
+        app.include_router(create_readiness_router(probe=lambda: True))
+        client = TestClient(app)
+        response = client.get("/ready")
+        assert response.status_code == 200, response.text
+
+    def test_live_returns_200_without_headers(self) -> None:
+        from apps.api.middleware import TenantAuthMiddleware
 
         app = FastAPI()
-        app.add_middleware(TenantAuthMiddleware, session_factory=_dead_factory)
+        app.add_middleware(TenantAuthMiddleware)
         app.include_router(create_readiness_router(probe=lambda: False))
         client = TestClient(app)
         response = client.get("/live")
         assert response.status_code == 200, response.text
 
+
+class TestBudgetSurfacing:
     """Existing P8 Budget refusals are observable in response + logs."""
 
     def test_in_budget_passes(self) -> None:

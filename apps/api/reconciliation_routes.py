@@ -125,9 +125,33 @@ _DECISION_TARGET: dict[str, str] = {
 
 
 def _db_session(request: Request) -> Session:
+    from sqlalchemy import event, text
+
     from apps.api.middleware import _default_session_factory
 
-    return _default_session_factory()  # type: ignore[no-any-return]
+    session = _default_session_factory()
+    # Wire the tenant into RLS on THIS session's connection. The middleware
+    # validates headers and stashes the actor, but it must not open a separate
+    # DB session to set the GUC: that setting is transaction-scoped and would
+    # be rolled back before the route's own session ever sees it, leaving
+    # production (non-superuser) requests without a tenant context.
+    actor = getattr(request.state, "actor", None)
+    tenant_id = actor.get("tenant_id") if isinstance(actor, dict) else None
+    if tenant_id:
+        # ``set_config(..., is_local => true)`` is transaction-scoped, so a
+        # single eager call is lost the moment a route commits and then reads
+        # again (e.g. ``session.get`` after ``commit``, or an expired attribute
+        # refresh). Re-apply it at the start of every transaction on this
+        # session. Being transaction-local, it can never leak onto the next
+        # request that checks the same pooled connection out.
+        @event.listens_for(session, "after_begin")
+        def _apply_tenant_guc(_session: Session, _transaction: Any, connection: Any) -> None:
+            connection.execute(
+                text("SELECT set_config('app.tenant_id', :tenant_id, true)"),
+                {"tenant_id": str(tenant_id)},
+            )
+
+    return session  # type: ignore[no-any-return]
 
 
 def _actor(request: Request) -> dict[str, str]:
