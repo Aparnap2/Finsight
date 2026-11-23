@@ -341,7 +341,7 @@ def start_reconciliation(
             variance=result.variance,
             tolerance_applied=result.tolerance_applied,
             currency=currency,
-            exception_code=result.exception_code.value if result.exception_code else None,
+            exception_code=result.exception_code or None,
             materiality=result.materiality.value,
             fingerprint=result.fingerprint,
         )
@@ -385,7 +385,7 @@ def start_reconciliation(
         result = link.result
         if result.outcome.value != "EXCEPTION":
             continue
-        code = result.exception_code.value if result.exception_code else "I-PARTIAL"
+        code = result.exception_code or "I-PARTIAL"
         exc = ReconciliationException(
             run_id=run.run_id,
             tenant_id=tenant_id,

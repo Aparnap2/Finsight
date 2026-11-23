@@ -11,7 +11,9 @@ from __future__ import annotations
 
 import io
 import os
+from decimal import Decimal
 from typing import Any
+from uuid import uuid4
 
 os.environ.setdefault(
     "POSTGRES_URI", "postgresql+psycopg://finsight:finsight@localhost:5432/finsight"
@@ -170,3 +172,150 @@ class TestReconciliationHttpWorkflow:
             json={"period_start": "2026-01-01", "period_end": "2026-01-31"},
         )
         assert r.status_code == 401
+
+
+# Two invoices, two charges, one deposit. ch_b carries a 15.00 processor fee, so
+# its net (485.00) is short of INV-B's 500.00 expectation: that edge must be
+# persisted as an EXCEPTION, while the 735.00 deposit clears both charges net.
+TWO_INVOICE_CSV = (
+    "invoice_id,amount,currency,issued_at\n"
+    "INV-A,250.00,USD,2026-01-02\n"
+    "INV-B,500.00,USD,2026-01-02\n"
+)
+TWO_STRIPE_CSV = (
+    "charge_id,amount,currency,created_at,fee\n"
+    "ch_a,250.00,USD,2026-01-02T09:15:00Z,0.00\n"
+    "ch_b,500.00,USD,2026-01-02T09:20:00Z,15.00\n"
+)
+TWO_BANK_CSV = "deposit_id,amount,posted_at\ndep_two,735.00,2026-01-04\n"
+
+
+class TestDiscrepancyWorkflowPersistence:
+    """A discrepancy-producing batch must persist matches, allocations, legs, exceptions.
+
+    The single-invoice happy path previously passed while the exception branch
+    crashed with ``'str' object has no attribute 'value'``. This test exercises
+    the realistic path the product exists for and asserts the rows that were
+    actually written, not merely the HTTP status.
+    """
+
+    def test_fee_discrepancy_persists_all_four_record_kinds(self) -> None:
+        ca = _client(TENANT_A)
+        r = ca.post(
+            "/api/v1/reconciliation/sessions",
+            json={"period_start": "2026-09-01", "period_end": "2026-09-30"},
+        )
+        assert r.status_code == 200, r.text
+        session_id = r.json()["session_id"]
+
+        _upload(ca, session_id, "INVOICE", TWO_INVOICE_CSV)
+        _upload(ca, session_id, "STRIPE", TWO_STRIPE_CSV)
+        _upload(ca, session_id, "BANK", TWO_BANK_CSV)
+
+        r = ca.post(f"/api/v1/reconciliation/sessions/{session_id}/validate")
+        assert r.status_code == 200, r.text
+        assert r.json()["status"] == "READY"
+        assert r.json()["accepted_count"] >= 5
+
+        r = ca.post(
+            f"/api/v1/reconciliation/sessions/{session_id}/reconcile",
+            json={
+                # Unique per invocation: reusing a key would replay an earlier
+                # run and mask whether this batch was actually persisted.
+                "idempotency_key": f"discrepancy-{uuid4()}",
+                "tolerance_absolute": "0",
+                "tolerance_percent": "0",
+            },
+        )
+        assert r.status_code == 200, r.text
+        assert r.json()["status"] == "SUCCEEDED"
+        run_id = r.json()["run_id"]
+
+        engine = create_engine(DSN)
+        try:
+            with engine.connect() as conn:
+                matches = (
+                    conn.execute(
+                        text(
+                            "SELECT invoice_id, charge_id, outcome, exception_code, "
+                            "expected_amount, observed_amount FROM reconciliation_matches "
+                            "WHERE run_id = :run_id ORDER BY invoice_id"
+                        ),
+                        {"run_id": run_id},
+                    )
+                    .mappings()
+                    .all()
+                )
+                allocations = (
+                    conn.execute(
+                        text(
+                            "SELECT allocation_id, deposit_id, outcome, allocated_total, "
+                            "fee_total FROM payout_allocations WHERE run_id = :run_id"
+                        ),
+                        {"run_id": run_id},
+                    )
+                    .mappings()
+                    .all()
+                )
+                legs = (
+                    conn.execute(
+                        text(
+                            "SELECT payment_id, gross, fee, net, allocated FROM allocation_legs "
+                            "WHERE allocation_id IN ("
+                            "  SELECT allocation_id FROM payout_allocations WHERE run_id = :run_id"
+                            ") ORDER BY payment_id"
+                        ),
+                        {"run_id": run_id},
+                    )
+                    .mappings()
+                    .all()
+                )
+                exceptions = (
+                    conn.execute(
+                        text(
+                            "SELECT exception_code, severity, status, description FROM "
+                            "reconciliation_exceptions WHERE run_id = :run_id"
+                        ),
+                        {"run_id": run_id},
+                    )
+                    .mappings()
+                    .all()
+                )
+        finally:
+            engine.dispose()
+
+        # Both invoice->charge edges are persisted, one matched and one broken.
+        assert len(matches) == 2, matches
+        by_invoice = {str(m["invoice_id"]): m for m in matches}
+        assert by_invoice["INV-A"]["outcome"] == "MATCHED"
+        assert by_invoice["INV-A"]["exception_code"] is None
+        assert by_invoice["INV-B"]["outcome"] == "EXCEPTION"
+        # The fee drift is classified, not silently absorbed.
+        assert by_invoice["INV-B"]["exception_code"] == "I-FEE-DRIFT"
+        assert Decimal(str(by_invoice["INV-B"]["observed_amount"])) == Decimal("485.00")
+
+        # One deposit allocation covering both charges, valued net of fees.
+        assert len(allocations) == 1, allocations
+        allocation = allocations[0]
+        assert str(allocation["deposit_id"]) == "dep_two"
+        assert Decimal(str(allocation["allocated_total"])) == Decimal("735.00")
+        assert Decimal(str(allocation["fee_total"])) == Decimal("15.00")
+
+        # Allocation legs bind each charge to the deposit with its own fee.
+        assert len(legs) == 2, legs
+        leg_by_payment = {str(leg["payment_id"]): leg for leg in legs}
+        assert Decimal(str(leg_by_payment["ch_a"]["net"])) == Decimal("250.00")
+        assert Decimal(str(leg_by_payment["ch_b"]["net"])) == Decimal("485.00")
+        assert Decimal(str(leg_by_payment["ch_b"]["fee"])) == Decimal("15.00")
+
+        # The break is durable and actionable, not just in the HTTP response.
+        assert len(exceptions) >= 1, exceptions
+        exc_codes = {str(e["exception_code"]) for e in exceptions}
+        assert exc_codes == {"I-FEE-DRIFT"}, exc_codes
+        assert all(str(e["status"]) == "OPEN" for e in exceptions)
+
+        # The read API reflects the persisted exception.
+        r = ca.get(f"/api/v1/reconciliation/runs/{run_id}")
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert any(m["outcome"] == "EXCEPTION" for m in body["matches"])
