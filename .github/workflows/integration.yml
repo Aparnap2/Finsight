@@ -82,9 +82,6 @@ jobs:
               raise SystemExit("postgres not reachable after 60s")
           EOF
 
-      - name: Apply Alembic migrations
-        run: uv run alembic upgrade head
-
       # DB-gated skips are tolerated: suites skip when Postgres is
       # unreachable; -rs surfaces skip reasons and the summary line reports
       # passed / skipped / failed counts.
