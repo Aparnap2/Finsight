@@ -90,6 +90,12 @@ class TenantAuthMiddleware(BaseHTTPMiddleware):
         path = request.url.path
         if path == "/health" or path.endswith("/health"):
             return await call_next(request)
+        if path in ("/live", "/ready", "/health/live", "/health/ready"):
+            # Liveness/readiness must still answer when Postgres is down. The
+            # tenant context setup below opens a DB session, which would turn a
+            # legitimate readiness 503 into a 500. Health endpoints are
+            # unauthenticated by API_CONTRACT.md §1, so they carry no tenant.
+            return await call_next(request)
         if path == "/gui" or path.startswith("/gui/"):
             # UI-1: operator console page chrome is a page-loading
             # concern only. Browser navigations cannot carry tenant

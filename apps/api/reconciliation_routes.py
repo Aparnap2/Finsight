@@ -23,9 +23,13 @@ from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from finance.exceptions.errors import IllegalTransitionError
+from finance.reconciliation.exception_lifecycle import allowed_targets
+from finance.reconciliation.models import ExceptionStatus
 from finance.reconciliation.persistence import (
     create_import_session,
     get_audit_events,
+    get_import_session,
     get_run,
     list_exceptions,
     persist_ingestion_report,
@@ -39,7 +43,12 @@ from finance.reconciliation.statement_workflow import (
 )
 from finance.source_ingestion import SourceType, ingest_source
 from shared.models.reconciliation import (
+    AllocationLeg,
+    ExceptionDecision,
+    ExportArtifact,
+    ImportRow,
     PayoutAllocation,
+    ReconciliationException,
     ReconciliationMatch,
     SourceFile,
 )
@@ -92,7 +101,22 @@ class ReconcileResponse(BaseModel):
 class DecisionRequest(BaseModel):
     decision_type: str
     reason: str = Field(min_length=1)
-    new_status: str
+    evidence_refs: list[str] | None = None
+    # Optional: when omitted the target status is derived from decision_type
+    # through the exception state machine (see ``_target_status``).
+    new_status: str | None = None
+
+
+class CreateExportRequest(BaseModel):
+    format: str = Field(default="CSV")
+
+
+# Result status implied by a decision type; ASSIGN depends on the current state.
+_DECISION_TARGET: dict[str, str] = {
+    "APPROVE": ExceptionStatus.RESOLVED.value,
+    "REJECT": ExceptionStatus.REOPENED.value,
+    "REOPEN": ExceptionStatus.INVESTIGATING.value,
+}
 
 
 # ---------------------------------------------------------------------------
@@ -463,11 +487,38 @@ def get_run_detail(run_id: str, request: Request) -> dict[str, Any]:
 
 @router.get("/reconciliation/runs/{run_id}/audit")
 def get_run_audit(run_id: str, request: Request) -> dict[str, Any]:
+    """Return audit events belonging to one run and its child records.
+
+    Scoped by entity id, not just tenant: a previous version returned every
+    audit event for the tenant and ignored ``run_id`` entirely.
+    """
     actor = _actor(request)
     tenant_id = actor["tenant_id"]
     session = _db_session(request)
     try:
-        events = get_audit_events(session, tenant_id=tenant_id, limit=200)
+        _require_run(session, run_id, tenant_id)
+        matches = (
+            session.query(ReconciliationMatch.match_id)
+            .filter(
+                ReconciliationMatch.run_id == run_id,
+                ReconciliationMatch.tenant_id == tenant_id,
+            )
+            .all()
+        )
+        allocations = (
+            session.query(PayoutAllocation.allocation_id)
+            .filter(
+                PayoutAllocation.run_id == run_id,
+                PayoutAllocation.tenant_id == tenant_id,
+            )
+            .all()
+        )
+        exceptions = list_exceptions(session, run_id=run_id, tenant_id=tenant_id)
+        entity_ids = [run_id]
+        entity_ids.extend(str(v) for (v,) in matches)
+        entity_ids.extend(str(v) for (v,) in allocations)
+        entity_ids.extend(e.exception_id for e in exceptions)
+        events = get_audit_events(session, tenant_id=tenant_id, entity_ids=entity_ids, limit=200)
         return {
             "run_id": run_id,
             "events": [
@@ -484,6 +535,8 @@ def get_run_audit(run_id: str, request: Request) -> dict[str, Any]:
                 for e in events
             ],
         }
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     finally:
@@ -552,37 +605,447 @@ def investigate_exception(
         session.close()
 
 
+@router.post("/exceptions/{exception_id}/decisions", status_code=201)
 def decide_exception(
     exception_id: str,
     body: DecisionRequest,
     request: Request,
 ) -> dict[str, Any]:
+    """Record a human decision on an exception (contract §2.3).
+
+    The target status is derived from ``decision_type`` through the exception
+    state machine unless the caller supplies one. An illegal move returns 400; a
+    repeat of a decision that would be a no-op (for example a second APPROVE on
+    an already-RESOLVED exception) returns 409.
+    """
     actor = _actor(request)
     tenant_id = actor["tenant_id"]
     session = _db_session(request)
     try:
-        from shared.models.reconciliation import ReconciliationException
-
-        exc = session.get(ReconciliationException, exception_id)
-        if exc is None or exc.tenant_id != tenant_id:
-            raise HTTPException(status_code=404, detail="Exception not found.")
-        decision_id = record_decision(
-            session,
-            exception_id=exception_id,
-            tenant_id=tenant_id,
-            actor_id=actor["user_id"] or str(uuid4()),
-            decision_type=body.decision_type,
-            reason=body.reason,
-            previous_status=exc.status,
-            new_status=body.new_status,
-        )
+        exc = _require_exception(session, exception_id, tenant_id)
+        requested_type = body.decision_type.upper()
+        new_status = body.new_status or _target_status(exc.status, requested_type)
+        previous_status = exc.status
+        try:
+            decision_id = record_decision(
+                session,
+                exception_id=exception_id,
+                tenant_id=tenant_id,
+                actor_id=actor["user_id"] or str(uuid4()),
+                decision_type=requested_type,
+                reason=body.reason,
+                previous_status=previous_status,
+                new_status=new_status,
+                evidence_refs=body.evidence_refs,
+            )
+        except IllegalTransitionError as exc_error:
+            session.rollback()
+            if "no-op" in str(exc_error):
+                raise HTTPException(status_code=409, detail="Duplicate decision.") from exc_error
+            raise HTTPException(status_code=400, detail=str(exc_error)) from exc_error
         session.commit()
-        return {"decision_id": decision_id, "status": body.new_status}
+        decision = session.get(ExceptionDecision, decision_id)
+        return {
+            "decision_id": decision_id,
+            "exception_id": exception_id,
+            "decision_type": requested_type,
+            "previous_status": previous_status,
+            "new_status": new_status,
+            "decided_at": _iso(decision.decided_at) if decision is not None else None,
+        }
     except HTTPException:
         session.rollback()
         raise
     except Exception as exc:
         session.rollback()
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    finally:
+        session.close()
+
+
+# ---------------------------------------------------------------------------
+# Contract endpoints (docs/specs/API_CONTRACT.md §2.1-2.4)
+#
+# These expose the same persisted rows as the routes above but at the paths and
+# response shapes the frozen contract specifies. No new business logic: every
+# handler reads or writes through finance.reconciliation.persistence.
+# ---------------------------------------------------------------------------
+
+
+def _require_run(session: Session, run_id: str, tenant_id: str) -> Any:
+    """Return the tenant-scoped run or raise 404."""
+    run = get_run(session, run_id=run_id, tenant_id=tenant_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Run not found.")
+    return run
+
+
+def _require_exception(session: Session, exception_id: str, tenant_id: str) -> Any:
+    """Return the tenant-scoped exception or raise 404."""
+    exc = session.get(ReconciliationException, exception_id)
+    if exc is None or exc.tenant_id != tenant_id:
+        raise HTTPException(status_code=404, detail="Exception not found.")
+    return exc
+
+
+def _iso(value: Any) -> str | None:
+    """Serialize an optional datetime to ISO-8601."""
+    return value.isoformat() if value is not None else None
+
+
+def _target_status(current: str, decision_type: str) -> str:
+    """Resolve the status a decision moves an exception to.
+
+    ``ASSIGN`` is state-dependent, so it picks the first allowed target from the
+    exception state machine. An unknown decision type is a 400, matching the
+    contract's ``400 (invalid transition)``.
+    """
+    decision = decision_type.upper()
+    if decision == "ASSIGN":
+        targets = allowed_targets(current)
+        for candidate in (ExceptionStatus.UNDER_REVIEW, ExceptionStatus.INVESTIGATING):
+            if candidate in targets:
+                return candidate.value
+        raise HTTPException(
+            status_code=400,
+            detail=f"No legal ASSIGN target from status {current!r}.",
+        )
+    target = _DECISION_TARGET.get(decision)
+    if target is None:
+        raise HTTPException(status_code=400, detail=f"Unknown decision_type {decision_type!r}.")
+    return target
+
+
+@router.get("/import-sessions/{session_id}")
+def get_session_detail(session_id: str, request: Request) -> dict[str, Any]:
+    """Full import-session detail with per-file validation status."""
+    actor = _actor(request)
+    tenant_id = actor["tenant_id"]
+    session = _db_session(request)
+    try:
+        sess = get_import_session(session, session_id=session_id, tenant_id=tenant_id)
+        if sess is None:
+            raise HTTPException(status_code=404, detail="Session not found.")
+        files = (
+            session.query(SourceFile)
+            .filter(SourceFile.session_id == session_id, SourceFile.tenant_id == tenant_id)
+            .all()
+        )
+        counts: dict[str, list[int]] = {
+            f.file_id: [0, 0] for f in files
+        }  # file_id -> [valid, invalid]
+        rows = (
+            session.query(ImportRow)
+            .filter(ImportRow.session_id == session_id, ImportRow.tenant_id == tenant_id)
+            .all()
+        )
+        for row in rows:
+            bucket = counts.setdefault(row.file_id, [0, 0])
+            bucket[0 if row.validation_status == "VALID" else 1] += 1
+        return {
+            "session_id": sess.session_id,
+            "tenant_id": sess.tenant_id,
+            "status": sess.status,
+            "period_start": _iso(sess.period_start),
+            "period_end": _iso(sess.period_end),
+            "created_at": _iso(sess.created_at),
+            "files": [
+                {
+                    "file_id": f.file_id,
+                    "source_type": f.source_type,
+                    "filename": f.filename,
+                    "row_count": f.row_count,
+                    "content_hash": f.content_hash,
+                    "valid_rows": counts.get(f.file_id, [0, 0])[0],
+                    "invalid_rows": counts.get(f.file_id, [0, 0])[1],
+                    "uploaded_at": _iso(f.uploaded_at),
+                }
+                for f in files
+            ],
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    finally:
+        session.close()
+
+
+@router.get("/runs/{run_id}/matches")
+def list_run_matches(
+    run_id: str, request: Request, limit: int = 50, offset: int = 0
+) -> dict[str, Any]:
+    """List invoice-to-charge matches for a run (contract §2.2)."""
+    actor = _actor(request)
+    tenant_id = actor["tenant_id"]
+    session = _db_session(request)
+    try:
+        _require_run(session, run_id, tenant_id)
+        query = session.query(ReconciliationMatch).filter(
+            ReconciliationMatch.run_id == run_id,
+            ReconciliationMatch.tenant_id == tenant_id,
+        )
+        total = query.count()
+        matches = query.order_by(ReconciliationMatch.match_id).offset(offset).limit(limit).all()
+        return {
+            "run_id": run_id,
+            "matches": [
+                {
+                    "match_id": m.match_id,
+                    "invoice_id": m.invoice_id,
+                    "charge_id": m.charge_id,
+                    "outcome": m.outcome,
+                    "expected_amount": str(m.expected_amount),
+                    "observed_amount": str(m.observed_amount),
+                    "difference": str(m.difference),
+                    "variance": str(m.variance),
+                    "tolerance_applied": str(m.tolerance_applied),
+                    "currency": m.currency,
+                    "exception_code": m.exception_code,
+                    "materiality": m.materiality,
+                    "fingerprint": m.fingerprint,
+                }
+                for m in matches
+            ],
+            "total_count": total,
+            "has_more": offset + len(matches) < total,
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    finally:
+        session.close()
+
+
+@router.get("/runs/{run_id}/allocations")
+def list_run_allocations(
+    run_id: str, request: Request, limit: int = 50, offset: int = 0
+) -> dict[str, Any]:
+    """List deposit allocations for a run, with their legs (contract §2.2)."""
+    actor = _actor(request)
+    tenant_id = actor["tenant_id"]
+    session = _db_session(request)
+    try:
+        _require_run(session, run_id, tenant_id)
+        query = session.query(PayoutAllocation).filter(
+            PayoutAllocation.run_id == run_id,
+            PayoutAllocation.tenant_id == tenant_id,
+        )
+        total = query.count()
+        allocations = (
+            query.order_by(PayoutAllocation.allocation_id).offset(offset).limit(limit).all()
+        )
+        allocation_ids = [a.allocation_id for a in allocations]
+        legs = (
+            session.query(AllocationLeg)
+            .filter(
+                AllocationLeg.allocation_id.in_(allocation_ids),
+                AllocationLeg.tenant_id == tenant_id,
+            )
+            .order_by(AllocationLeg.payment_id)
+            .all()
+            if allocation_ids
+            else []
+        )
+        legs_by_allocation: dict[str, list[dict[str, Any]]] = {}
+        for leg in legs:
+            legs_by_allocation.setdefault(leg.allocation_id, []).append(
+                {
+                    "payment_id": leg.payment_id,
+                    "gross": str(leg.gross),
+                    "fee": str(leg.fee),
+                    "refund": str(leg.refund),
+                    "net": str(leg.net),
+                    "allocated": str(leg.allocated),
+                    "fingerprint": leg.fingerprint,
+                }
+            )
+        return {
+            "run_id": run_id,
+            "allocations": [
+                {
+                    "allocation_id": a.allocation_id,
+                    "deposit_id": a.deposit_id,
+                    "outcome": a.outcome,
+                    "allocated_total": str(a.allocated_total),
+                    "eligible_net_total": str(a.eligible_net_total),
+                    "open_balance": str(a.open_balance),
+                    "unallocated_deposit": str(a.unallocated_deposit),
+                    "fee_total": str(a.fee_total),
+                    "refund_total": str(a.refund_total),
+                    "exception_code": a.exception_code,
+                    "fingerprint": a.fingerprint,
+                    "legs": legs_by_allocation.get(a.allocation_id, []),
+                }
+                for a in allocations
+            ],
+            "total_count": total,
+            "has_more": offset + len(allocations) < total,
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    finally:
+        session.close()
+
+
+@router.get("/runs/{run_id}/exceptions")
+def list_run_exceptions(
+    run_id: str, request: Request, limit: int = 50, offset: int = 0
+) -> dict[str, Any]:
+    """List exceptions raised by a run (contract §2.2)."""
+    actor = _actor(request)
+    tenant_id = actor["tenant_id"]
+    session = _db_session(request)
+    try:
+        _require_run(session, run_id, tenant_id)
+        all_exceptions = list_exceptions(session, run_id=run_id, tenant_id=tenant_id)
+        page = all_exceptions[offset : offset + limit]
+        return {
+            "run_id": run_id,
+            "exceptions": [_exception_payload(e) for e in page],
+            "total_count": len(all_exceptions),
+            "has_more": offset + len(page) < len(all_exceptions),
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    finally:
+        session.close()
+
+
+def _exception_payload(exc: ReconciliationException) -> dict[str, Any]:
+    """Serialize an exception in the contract's §2.2 shape."""
+    return {
+        "exception_id": exc.exception_id,
+        "exception_code": exc.exception_code,
+        "severity": exc.severity,
+        "status": exc.status,
+        "title": exc.title,
+        "description": exc.description,
+        "evidence_refs": list(exc.evidence_refs or []),
+        "created_at": _iso(exc.created_at),
+    }
+
+
+@router.get("/exceptions/{exception_id}")
+def get_exception_detail(exception_id: str, request: Request) -> dict[str, Any]:
+    """Full exception detail with evidence and its decision history."""
+    actor = _actor(request)
+    tenant_id = actor["tenant_id"]
+    session = _db_session(request)
+    try:
+        exc = _require_exception(session, exception_id, tenant_id)
+        decisions = (
+            session.query(ExceptionDecision)
+            .filter(
+                ExceptionDecision.exception_id == exception_id,
+                ExceptionDecision.tenant_id == tenant_id,
+            )
+            .order_by(ExceptionDecision.decided_at)
+            .all()
+        )
+        payload = _exception_payload(exc)
+        payload.update(
+            {
+                "run_id": exc.run_id,
+                "tenant_id": exc.tenant_id,
+                "assigned_to": exc.assigned_to,
+                "updated_at": _iso(exc.updated_at),
+                "decisions": [
+                    {
+                        "decision_id": d.decision_id,
+                        "decision_type": d.decision_type,
+                        "reason": d.reason,
+                        "evidence_refs": list(d.evidence_refs or []),
+                        "previous_status": d.previous_status,
+                        "new_status": d.new_status,
+                        "actor_id": d.actor_id,
+                        "decided_at": _iso(d.decided_at),
+                    }
+                    for d in decisions
+                ],
+            }
+        )
+        return payload
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    finally:
+        session.close()
+
+
+@router.post("/runs/{run_id}/exports", status_code=201)
+def create_run_export(run_id: str, body: CreateExportRequest, request: Request) -> dict[str, Any]:
+    """Create an export artifact record for a run (contract §2.4).
+
+    Only the artifact row is created; producing the bytes is a separate worker
+    and is not implemented. Status therefore starts ``PENDING`` and stays there
+    until a generator advances it, which is why the endpoint is reported as
+    CONDITIONAL rather than a working export pipeline.
+    """
+    actor = _actor(request)
+    tenant_id = actor["tenant_id"]
+    session = _db_session(request)
+    try:
+        _require_run(session, run_id, tenant_id)
+        export_format = body.format.upper()
+        if export_format not in ("CSV", "JSON", "MARKDOWN"):
+            raise HTTPException(status_code=400, detail="format must be CSV, JSON or MARKDOWN.")
+        artifact = ExportArtifact(
+            run_id=run_id,
+            tenant_id=tenant_id,
+            status="PENDING",
+            format=export_format,
+            created_by=actor["user_id"] or str(uuid4()),
+        )
+        session.add(artifact)
+        session.commit()
+        return {
+            "export_id": artifact.export_id,
+            "run_id": run_id,
+            "status": artifact.status,
+            "format": artifact.format,
+            "created_at": _iso(artifact.created_at),
+        }
+    except HTTPException:
+        session.rollback()
+        raise
+    except Exception as exc:
+        session.rollback()
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    finally:
+        session.close()
+
+
+@router.get("/exports/{export_id}")
+def get_export(export_id: str, request: Request) -> dict[str, Any]:
+    """Retrieve an export artifact record (contract §2.4)."""
+    actor = _actor(request)
+    tenant_id = actor["tenant_id"]
+    session = _db_session(request)
+    try:
+        artifact = session.get(ExportArtifact, export_id)
+        if artifact is None or artifact.tenant_id != tenant_id:
+            raise HTTPException(status_code=404, detail="Export not found.")
+        return {
+            "export_id": artifact.export_id,
+            "run_id": artifact.run_id,
+            "status": artifact.status,
+            "format": artifact.format,
+            "storage_ref": artifact.storage_ref,
+            "file_size_bytes": artifact.file_size_bytes,
+            "created_at": _iso(artifact.created_at),
+            "completed_at": _iso(artifact.completed_at),
+            "error_code": artifact.error_code,
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     finally:
         session.close()

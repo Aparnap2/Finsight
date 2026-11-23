@@ -20,6 +20,7 @@ Only SQLAlchemy plus the Python standard library are used.
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 from datetime import UTC, date, datetime
 from typing import Any
 
@@ -537,14 +538,24 @@ def get_audit_events(
     tenant_id: str,
     entity_type: str | None = None,
     entity_id: str | None = None,
+    entity_ids: Sequence[str] | None = None,
     limit: int = 100,
 ) -> list[AuditEvent]:
-    """Return audit events for this tenant, newest first."""
+    """Return audit events for this tenant, newest first.
+
+    ``entity_ids`` restricts the result to events whose ``entity_id`` is one of
+    the supplied ids — the mechanism run-scoped audit retrieval uses to return
+    only the events belonging to one run and its children.
+    """
     query = session.query(AuditEvent).filter(AuditEvent.tenant_id == tenant_id)
     if entity_type is not None:
         query = query.filter(AuditEvent.entity_type == entity_type)
     if entity_id is not None:
         query = query.filter(AuditEvent.entity_id == entity_id)
+    if entity_ids is not None:
+        if not entity_ids:
+            return []
+        query = query.filter(AuditEvent.entity_id.in_(list(entity_ids)))
     return query.order_by(AuditEvent.created_at.desc()).limit(limit).all()
 
 

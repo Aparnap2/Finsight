@@ -159,7 +159,55 @@ class TestReadiness:
         assert response.json() == {"status": "alive"}
 
 
-class TestBudgetSurfacing:
+class TestReadinessMiddlewareExemption:
+    """Readiness answers through the real tenant middleware on a dead DB.
+
+    Without the exemption, ``TenantAuthMiddleware`` opens a session to set the
+    RLS tenant context, which turns a legitimate readiness 503 into a 500.
+    """
+
+    def test_ready_returns_503_not_500_on_dead_db(self) -> None:
+        from sqlalchemy import create_engine
+        from sqlalchemy.orm import Session as OrmSession
+
+        from apps.api.middleware import TenantAuthMiddleware
+
+        def _dead_factory() -> Any:
+            engine = create_engine("postgresql+psycopg://finsight:finsight@localhost:5499/finsight")
+            return OrmSession(engine)
+
+        app = FastAPI()
+        app.add_middleware(TenantAuthMiddleware, session_factory=_dead_factory)
+        app.include_router(create_readiness_router(probe=lambda: False))
+
+        client = TestClient(app)
+        response = client.get("/ready", headers={"X-Tenant-ID": "TENANT_A", "X-Role": "director"})
+        assert response.status_code == 503, response.text
+
+    def test_ready_returns_503_without_headers(self) -> None:
+        app = FastAPI()
+        app.include_router(create_readiness_router(probe=lambda: False))
+        client = TestClient(app)
+        response = client.get("/ready")
+        assert response.status_code == 503, response.text
+
+    def test_live_returns_200_on_dead_db(self) -> None:
+        from sqlalchemy import create_engine
+        from sqlalchemy.orm import Session as OrmSession
+
+        from apps.api.middleware import TenantAuthMiddleware
+
+        def _dead_factory() -> Any:
+            engine = create_engine("postgresql+psycopg://finsight:finsight@localhost:5499/finsight")
+            return OrmSession(engine)
+
+        app = FastAPI()
+        app.add_middleware(TenantAuthMiddleware, session_factory=_dead_factory)
+        app.include_router(create_readiness_router(probe=lambda: False))
+        client = TestClient(app)
+        response = client.get("/live")
+        assert response.status_code == 200, response.text
+
     """Existing P8 Budget refusals are observable in response + logs."""
 
     def test_in_budget_passes(self) -> None:
