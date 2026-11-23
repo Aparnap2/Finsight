@@ -57,6 +57,16 @@ class MaterialityVerdict(StrEnum):
     IMMATERIAL = "IMMATERIAL"
 
 
+class ExceptionStatus(StrEnum):
+    """Lifecycle status of a reconciliation exception."""
+
+    OPEN = "OPEN"
+    INVESTIGATING = "INVESTIGATING"
+    UNDER_REVIEW = "UNDER_REVIEW"
+    RESOLVED = "RESOLVED"
+    REOPENED = "REOPENED"
+
+
 class ExceptionCode(StrEnum):
     """Versioned break-classification codes.
 

@@ -26,6 +26,7 @@ from typing import Any
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from finance.reconciliation.exception_lifecycle import validate_transition
 from finance.reconciliation.statement_workflow import (
     ReconciliationReport,
 )
@@ -469,6 +470,7 @@ def record_decision(
     exc = session.get(ReconciliationException, exception_id)
     if exc is None or exc.tenant_id != tenant_id:
         raise ValueError(f"Exception {exception_id} not found for tenant {tenant_id}.")
+    validate_transition(exc.status, new_status, decision_type)
     decision = ExceptionDecision(
         exception_id=exception_id,
         tenant_id=tenant_id,
