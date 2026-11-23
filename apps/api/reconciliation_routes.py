@@ -148,6 +148,7 @@ async def upload_source(
     source_type: str,
     request: Request,
     file: Annotated[UploadFile, File()],
+    statement_currency: str = "USD",
 ) -> UploadSourceResponse:
     actor = _actor(request)
     tenant_id = actor["tenant_id"]
@@ -176,6 +177,7 @@ async def upload_source(
             source_type=st,
             tenant_id=tenant_id,
             filename=file.filename,
+            statement_currency=statement_currency if st == SourceType.BANK else None,
         )
 
         from finance.reconciliation.persistence import get_import_session as _get_session
@@ -488,7 +490,68 @@ def get_run_audit(run_id: str, request: Request) -> dict[str, Any]:
         session.close()
 
 
-@router.post("/reconciliation/exceptions/{exception_id}/decisions")
+@router.post("/reconciliation/exceptions/{exception_id}/investigate")
+def investigate_exception(
+    exception_id: str,
+    request: Request,
+) -> dict[str, Any]:
+    actor = _actor(request)
+    tenant_id = actor["tenant_id"]
+    session = _db_session(request)
+    try:
+        from shared.models.reconciliation import ReconciliationException
+
+        exc = session.get(ReconciliationException, exception_id)
+        if exc is None or exc.tenant_id != tenant_id:
+            raise HTTPException(status_code=404, detail="Exception not found.")
+
+        from finance.reconciliation.investigation import (
+            BoundedInvestigation,
+            InvestigationContext,
+        )
+        from shared.llm.factory import create_provider_from_settings
+
+        provider = create_provider_from_settings()
+        investigator = BoundedInvestigation(provider)
+        context = InvestigationContext(
+            exception_id=exc.exception_id,
+            exception_code=exc.exception_code,
+            title=exc.title,
+            description=exc.description,
+            evidence_refs=list(exc.evidence_refs or []),
+        )
+        finding = investigator.investigate(context)
+
+        from shared.models.reconciliation import Investigation as InvRow
+
+        inv = InvRow(
+            exception_id=exception_id,
+            tenant_id=tenant_id,
+            status="COMPLETED" if not finding.abstained else "FAILED",
+            result_text=finding.claim,
+            evidence_refs=finding.evidence_refs,
+            created_by=actor["user_id"] or str(uuid4()),
+        )
+        session.add(inv)
+        session.commit()
+        return {
+            "investigation_id": inv.investigation_id,
+            "claim": finding.claim,
+            "evidence_refs": finding.evidence_refs,
+            "confidence": finding.confidence,
+            "abstained": finding.abstained,
+            "abstention_reason": finding.abstention_reason,
+        }
+    except HTTPException:
+        session.rollback()
+        raise
+    except Exception as exc:
+        session.rollback()
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    finally:
+        session.close()
+
+
 def decide_exception(
     exception_id: str,
     body: DecisionRequest,

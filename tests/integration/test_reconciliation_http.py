@@ -18,6 +18,15 @@ os.environ.setdefault(
     "MIGRATION_POSTGRES_URI", "postgresql+psycopg://finsight:finsight@localhost:5432/finsight"
 )
 
+try:
+    from alembic import command as _alembic_command
+    from alembic.config import Config as _AlembicConfig
+
+    _alembic_cfg = _AlembicConfig("alembic.ini")
+    _alembic_command.upgrade(_alembic_cfg, "head")
+except Exception:
+    pass
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text

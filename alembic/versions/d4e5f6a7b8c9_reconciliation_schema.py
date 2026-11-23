@@ -51,7 +51,7 @@ def upgrade() -> None:
     # --- tenants (new; FP&A schema uses 'entities', not 'tenants') ---
     op.create_table(
         "tenants",
-        sa.Column("tenant_id", sa.UUID(), nullable=False, server_default=_UUID_DEFAULT),
+        sa.Column("tenant_id", sa.String(36), nullable=False, server_default=_UUID_DEFAULT),
         sa.Column("name", sa.String(255), nullable=False),
         sa.Column(
             "created_at", sa.DateTime(timezone=True), nullable=False, server_default=_NOW_DEFAULT
@@ -65,9 +65,9 @@ def upgrade() -> None:
     # --- import_sessions ---
     op.create_table(
         "import_sessions",
-        sa.Column("session_id", sa.UUID(), nullable=False, server_default=_UUID_DEFAULT),
-        sa.Column("tenant_id", sa.UUID(), nullable=False),
-        sa.Column("actor_id", sa.UUID(), nullable=False),
+        sa.Column("session_id", sa.String(36), nullable=False, server_default=_UUID_DEFAULT),
+        sa.Column("tenant_id", sa.String(36), nullable=False),
+        sa.Column("actor_id", sa.String(36), nullable=False),
         sa.Column("period_start", sa.Date(), nullable=False),
         sa.Column("period_end", sa.Date(), nullable=False),
         sa.Column("status", sa.String(20), nullable=False, server_default=sa.text("'CREATED'")),
@@ -91,9 +91,9 @@ def upgrade() -> None:
     # --- source_files ---
     op.create_table(
         "source_files",
-        sa.Column("file_id", sa.UUID(), nullable=False, server_default=_UUID_DEFAULT),
-        sa.Column("session_id", sa.UUID(), nullable=False),
-        sa.Column("tenant_id", sa.UUID(), nullable=False),
+        sa.Column("file_id", sa.String(36), nullable=False, server_default=_UUID_DEFAULT),
+        sa.Column("session_id", sa.String(36), nullable=False),
+        sa.Column("tenant_id", sa.String(36), nullable=False),
         sa.Column("source_type", sa.String(20), nullable=False),
         sa.Column("filename", sa.String(255), nullable=False),
         sa.Column("content_hash", sa.String(64), nullable=False),
@@ -103,7 +103,7 @@ def upgrade() -> None:
         sa.Column(
             "uploaded_at", sa.DateTime(timezone=True), nullable=False, server_default=_NOW_DEFAULT
         ),
-        sa.Column("uploaded_by", sa.UUID(), nullable=False),
+        sa.Column("uploaded_by", sa.String(36), nullable=False),
         sa.PrimaryKeyConstraint("file_id"),
         sa.ForeignKeyConstraint(["session_id"], ["import_sessions.session_id"]),
         sa.ForeignKeyConstraint(["tenant_id"], ["tenants.tenant_id"]),
@@ -123,10 +123,10 @@ def upgrade() -> None:
     # --- import_rows ---
     op.create_table(
         "import_rows",
-        sa.Column("row_id", sa.UUID(), nullable=False, server_default=_UUID_DEFAULT),
-        sa.Column("file_id", sa.UUID(), nullable=False),
-        sa.Column("session_id", sa.UUID(), nullable=False),
-        sa.Column("tenant_id", sa.UUID(), nullable=False),
+        sa.Column("row_id", sa.String(36), nullable=False, server_default=_UUID_DEFAULT),
+        sa.Column("file_id", sa.String(36), nullable=False),
+        sa.Column("session_id", sa.String(36), nullable=False),
+        sa.Column("tenant_id", sa.String(36), nullable=False),
         sa.Column("source_type", sa.String(20), nullable=False),
         sa.Column("line_number", sa.Integer(), nullable=False),
         sa.Column("raw_data", sa.dialects.postgresql.JSONB(), nullable=False),
@@ -153,10 +153,10 @@ def upgrade() -> None:
     # --- reconciliation_runs ---
     op.create_table(
         "reconciliation_runs",
-        sa.Column("run_id", sa.UUID(), nullable=False, server_default=_UUID_DEFAULT),
-        sa.Column("session_id", sa.UUID(), nullable=False),
-        sa.Column("tenant_id", sa.UUID(), nullable=False),
-        sa.Column("actor_id", sa.UUID(), nullable=False),
+        sa.Column("run_id", sa.String(36), nullable=False, server_default=_UUID_DEFAULT),
+        sa.Column("session_id", sa.String(36), nullable=False),
+        sa.Column("tenant_id", sa.String(36), nullable=False),
+        sa.Column("actor_id", sa.String(36), nullable=False),
         sa.Column("idempotency_key", sa.String(255), nullable=False),
         sa.Column("status", sa.String(20), nullable=False, server_default=sa.text("'QUEUED'")),
         sa.Column("engine_version", sa.String(64), nullable=False),
@@ -191,9 +191,9 @@ def upgrade() -> None:
     # --- reconciliation_matches ---
     op.create_table(
         "reconciliation_matches",
-        sa.Column("match_id", sa.UUID(), nullable=False, server_default=_UUID_DEFAULT),
-        sa.Column("run_id", sa.UUID(), nullable=False),
-        sa.Column("tenant_id", sa.UUID(), nullable=False),
+        sa.Column("match_id", sa.String(36), nullable=False, server_default=_UUID_DEFAULT),
+        sa.Column("run_id", sa.String(36), nullable=False),
+        sa.Column("tenant_id", sa.String(36), nullable=False),
         sa.Column("invoice_id", sa.String(255), nullable=False),
         sa.Column("charge_id", sa.String(255), nullable=False),
         sa.Column("outcome", sa.String(20), nullable=False),
@@ -239,9 +239,9 @@ def upgrade() -> None:
     # --- payout_allocations ---
     op.create_table(
         "payout_allocations",
-        sa.Column("allocation_id", sa.UUID(), nullable=False, server_default=_UUID_DEFAULT),
-        sa.Column("run_id", sa.UUID(), nullable=False),
-        sa.Column("tenant_id", sa.UUID(), nullable=False),
+        sa.Column("allocation_id", sa.String(36), nullable=False, server_default=_UUID_DEFAULT),
+        sa.Column("run_id", sa.String(36), nullable=False),
+        sa.Column("tenant_id", sa.String(36), nullable=False),
         sa.Column("deposit_id", sa.String(255), nullable=False),
         sa.Column("outcome", sa.String(20), nullable=False),
         sa.Column("allocated_total", sa.Numeric(19, 4), nullable=False),
@@ -282,9 +282,9 @@ def upgrade() -> None:
     # --- allocation_legs ---
     op.create_table(
         "allocation_legs",
-        sa.Column("leg_id", sa.UUID(), nullable=False, server_default=_UUID_DEFAULT),
-        sa.Column("allocation_id", sa.UUID(), nullable=False),
-        sa.Column("tenant_id", sa.UUID(), nullable=False),
+        sa.Column("leg_id", sa.String(36), nullable=False, server_default=_UUID_DEFAULT),
+        sa.Column("allocation_id", sa.String(36), nullable=False),
+        sa.Column("tenant_id", sa.String(36), nullable=False),
         sa.Column("payment_id", sa.String(255), nullable=False),
         sa.Column("gross", sa.Numeric(19, 4), nullable=False),
         sa.Column("fee", sa.Numeric(19, 4), nullable=False),
@@ -309,9 +309,9 @@ def upgrade() -> None:
     # --- reconciliation_exceptions ---
     op.create_table(
         "reconciliation_exceptions",
-        sa.Column("exception_id", sa.UUID(), nullable=False, server_default=_UUID_DEFAULT),
-        sa.Column("run_id", sa.UUID(), nullable=False),
-        sa.Column("tenant_id", sa.UUID(), nullable=False),
+        sa.Column("exception_id", sa.String(36), nullable=False, server_default=_UUID_DEFAULT),
+        sa.Column("run_id", sa.String(36), nullable=False),
+        sa.Column("tenant_id", sa.String(36), nullable=False),
         sa.Column("exception_code", sa.String(50), nullable=False),
         sa.Column("severity", sa.String(10), nullable=False),
         sa.Column("status", sa.String(20), nullable=False, server_default=sa.text("'OPEN'")),
@@ -323,7 +323,7 @@ def upgrade() -> None:
             nullable=False,
             server_default=sa.text("'[]'::jsonb"),
         ),
-        sa.Column("assigned_to", sa.UUID(), nullable=True),
+        sa.Column("assigned_to", sa.String(36), nullable=True),
         sa.Column(
             "created_at", sa.DateTime(timezone=True), nullable=False, server_default=_NOW_DEFAULT
         ),
@@ -354,10 +354,10 @@ def upgrade() -> None:
     # --- exception_decisions (append-only) ---
     op.create_table(
         "exception_decisions",
-        sa.Column("decision_id", sa.UUID(), nullable=False, server_default=_UUID_DEFAULT),
-        sa.Column("exception_id", sa.UUID(), nullable=False),
-        sa.Column("tenant_id", sa.UUID(), nullable=False),
-        sa.Column("actor_id", sa.UUID(), nullable=False),
+        sa.Column("decision_id", sa.String(36), nullable=False, server_default=_UUID_DEFAULT),
+        sa.Column("exception_id", sa.String(36), nullable=False),
+        sa.Column("tenant_id", sa.String(36), nullable=False),
+        sa.Column("actor_id", sa.String(36), nullable=False),
         sa.Column("decision_type", sa.String(20), nullable=False),
         sa.Column("reason", sa.Text(), nullable=False),
         sa.Column("evidence_refs", sa.dialects.postgresql.JSONB(), nullable=True),
@@ -400,9 +400,9 @@ def upgrade() -> None:
     # --- investigations ---
     op.create_table(
         "investigations",
-        sa.Column("investigation_id", sa.UUID(), nullable=False, server_default=_UUID_DEFAULT),
-        sa.Column("exception_id", sa.UUID(), nullable=False),
-        sa.Column("tenant_id", sa.UUID(), nullable=False),
+        sa.Column("investigation_id", sa.String(36), nullable=False, server_default=_UUID_DEFAULT),
+        sa.Column("exception_id", sa.String(36), nullable=False),
+        sa.Column("tenant_id", sa.String(36), nullable=False),
         sa.Column("status", sa.String(20), nullable=False, server_default=sa.text("'PENDING'")),
         sa.Column("provider", sa.String(50), nullable=True),
         sa.Column("model", sa.String(100), nullable=True),
@@ -420,7 +420,7 @@ def upgrade() -> None:
         sa.Column(
             "created_at", sa.DateTime(timezone=True), nullable=False, server_default=_NOW_DEFAULT
         ),
-        sa.Column("created_by", sa.UUID(), nullable=False),
+        sa.Column("created_by", sa.String(36), nullable=False),
         sa.PrimaryKeyConstraint("investigation_id"),
         sa.ForeignKeyConstraint(["exception_id"], ["reconciliation_exceptions.exception_id"]),
         sa.ForeignKeyConstraint(["tenant_id"], ["tenants.tenant_id"]),
@@ -436,16 +436,16 @@ def upgrade() -> None:
     # --- audit_events (append-only) ---
     op.create_table(
         "audit_events",
-        sa.Column("event_id", sa.UUID(), nullable=False, server_default=_UUID_DEFAULT),
-        sa.Column("tenant_id", sa.UUID(), nullable=False),
+        sa.Column("event_id", sa.String(36), nullable=False, server_default=_UUID_DEFAULT),
+        sa.Column("tenant_id", sa.String(36), nullable=False),
         sa.Column("entity_type", sa.String(50), nullable=False),
-        sa.Column("entity_id", sa.UUID(), nullable=False),
+        sa.Column("entity_id", sa.String(36), nullable=False),
         sa.Column("action", sa.String(50), nullable=False),
-        sa.Column("actor_id", sa.UUID(), nullable=True),
+        sa.Column("actor_id", sa.String(36), nullable=True),
         sa.Column("previous_state", sa.String(50), nullable=True),
         sa.Column("new_state", sa.String(50), nullable=True),
         sa.Column("metadata", sa.dialects.postgresql.JSONB(), nullable=True),
-        sa.Column("correlation_id", sa.UUID(), nullable=True),
+        sa.Column("correlation_id", sa.String(36), nullable=True),
         sa.Column(
             "created_at", sa.DateTime(timezone=True), nullable=False, server_default=_NOW_DEFAULT
         ),
@@ -479,9 +479,9 @@ def upgrade() -> None:
     # --- export_artifacts ---
     op.create_table(
         "export_artifacts",
-        sa.Column("export_id", sa.UUID(), nullable=False, server_default=_UUID_DEFAULT),
-        sa.Column("run_id", sa.UUID(), nullable=False),
-        sa.Column("tenant_id", sa.UUID(), nullable=False),
+        sa.Column("export_id", sa.String(36), nullable=False, server_default=_UUID_DEFAULT),
+        sa.Column("run_id", sa.String(36), nullable=False),
+        sa.Column("tenant_id", sa.String(36), nullable=False),
         sa.Column("status", sa.String(20), nullable=False, server_default=sa.text("'PENDING'")),
         sa.Column("format", sa.String(10), nullable=False),
         sa.Column("storage_ref", sa.String(512), nullable=True),
@@ -490,7 +490,7 @@ def upgrade() -> None:
             "created_at", sa.DateTime(timezone=True), nullable=False, server_default=_NOW_DEFAULT
         ),
         sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("created_by", sa.UUID(), nullable=False),
+        sa.Column("created_by", sa.String(36), nullable=False),
         sa.Column("error_code", sa.String(50), nullable=True),
         sa.PrimaryKeyConstraint("export_id"),
         sa.ForeignKeyConstraint(["run_id"], ["reconciliation_runs.run_id"]),
@@ -514,7 +514,7 @@ def upgrade() -> None:
         op.execute(
             sa.text(
                 f"CREATE POLICY tenant_isolation_{table_name} ON {table_name} "
-                f"USING (tenant_id = current_setting('app.tenant_id', true)::uuid);"
+                f"USING (tenant_id::uuid = current_setting('app.tenant_id', true)::uuid);"
             )
         )
 
