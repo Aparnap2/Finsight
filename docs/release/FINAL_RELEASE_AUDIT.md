@@ -563,6 +563,23 @@ discovered during the UNVERIFIED investigation. All commits are on
 6. Broken documentation references (N9).
 7. Dead configuration (O4).
 
+### History rewrite (credential remediation)
+
+Commit  originally contained the hardcoded test credential
+ in . The credential
+was confirmed test-only (isolated local/CI test DB, not reused). History was
+rewritten via interactive rebase:  amended to  (credential
+generated at run time, matching the later  approach, which was dropped
+as redundant), all subsequent commits replayed. Force-pushed with
+.
+
+Verification of rewritten head :
+- No occurrence of the credential in reachable HEAD history.
+- RLS integration tests: 4 passed.
+- Full local gates: ruff clean, mypy 1137/1137, 3451 unit+contract passed.
+- Remote CI: GitGuardian SUCCESS, CI (fast) SUCCESS, Integration SUCCESS,
+  AI evals SUCCESS, PR verification SUCCESS, gate evidence bundle SUCCESS.
+
 ### Final verdict
 
 **CONDITIONAL GO** for the reconciliation workflow on the portfolio path: the core
