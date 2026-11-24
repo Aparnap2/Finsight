@@ -32,6 +32,7 @@ The deterministic engine and the operator demonstration are complete and frozen.
 | AI investigation (evidence-grounded, bounded) | working |
 | NiceGUI reconciliation page | minimal placeholder (API is the supported workflow) |
 | HTTP workflow + restart recovery | verified (5 integration tests) |
+| OKF codebase knowledge bundle (reconciliation path) | working (CI drift check) |
 
 Status is tracked in [`docs/PRODUCT.md`](docs/PRODUCT.md). Limitations and deferred
 capabilities are documented in [`docs/release/PRODUCTION_READINESS.md`](docs/release/PRODUCTION_READINESS.md).
@@ -116,6 +117,7 @@ sequence: [`docs/release/LOCAL_DEPLOYMENT.md`](docs/release/LOCAL_DEPLOYMENT.md)
 | `tests/unit/reconciliation/` | engine, workflow, operator report, golden evidence, boundary |
 | `tests/fixtures/reconciliation/triangle/` | the nine frozen scenarios |
 | `docs/PRODUCT.md` | canonical product specification |
+| `docs/knowledge/` | OKF knowledge bundle (reconciliation execution path) |
 | `docs/release/` | local deployment and the reconciliation runtime boundary |
 | `docs/archive/` | historical documents from previous product generations |
 
@@ -130,13 +132,15 @@ uv run python scripts/mypy_baseline_check.py \
   --baseline scripts/mypy-baseline.txt --report /tmp/mypy.txt
 uv run python -m pytest tests/unit tests/contract -q
 uv run python scripts/reconciliation_boundary.py --check
+uv run python scripts/knowledge_graph.py --check
+uv run python scripts/validate_knowledge.py
 uv run python -m pytest tests/unit/reconciliation -q
 ```
 
 `make test` mirrors the CI fast gate; `make test-integration` runs the
 PostgreSQL-gated tier; `make ci-local` runs the fast gate locally.
 
-Current baseline: 241 reconciliation tests, 3336 fast-suite tests, 206 compose
+Current baseline: 241 reconciliation tests, 3659 fast-suite tests, 208 compose
 integration tests, mypy baseline 1137 with zero new errors. Numbers and the
 deletion log live in
 [`docs/release/RECONCILIATION_BOUNDARY.md`](docs/release/RECONCILIATION_BOUNDARY.md).
