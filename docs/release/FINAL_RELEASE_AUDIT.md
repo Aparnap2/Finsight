@@ -565,15 +565,15 @@ discovered during the UNVERIFIED investigation. All commits are on
 
 ### History rewrite (credential remediation)
 
-Commit  originally contained the hardcoded test credential
- in . The credential
+Commit `94b5505` originally contained the hardcoded test credential
+`recon_rls_pw` in `tests/integration/test_reconciliation_rls.py`. The credential
 was confirmed test-only (isolated local/CI test DB, not reused). History was
-rewritten via interactive rebase:  amended to  (credential
-generated at run time, matching the later  approach, which was dropped
+rewritten via interactive rebase: `94b5505` amended to `18ad6fa` (credential
+generated at run time, matching the later `229b4f1` approach, which was dropped
 as redundant), all subsequent commits replayed. Force-pushed with
-.
+`--force-with-lease`.
 
-Verification of rewritten head :
+Verification of rewritten head `5f5c38df44b6fac25ae4c2dbb4f76befc98cc3ba`:
 - No occurrence of the credential in reachable HEAD history.
 - RLS integration tests: 4 passed.
 - Full local gates: ruff clean, mypy 1137/1137, 3451 unit+contract passed.
