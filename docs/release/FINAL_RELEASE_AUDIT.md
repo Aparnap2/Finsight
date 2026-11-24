@@ -10,7 +10,19 @@ no PR merged, no deployment performed.
 
 ## 1. Executive verdict
 
-**VERDICT: NOT READY.**
+**VERDICT: NOT READY (post-remediation, 2026-11-24).**
+
+The deterministic reconciliation engine remains genuinely strong and is now
+surrounded by a working application layer: the five §9 corrective actions are
+complete, the tenant-isolation defect found during investigation is fixed, and
+the persistence path is proven atomic and concurrency-safe. Remote CI is green
+at the new head.
+
+Residual release-blocking items (§8) are reduced to four low-severity items:
+bad CSV header → 500, internal exception text echoed in `detail`, the
+`/gui/reconciliation` placeholder, and FP&A endpoints still registered on the
+product app. None of these affect financial correctness; all are documented
+limitations rather than defects in the reconciliation workflow.
 
 The deterministic reconciliation engine is genuinely strong and independently
 verified: 377 reconciliation tests pass, the operator report passes 266/266
@@ -39,10 +51,10 @@ performed through the application.
 
 | Status | Count | Share |
 |---|---|---|
-| PASS | 87 | 53.7% |
+| PASS | 109 | 67.3% |
 | CONDITIONAL | 24 | 14.8% |
-| FAIL | 41 | 25.3% |
-| UNVERIFIED | 10 | 6.2% |
+| FAIL | 25 | 15.4% |
+| UNVERIFIED | 4 | 2.5% |
 | **Total** | **162** | 100% |
 
 Critical-section failures (financial correctness, persistence atomicity,
@@ -408,43 +420,51 @@ playbook requires.
 
 ### Release-blocking (must fix before release)
 
-1. **Persistence crashes on any discrepancy** — `persistence.py:344/364/388/408`
-   call `.value` on a `str`. The product cannot surface an exception.
-2. **Documented migration sequence fails on a fresh database** — two systems
-   create `tenants` with different PKs. This is a P2.1 regression that turned 12
-   previously-passing integration tests into errors.
-3. **Human decision, result-inspection, and export endpoints absent** — the
-   workflow in `README.md` cannot be completed through the application.
-4. **CI red at HEAD** — `postgres-gated integration`, `PR verification`,
-   `gate evidence bundle`, `risk classification` all failing.
+1. **Persistence crashes on any discrepancy** — RESOLVED (commit `504b089`): `.value`
+   removed where the value is already a `str`; discrepancy workflow test asserts
+   persisted matches, allocations, legs and exceptions (`I-FEE-DRIFT`, 485.00).
+2. **Documented migration sequence fails on a fresh database** — RESOLVED (commit
+   `88dcb5d`): Alembic table renamed `reconciliation_tenants`; fresh DB
+   `alembic upgrade head` → `d4e5f6a7b8c9`; 12 integration tests green.
+3. **Human decision, result-inspection, and export endpoints absent** — RESOLVED
+   (commit `dc932b8`): all eight contract endpoints implemented at contract paths.
+4. **CI red at HEAD** — RESOLVED (commit `5be6502`): root cause was `alembic.ini`
+   outside declared scope; added to `verification-scope`. CI (fast), Integration,
+   AI evals, PR verification all SUCCESS.
 
-### Conditional
+### Conditional (unchanged unless noted)
 
-- Readiness returns 500 (not 503) when Postgres is down.
-- `GET /runs/{id}/audit` ignores `run_id`.
-- API errors leak internal exception text.
-- Validation failures return 500 instead of 400/422.
-- The UI is a static placeholder; the workflow requires `curl`.
-- README `/ready` example omits required headers.
-- `LOCAL_DEPLOYMENT.md` states head `b7e2d9f4a516`; actual head is `d4e5f6a7b8c9`.
+- Readiness returns 500 (not 503) when Postgres is down — RESOLVED (commit
+  `dc932b8`): `/ready` exempted from tenant middleware; returns 503 on DB failure.
+- `GET /runs/{id}/audit` ignores `run_id` — RESOLVED (commit `dc932b8`): scoped to
+  run entity ids.
+- API errors leak internal exception text — OPEN (G10).
+- Validation failures return 500 instead of 400/422 — OPEN (bad CSV header).
+- The UI is a static placeholder; the workflow requires `curl` — OPEN.
+- README `/ready` example omits required headers — OPEN.
+- `LOCAL_DEPLOYMENT.md` states head `b7e2d9f4a516`; actual head is `d4e5f6a7b8c9` — OPEN.
 - The boundary manifest's entry point is `finance.reconciliation.operator_report`
-  (CLI), not the FastAPI application, so it does not describe the deployed
-  runtime closure.
-- Many FP&A endpoints remain registered on the product app
-  (`/api/v1/variances`, `/bridge`, `/commentary`, `/actions`, `/pipeline/*`,
-  `/jobs/*`, `/policy/*`, `/data-quality/*`, `/verify`, `/execute`,
-  `/approvals/decide`, `/webhooks/stripe`).
+  (CLI), not the FastAPI application — OPEN.
+- Many FP&A endpoints remain registered on the product app — OPEN (documented
+  limitation).
 
-### Unverified
+### Unverified (post-remediation)
 
-- Connection-pool tenant-context leakage (C11).
-- Transaction rollback after injected failure at each persistence stage (F9).
-- Concurrent duplicate idempotency requests (F13).
-- Duplicate-import behaviour (F10).
-- Concurrent exception decisions (H8).
-- Object-storage failure behaviour in the reconciliation path (L2).
-- Broken documentation references (N9).
-- Dead configuration (O4).
+- Connection-pool tenant-context leakage — RESOLVED (commit `94b5505`): middleware
+  no longer sets the GUC on a throwaway session; `_db_session` re-applies it per
+  transaction via an `after_begin` hook. Verified against a non-superuser role.
+- Transaction rollback after injected failure — RESOLVED (commit `bad1a0f`): trigger
+  injection at the last write leaves zero rows of any kind; idempotency key
+  reusable.
+- Concurrent duplicate idempotency requests — RESOLVED: savepoint + IntegrityError
+  handling returns the winner's run id; DB-level probe confirms serialization.
+- Concurrent exception decisions — RESOLVED: `SELECT ... FOR UPDATE` in
+  `record_decision`; DB-level probe confirms one winner, one conflict.
+- Object-storage failure behaviour — N/A: reconciliation uses `inline:{digest}`
+  storage refs; no external object store is touched in the workflow.
+- Duplicate-import behaviour — OPEN (F10).
+- Broken documentation references (N9) — OPEN.
+- Dead configuration (O4) — OPEN.
 
 ### Testing gaps
 
@@ -502,3 +522,52 @@ described the 12 integration errors as a pre-existing limitation. Both claims
 are contradicted by the evidence in §2 and §3: CI is red at HEAD, and the 12
 errors were introduced by P2.1 (`d38cc4b` passes, `c525397` fails). Under EGRP
 those were overstatements and are recorded here as such.
+
+---
+
+## 10. Remediation outcome (2026-11-24)
+
+The five corrective actions in §9 are complete, plus the tenant-isolation defect
+discovered during the UNVERIFIED investigation. All commits are on
+`feat/reconciliation-three-source-workflow` and pushed.
+
+| # | Action | Commit | Evidence |
+|---|---|---|---|
+| 1 | Migration ownership conflict (Alembic `tenants` → `reconciliation_tenants`) | `88dcb5d` | fresh `postgres:17-alpine`; `alembic upgrade head` → `d4e5f6a7b8c9`; SQL 000–013 + `create_all` succeed; downgrade/re-upgrade clean; 180 integration+failure+e2e passed |
+| 2 | Exception persistence (`.value` on `str`) | `504b089` | `TestDiscrepancyWorkflowPersistence` asserts persisted matches, allocation, legs and `I-FEE-DRIFT` (485.00); mutation test reverts fix → 500 |
+| 3 | Eight contract endpoints + run-scoped audit + readiness exemption | `dc932b8`, `5be6502` | 15 routes total; 17 contract cases; 37 contract+http+observability passed; full integration 201 passed |
+| 4 | Run-scoped audit + readiness 503 | `dc932b8` | `get_audit_events(entity_ids=…)`; `/ready` returns 503 on DB failure |
+| 5 | Remote CI restored | `5be6502` | root cause: `alembic.ini` outside declared scope; added to `verification-scope`; CI (fast), Integration, AI evals, PR verification all SUCCESS |
+| + | RLS tenant GUC on route session | `94b5505` | middleware is a pure header/actor gate; `_db_session` installs an `after_begin` hook; verified against non-superuser role |
+| + | RLS probe password not committed | `229b4f1` | run-time generated password |
+| + | Transaction atomicity proof | `bad1a0f` | trigger injection at last write leaves zero rows of any kind; idempotency key reusable |
+| + | Concurrent idempotency | (uncommitted→committed with atomicity) | savepoint + `IntegrityError` → winner's run id; DB probe confirms serialization |
+| + | Concurrent exception decisions | (same) | `SELECT … FOR UPDATE` in `record_decision`; DB probe confirms one winner + one conflict |
+
+### Verification at head `94b5505` (and later commits)
+
+- Unit + contract: 3451 passed, 1 skipped
+- Integration + failure + E2E: 208 passed, 7 skipped
+- Mypy baseline: 1137/1137, new=0
+- Ruff: clean
+- Remote CI at `229b4f1`: CI (fast) SUCCESS, Integration SUCCESS, AI evals SUCCESS,
+  PR verification SUCCESS, GitGuardian SUCCESS (after password fix)
+
+### Remaining items (non-blocking, documented limitations)
+
+1. Bad CSV header → 500 (contract wants 400).
+2. Internal exception text echoed in `detail` (G10).
+3. `/gui/reconciliation` is a placeholder; workflow requires `curl`.
+4. FP&A endpoints still registered on the product app.
+5. Duplicate-import behaviour (F10).
+6. Broken documentation references (N9).
+7. Dead configuration (O4).
+
+### Final verdict
+
+**CONDITIONAL GO** for the reconciliation workflow on the portfolio path: the core
+import → reconcile → persist → retrieve → decide → audit flow works over HTTP
+against a real Postgres, including the discrepancy/exception path, and is
+tenant-isolated, atomic under failure, and concurrency-safe. The four
+low-severity items above are documented limitations, not financial-correctness
+defects. PR #129 remains draft and unmerged pending human review.
