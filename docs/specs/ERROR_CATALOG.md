@@ -85,9 +85,9 @@ The classification facts in this document are executed, not merely described.
 HTTP status, severity, retryability, recovery guidance, and owner — and the API
 boundary derives every response body from it (`apps/api/errors.py`). A handler
 never invents a code; if a route needs a new one, the registry gains it first
-and this document is updated in the same change. Drift in the
-registry→document direction is a defect; a test asserts that every registered
-code is documented here.
+and this document is updated in the same change. Drift is a defect in either
+direction, and tests assert both: every registered code is documented here, and
+every code documented in the taxonomy tables is registered with the same status.
 
 **Stage 1 is additive, not breaking.** The pre-existing FastAPI body shape
 
@@ -303,7 +303,7 @@ delivered one. Statuses are **Verified** (direct evidence), **Partial**
 | `correlation_id` propagation | **Verified** | Accepted/echoed as `X-Correlation-ID` and recorded in the access log; `tests/integration/test_observability.py::TestCorrelationId`. |
 | Error `code` in responses | **Verified (additive, Stage 1)** | Registry `shared/errors/catalog.py`; handlers `apps/api/errors.py`; every `HTTPException` and unhandled exception now yields `error.code`. Tested by `tests/unit/api/test_error_contract.py`. |
 | `retryable` in responses | **Verified (additive, Stage 1)** | Derived from the registry spec, not hard-coded per handler; `tests/unit/api/test_error_contract.py::TestRegistryInvariants::test_retryability_is_explicit`. |
-| Registry↔document consistency | **Verified (one direction)** | `tests/unit/api/test_error_contract.py::TestSingleSourceOfTruth` asserts every registered code is documented. The reverse (documented but unregistered) is not yet machine-checked. |
+| Registry↔document consistency | **Verified (both directions)** | `tests/unit/api/test_error_contract.py::TestSingleSourceOfTruth` asserts every registered code is documented, every documented taxonomy code is registered, and every documented status matches the registry. |
 | Legacy `detail` compatibility | **Verified** | `detail` echoed verbatim; existing `["detail"]` assertions in `tests/unit/test_platform/test_middleware.py` and `tests/integration/test_error_echo.py` still pass unchanged. |
 | Metrics (§3 of observability contract) | **Not implemented** | No metrics backend in `pyproject.toml`; no `prometheus_client` import. |
 | Tracing (OpenTelemetry) | **Not implemented** | No OpenTelemetry dependency or instrumentation. |

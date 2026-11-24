@@ -17,6 +17,8 @@ production helpers, so a bug in the helper cannot become the expectation.
 
 from __future__ import annotations
 
+import re
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -38,6 +40,11 @@ from shared.errors import (
     is_retryable,
     spec_for,
 )
+
+#: A taxonomy table row: ``| `CODE` | 400 | ...``. Reading the normative tables
+#: lets documentation drift be detected in both directions, not just
+#: registry→doc.
+_TAXONOMY_ROW = re.compile(r"^\|\s*`([A-Z][A-Z0-9_]+)`\s*\|\s*(\d{3})", re.MULTILINE)
 
 
 def _request(
@@ -328,17 +335,120 @@ class TestMainAppWiring:
         assert TestClient(app).get("/live").status_code == 200
 
 
+class TestSchemaParity:
+    """Middleware rejections and handler errors must be one contract.
+
+    These are two different code paths: the middleware builds a response
+    directly, while handlers run inside FastAPI's exception machinery. They are
+    easy to drift apart, so this pins both to the same schema and the same
+    correlation-ID semantics. A change that fixes one path and forgets the
+    other fails here.
+    """
+
+    TOP_LEVEL = {"detail", "error", "request_id", "correlation_id"}
+    ERROR_OBJECT = {"code", "category", "message", "details", "retryable"}
+    VALID_TENANT = {"X-Tenant-ID": "tenant-a", "X-Role": "analyst"}
+
+    @staticmethod
+    def _app() -> FastAPI:
+        from apps.api.middleware import TenantAuthMiddleware
+        from apps.api.observability import RequestIDMiddleware
+
+        app = FastAPI()
+        register_error_handlers(app)
+
+        @app.get("/typed")
+        async def typed() -> None:
+            raise ApiError(status_code=400, detail="Bad input.", code=ErrorCode.BAD_REQUEST)
+
+        @app.get("/unhandled")
+        async def unhandled() -> None:
+            raise RuntimeError("password=hunter2")
+
+        # Same registration order as apps/api/main.py: request-ID is outermost,
+        # so an ID exists before the tenant gate can reject a request.
+        app.add_middleware(TenantAuthMiddleware)
+        app.add_middleware(RequestIDMiddleware)
+        return app
+
+    @classmethod
+    def _cases(cls) -> list[tuple[str, dict[str, str], int, str]]:
+        """Return (path, headers, expected_status, expected_code) per path."""
+        return [
+            ("/typed", {}, 401, "TENANT_CONTEXT_MISSING"),  # middleware rejection
+            ("/typed", cls.VALID_TENANT, 400, "BAD_REQUEST"),  # typed handler
+            ("/unhandled", cls.VALID_TENANT, 500, "INTERNAL_ERROR"),  # unhandled
+        ]
+
+    @classmethod
+    def _call(cls, path: str, headers: dict[str, str]) -> Any:
+        client = TestClient(cls._app(), raise_server_exceptions=False)
+        return client.get(path, headers=headers)
+
+    def test_every_path_uses_the_same_schema(self) -> None:
+        for path, headers, status, code in self._cases():
+            response = self._call(path, headers)
+            assert response.status_code == status, (path, response.text)
+            body = response.json()
+            assert set(body) == self.TOP_LEVEL, (path, set(body))
+            assert set(body["error"]) == self.ERROR_OBJECT, (path, set(body["error"]))
+            assert body["error"]["code"] == code, path
+            assert isinstance(body["error"]["category"], str), path
+            assert isinstance(body["error"]["retryable"], bool), path
+            assert isinstance(body["error"]["details"], dict), path
+            assert isinstance(body["detail"], str), path
+
+    def test_supplied_correlation_id_is_echoed_on_every_path(self) -> None:
+        supplied = "client-supplied-123"
+        for path, headers, _status, _code in self._cases():
+            response = self._call(path, {**headers, "X-Correlation-ID": supplied})
+            body = response.json()
+            assert body["correlation_id"] == supplied, path
+            assert response.headers["X-Correlation-ID"] == supplied, path
+
+    def test_minted_ids_match_headers_on_every_path(self) -> None:
+        for path, headers, _status, _code in self._cases():
+            response = self._call(path, headers)
+            body = response.json()
+            assert body["correlation_id"], path
+            assert body["request_id"], path
+            assert response.headers["X-Correlation-ID"] == body["correlation_id"], path
+            assert response.headers["X-Request-ID"] == body["request_id"], path
+
+    def test_unhandled_error_never_leaks_the_exception(self) -> None:
+        response = self._call("/unhandled", self.VALID_TENANT)
+        assert "hunter2" not in response.text
+        assert "RuntimeError" not in response.text
+
+
 class TestSingleSourceOfTruth:
     """Ingestion must borrow the registry, not maintain a second copy."""
 
     def test_every_registered_code_is_documented(self) -> None:
         """The catalog is normative; an undocumented code is drift."""
-        from pathlib import Path
-
         doc = Path(__file__).resolve().parents[3] / "docs" / "specs" / "ERROR_CATALOG.md"
         text = doc.read_text(encoding="utf-8")
         undocumented = [code.value for code in ErrorCode if f"`{code.value}`" not in text]
         assert undocumented == []
+
+    def test_every_documented_taxonomy_code_is_registered(self) -> None:
+        """The reverse direction: the spec must not list a code we cannot emit."""
+        doc = Path(__file__).resolve().parents[3] / "docs" / "specs" / "ERROR_CATALOG.md"
+        rows = _TAXONOMY_ROW.findall(doc.read_text(encoding="utf-8"))
+        assert rows, "taxonomy tables not found — the parser or the doc changed"
+        unknown = sorted({code for code, _status in rows} - {c.value for c in ErrorCode})
+        assert unknown == []
+
+    def test_documented_status_matches_the_registry(self) -> None:
+        """A documented status that disagrees with the runtime is a lie."""
+        doc = Path(__file__).resolve().parents[3] / "docs" / "specs" / "ERROR_CATALOG.md"
+        rows = _TAXONOMY_ROW.findall(doc.read_text(encoding="utf-8"))
+        mismatches = [
+            (code, int(documented), spec_for(ErrorCode(code)).http_status)
+            for code, documented in rows
+            if int(documented) != spec_for(ErrorCode(code)).http_status
+        ]
+        assert mismatches == []
 
     def test_ingestion_error_codes_are_registry_codes(self) -> None:
         from finance.source_ingestion.issues import ApiErrorCode, IngestionError

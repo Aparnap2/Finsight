@@ -593,14 +593,21 @@ definitions, consumers, cardinality, retention, and exposure are established.
 | Centralised mapping | **Implemented** | FastAPI's native `add_exception_handler` for `StarletteHTTPException` and `Exception`; no custom middleware framework. |
 | Consistent envelope (additive) | **Implemented** | `error{code,category,message,details,retryable}` + `request_id` + `correlation_id`; legacy `detail` preserved verbatim. |
 | Compatibility documentation | **Implemented** | `ERROR_CATALOG.md` §1.1 and `API_CONTRACT.md` §1 contract-change notice. |
-| Contract/regression tests | **Implemented** | `tests/unit/api/test_error_contract.py` — 143 tests; 3 mutations killed (dropped `detail`, flipped retryability, leaked exception text). |
+| Contract/regression tests | **Implemented** | `tests/unit/api/test_error_contract.py` — 149 tests; 6 mutations killed (dropped `detail`, flipped retryability, leaked exception text, middleware schema drift, middleware correlation drift, doc status drift). |
 | Metrics endpoint | **Not implemented (deferred)** | Stage 2, not authorized. |
 | OpenTelemetry / JSON logging | **Not implemented (not authorized)** | — |
 
-Registry↔spec drift is now machine-checked in one direction: every registered
-code must be documented. That check immediately found one undocumented code
-(`BUDGET_EXHAUSTED`) and eight status-derived fallback codes, all now added to
-the spec.
+Registry↔spec drift is now machine-checked in **both** directions: every
+registered code must be documented, every documented taxonomy code must be
+registered, and each documented status must match the registry. That check
+immediately found one undocumented code (`BUDGET_EXHAUSTED`) and eight
+status-derived fallback codes, all now added to the spec.
+
+Middleware rejections and exception-handler errors are two different code paths
+that are easy to drift apart. `TestSchemaParity` pins both to the same top-level
+schema, the same `error` object, and the same correlation-ID semantics
+(supplied ID echoed verbatim; minted ID equal in body and header), so a change
+that fixes one path and forgets the other fails the suite.
 
 Local verification of this increment (not CI):
 - Unit + contract: 3614 passed, 1 skipped.
