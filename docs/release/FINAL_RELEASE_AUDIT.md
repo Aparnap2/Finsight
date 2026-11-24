@@ -51,9 +51,9 @@ performed through the application.
 
 | Status | Count | Share |
 |---|---|---|
-| PASS | 109 | 67.3% |
+| PASS | 111 | 68.5% |
 | CONDITIONAL | 24 | 14.8% |
-| FAIL | 25 | 15.4% |
+| FAIL | 23 | 14.2% |
 | UNVERIFIED | 4 | 2.5% |
 | **Total** | **162** | 100% |
 
@@ -555,9 +555,9 @@ discovered during the UNVERIFIED investigation. All commits are on
 
 ### Remaining items (non-blocking, documented limitations)
 
-1. Bad CSV header → 500 (contract wants 400).
-2. Internal exception text echoed in `detail` (G10).
-3. `/gui/reconciliation` is a placeholder; workflow requires `curl`.
+1. Bad CSV header → 400 (RESOLVED, commit `c969157`).
+2. Internal exception text echoed in `detail` (G10, RESOLVED, commit `c969157`).
+3. `/gui/reconciliation` is a placeholder; workflow is API-driven (README updated).
 4. FP&A endpoints still registered on the product app.
 5. Duplicate-import behaviour (F10).
 6. Broken documentation references (N9).
