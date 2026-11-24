@@ -49,6 +49,8 @@ from shared.utils.tools.tool_result import ToolResult
 
 router = APIRouter()
 
+logger = logging.getLogger(__name__)
+
 _runs: dict[str, dict[str, Any]] = {}
 
 # In-memory store for action items (would be DB-backed in production)
@@ -461,7 +463,8 @@ async def execute_full_pipeline(req: PipelineExecuteRequest) -> PipelineExecuteR
     try:
         result = _run_full_pipeline(req.period, req.tenant_id)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Pipeline execution failed: {e}") from e
+        logger.exception("pipeline execution failed")
+        raise HTTPException(status_code=500, detail="Pipeline execution failed.") from e
 
     assertions_resp = [_serialize_assertion(a) for a in result["assertions"]]
     commentary_resp = [
@@ -510,7 +513,8 @@ async def get_commentary(period: str, tenant_id: str = "CF001") -> CommentaryRes
     try:
         result = _run_full_pipeline(period, tenant_id)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Commentary generation failed: {e}") from e
+        logger.exception("commentary generation failed")
+        raise HTTPException(status_code=500, detail="Commentary generation failed.") from e
 
     assertions_resp = [_serialize_assertion(a) for a in result["assertions"]]
     commentary_resp = [
@@ -735,7 +739,8 @@ async def get_policy_decision(period: str, tenant_id: str = "CF001") -> PolicyDe
     try:
         result = _run_full_pipeline(period, tenant_id)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Policy evaluation failed: {e}") from e
+        logger.exception("policy evaluation failed")
+        raise HTTPException(status_code=500, detail="Policy evaluation failed.") from e
 
     pd = result["policy_decision"]
     return PolicyDecisionResponse(

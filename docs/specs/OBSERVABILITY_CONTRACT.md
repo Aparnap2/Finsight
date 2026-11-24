@@ -83,7 +83,7 @@ request_id → trace_id → tenant_id (hashed) → run_id → operation
 - `operation`: Logical operation name (e.g., "reconciliation.run", "import.upload", "exception.decision").
 
 **Propagation:**
-- HTTP requests: `request_id` and `correlation_id` in response headers.
+- HTTP requests: `request_id` and `correlation_id` in response headers (`X-Request-ID`, `X-Correlation-ID`). Both are accepted on the inbound request; an unsafe inbound value is replaced rather than echoed.
 - Database queries: `run_id` in query comments (for slow query analysis).
 - AI investigations: `run_id` and `exception_id` in provider call metadata.
 - Logs: all fields above included in every log line for the request.
@@ -160,6 +160,17 @@ request_id → trace_id → tenant_id (hashed) → run_id → operation
 ---
 
 ## 4. Health Endpoints
+
+> **Implementation note (v1.1).** The endpoints below are specified at
+> `/health/live` and `/health/ready`. The application currently registers
+> `/live` and `/ready` (see `apps/api/observability.py::create_readiness_router`).
+> Both spellings are exempt from tenant authentication so an unauthenticated
+> probe works either way. The divergence is recorded in `ERROR_CATALOG.md` §6
+> and is not silently "fixed" by renaming the contract.
+>
+> Readiness currently performs the database check only. Migration-currency and
+> required-table checks are specified but **not implemented**; a ready process
+> therefore proves connectivity, not migration correctness.
 
 ### GET /health/live
 
