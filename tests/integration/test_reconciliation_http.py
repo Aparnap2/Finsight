@@ -12,6 +12,7 @@ from __future__ import annotations
 import io
 import os
 from decimal import Decimal
+from threading import Barrier, Thread
 from typing import Any
 from uuid import uuid4
 
@@ -483,4 +484,62 @@ class TestPersistenceAtomicity:
             assert persisted["exceptions"] >= 1
         finally:
             self._remove_failing_trigger(engine)
+            engine.dispose()
+
+
+class TestConcurrentIdempotency:
+    """Two simultaneous reconciles with the same key produce one logical run."""
+
+    def test_duplicate_concurrent_reconcile_yields_one_run(self) -> None:
+        ca = _client(TENANT_A)
+        r = ca.post(
+            "/api/v1/reconciliation/sessions",
+            json={"period_start": "2026-11-01", "period_end": "2026-11-30"},
+        )
+        assert r.status_code == 200, r.text
+        session_id = r.json()["session_id"]
+        _upload(ca, session_id, "INVOICE", TWO_INVOICE_CSV)
+        _upload(ca, session_id, "STRIPE", TWO_STRIPE_CSV)
+        _upload(ca, session_id, "BANK", TWO_BANK_CSV)
+        assert ca.post(f"/api/v1/reconciliation/sessions/{session_id}/validate").status_code == 200
+        key = f"race-{uuid4()}"
+
+        results: list[Any] = []
+        barrier = Barrier(2)
+
+        def worker() -> None:
+            barrier.wait()
+            resp = ca.post(
+                f"/api/v1/reconciliation/sessions/{session_id}/reconcile",
+                json={
+                    "idempotency_key": key,
+                    "tolerance_absolute": "0",
+                    "tolerance_percent": "0",
+                },
+            )
+            results.append(resp)
+
+        threads = [Thread(target=worker) for _ in range(2)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert len(results) == 2
+        assert all(r.status_code == 200 for r in results), [r.text for r in results]
+        run_ids = {r.json()["run_id"] for r in results}
+        assert len(run_ids) == 1, run_ids
+
+        engine = create_engine(DSN)
+        try:
+            with engine.connect() as conn:
+                count = conn.execute(
+                    text(
+                        "SELECT count(*) FROM reconciliation_runs "
+                        "WHERE tenant_id = :tenant AND idempotency_key = :key"
+                    ),
+                    {"tenant": TENANT_A, "key": key},
+                ).scalar_one()
+            assert count == 1
+        finally:
             engine.dispose()

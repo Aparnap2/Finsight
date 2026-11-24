@@ -273,7 +273,10 @@ def _title_for(code: str | None) -> str:
     return titles.get(code or "", "Reconciliation exception")
 
 
-@persist_guarded
+class IdempotencyConflictError(ValueError):
+    """Raised when an idempotency key is reused with a differing payload."""
+
+
 def start_reconciliation(
     session: Session,
     *,
@@ -308,10 +311,10 @@ def start_reconciliation(
     )
     if existing is not None:
         if existing.input_fingerprint != input_fingerprint:
-            raise ValueError(
+            raise IdempotencyConflictError(
                 f"Idempotency conflict: key {idempotency_key!r} was already used "
                 f"with a different input fingerprint."
-            )
+            ) from None
         return existing.run_id
 
     run = ReconciliationRun(
@@ -324,8 +327,25 @@ def start_reconciliation(
         input_fingerprint=input_fingerprint,
         input_snapshot_ref=input_snapshot_ref,
     )
-    session.add(run)
-    session.flush()
+    try:
+        with session.begin_nested():
+            session.add(run)
+            session.flush()
+    except IntegrityError:
+        existing = (
+            session.query(ReconciliationRun)
+            .filter(
+                ReconciliationRun.tenant_id == tenant_id,
+                ReconciliationRun.idempotency_key == idempotency_key,
+            )
+            .first()
+        )
+        if existing is None or existing.input_fingerprint != input_fingerprint:
+            raise IdempotencyConflictError(
+                f"Idempotency conflict: key {idempotency_key!r} was already used "
+                f"with a different input fingerprint."
+            ) from None
+        return existing.run_id
 
     # Matches (invoice -> charge edges)
     for link in getattr(report, "links", ()):
@@ -468,9 +488,18 @@ def record_decision(
 
     Does not commit. The caller commits the transaction.
     """
-    exc = session.get(ReconciliationException, exception_id)
+    exc = session.get(ReconciliationException, exception_id, with_for_update=True)
     if exc is None or exc.tenant_id != tenant_id:
         raise ValueError(f"Exception {exception_id} not found for tenant {tenant_id}.")
+    if exc.status != previous_status:
+        from finance.exceptions.errors import IllegalTransitionError
+
+        raise IllegalTransitionError(
+            exception_id=exception_id,
+            from_state=exc.status,
+            to_state=new_status,
+            reason="no-op: concurrent decision changed the status; retry",
+        )
     validate_transition(exc.status, new_status, decision_type)
     decision = ExceptionDecision(
         exception_id=exception_id,

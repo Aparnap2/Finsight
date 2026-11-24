@@ -27,6 +27,7 @@ from finance.exceptions.errors import IllegalTransitionError
 from finance.reconciliation.exception_lifecycle import allowed_targets
 from finance.reconciliation.models import ExceptionStatus
 from finance.reconciliation.persistence import (
+    IdempotencyConflictError,
     create_import_session,
     get_audit_events,
     get_import_session,
@@ -420,6 +421,9 @@ def reconcile_session(
     except HTTPException:
         session.rollback()
         raise
+    except IdempotencyConflictError as exc:
+        session.rollback()
+        raise HTTPException(status_code=409, detail="Idempotency conflict.") from exc
     except Exception as exc:
         session.rollback()
         raise HTTPException(status_code=500, detail=str(exc)) from exc
