@@ -573,7 +573,7 @@ generated at run time, matching the later `229b4f1` approach, which was dropped
 as redundant), all subsequent commits replayed. Force-pushed with
 `--force-with-lease`.
 
-Verification of rewritten head `5f5c38df44b6fac25ae4c2dbb4f76befc98cc3ba`:
+Verification of rewritten head `8667f6e1bc59c42adf8a44b6790ba705e574a18a`:
 - No occurrence of the credential in reachable HEAD history.
 - RLS integration tests: 4 passed.
 - Full local gates: ruff clean, mypy 1137/1137, 3451 unit+contract passed.
