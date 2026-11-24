@@ -116,7 +116,6 @@ This compatibility layer is a **transition state**, not the final contract. A
 later stage may drop the top-level `detail` once consumers are migrated; that
 removal is a breaking change and requires its own explicit authorization.
 
-
 ---
 
 ## 2. Error Taxonomy
@@ -136,12 +135,17 @@ but must not contradict it.
 | **Concurrency** | 409 | WARNING | **Yes (safe)** | Caller | Re-read current state, then retry with fresh preconditions. |
 | **Resource** | 404 | INFO | No | Caller | Verify the identifier exists in tenant scope. |
 | **Processing** | 5xx | ERROR | No | FinSight engineering | Investigate with the correlation ID; do not blind-retry. |
-| **Infrastructure** | 5xx | ERROR | Yes (bounded) | Platform | Back off and retry; surface `Retry-After`. |
+| **Infrastructure** | 5xx (429 for throttling) | ERROR | Yes (bounded) | Platform | Back off and retry; surface `Retry-After`. |
 | **Provider (AI)** | 5xx | WARNING | Yes (bounded) | AI platform | Deterministic results stay available; retry investigation separately. |
 
 Concurrency and business-rule failures are **not** validation failures. They
 mean the request was well-formed but the system refused it for a state reason.
 Collapsing them into `400` hides whether a safe retry is possible.
+
+Throttling (`RATE_LIMITED`, `BUDGET_EXHAUSTED`) sits in the infrastructure
+category because its recovery policy is identical — back off and retry — but it
+is a `429`, not a `5xx`: the service is healthy, the caller is over quota. The
+category's severity and retryability still apply unchanged.
 
 ### 2.1 Validation Errors (4xx, not retryable)
 
