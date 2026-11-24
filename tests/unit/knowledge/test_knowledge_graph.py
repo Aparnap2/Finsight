@@ -165,24 +165,25 @@ def test_validator_rejects_broken_link(validator: ModuleType, tmp_path: Path) ->
 def test_validator_rejects_stale_fingerprint(validator: ModuleType, tmp_path: Path) -> None:
     bundle = tmp_path / "bundle"
     bundle.mkdir()
-    # create a source file
-    src = tmp_path / "src.py"
-    src.write_text("x = 1\n", encoding="utf-8")
-    # reference it with a wrong fingerprint
     wrong = "f" * 64
-    (bundle / "m.md").write_text(
-        f"---\ntype: Module\nsources:\n  - id: src\n    resource: /{src.relative_to(tmp_path.parent).as_posix() if False else 'src.py'}\nsource_fingerprint: {wrong}\n---\nbody\n",  # noqa: E501
-        encoding="utf-8",
-    )
-    # The source path won't resolve (src.py not under ROOT), so fingerprint check skipped.
-    # Instead test that a resolvable stale fingerprint is caught.
+    # A resolvable source file whose recorded fingerprint no longer matches.
     root_src = _ROOT / "docs" / "knowledge" / "src_test_tmp.py"
     root_src.write_text("x = 1\n", encoding="utf-8")
     try:
-        (bundle / "m2.md").write_text(
-            f"---\ntype: Module\nsources:\n  - id: src\n    resource: /docs/knowledge/src_test_tmp.py\nsource_fingerprint: {wrong}\n---\nbody\n",  # noqa: E501
-            encoding="utf-8",
+        frontmatter = "\n".join(
+            [
+                "---",
+                "type: Module",
+                "sources:",
+                "  - id: src",
+                "    resource: /docs/knowledge/src_test_tmp.py",
+                f"source_fingerprint: {wrong}",
+                "---",
+                "body",
+                "",
+            ]
         )
+        (bundle / "m2.md").write_text(frontmatter, encoding="utf-8")
         assert validator.validate_bundle(bundle) == 1
     finally:
         root_src.unlink(missing_ok=True)

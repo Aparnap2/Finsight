@@ -57,7 +57,7 @@ def validate_bundle(bundle_dir: Path, *, strict: bool = False) -> int:
     md_files = sorted(bundle_dir.rglob("*.md"))
     concept_files = [
         p for p in md_files if p.name not in ("index.md", "log.md", "NOTICE.md", "coverage.md")
-    ]  # noqa: E501
+    ]
 
     # 1. frontmatter conformance
     for path in concept_files:
@@ -74,7 +74,7 @@ def validate_bundle(bundle_dir: Path, *, strict: bool = False) -> int:
             isinstance(gen, dict)
             and gen.get("by", "").startswith("process:")
             and not fm.get("sources")
-        ):  # noqa: E501
+        ):
             warnings.append(f"{rel}: machine-generated concept has no sources")
         # fingerprint staleness (any concept with a fingerprint)
         fp = fm.get("source_fingerprint")

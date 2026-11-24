@@ -147,6 +147,7 @@ def _slug(module_name: str) -> str:
 
 
 def _is_human_reviewed(path: Path) -> bool:
+    """True when a concept declares a human verifier in its frontmatter."""
     if not path.exists():
         return False
     text = path.read_text(encoding="utf-8")
@@ -176,7 +177,7 @@ def _frontmatter(concept: dict[str, Any]) -> str:
     # Use yaml.safe_dump for correct quoting, then strip trailing newline
     dumped = yaml.safe_dump(
         fm, default_flow_style=None, sort_keys=False, allow_unicode=True
-    ).rstrip("\n")  # noqa: E501
+    ).rstrip("\n")
     # Make generated/verified inline-ish: safe_dump already fine
     lines = ["---", dumped, "---"]
     return "\n".join(lines)
@@ -222,7 +223,7 @@ class Concept:
     type: str
     title: str
     description: str
-    resource: str
+    resource: str | None
     tags: list[str]
     sources: list[dict[str, str]]
     source_fingerprint: str | None
@@ -298,11 +299,12 @@ def _build_api_concept(path: Path) -> Concept:
     body_parts.append("## In-scope dependencies")
     body_parts.append("")
     body_parts.append(
-        "- [finance.reconciliation.persistence](/code/modules/finance-reconciliation-persistence.md)"
-    )  # noqa: E501
+        "- [finance.reconciliation.persistence]"
+        "(/code/modules/finance-reconciliation-persistence.md)"
+    )
     body_parts.append(
         "- [shared.models.reconciliation](/code/modules/shared-models-reconciliation.md)"
-    )  # noqa: E501
+    )
     body_parts.append("")
     body_parts.append("## Provenance")
     body_parts.append("")
@@ -376,7 +378,7 @@ def _build_migration_concept(paths: list[Path]) -> Concept:
         tags=["reconciliation", "migration"],
         sources=[
             {"id": "src", "resource": "/alembic/versions", "title": "reconciliation migrations"}
-        ],  # noqa: E501
+        ],
         source_fingerprint=fp,
         body="\n".join(body_parts),
     )
@@ -384,7 +386,7 @@ def _build_migration_concept(paths: list[Path]) -> Concept:
 
 def _build_arch_concept(
     slug: str, title: str, description: str, links: list[str], fp_sources: list[Path]
-) -> Concept:  # noqa: E501
+) -> Concept:
     body_parts = [f"# {title}", "", description, ""]
     if links:
         body_parts.append("## Related concepts")
@@ -412,7 +414,7 @@ def _build_arch_concept(
         tags=["reconciliation", "architecture"],
         sources=[
             {"id": "src", "resource": "/finance/reconciliation", "title": "reconciliation runtime"}
-        ],  # noqa: E501
+        ],
         source_fingerprint=fp if fp else None,
         body="\n".join(body_parts),
     )
@@ -437,13 +439,6 @@ def _concept_path(knowledge_root: Path, c: Concept) -> Path:
     return knowledge_root / "code" / "modules" / f"{c.slug}.md"
 
 
-def _is_human_reviewed(path: Path) -> bool:
-    if not path.exists():
-        return False
-    text = path.read_text(encoding="utf-8")
-    return "human:" in text
-
-
 def generate_bundle(knowledge_root: Path) -> dict[str, str]:
     """Return a mapping of relative-path -> content for the full bundle."""
     modules_map = _first_party_modules()
@@ -455,7 +450,7 @@ def generate_bundle(knowledge_root: Path) -> dict[str, str]:
     for path in files:
         if path.as_posix().endswith("reconciliation_routes.py") or path.as_posix().endswith(
             "shared/models/reconciliation.py"
-        ):  # noqa: E501
+        ):
             continue
         _module_name_for(path)
         concepts.append(_build_module_concept(path, modules_map))
@@ -479,16 +474,17 @@ def generate_bundle(knowledge_root: Path) -> dict[str, str]:
         _build_arch_concept(
             "reconciliation-workflow",
             "Reconciliation Workflow",
-            "Three-source reconciliation execution path: ingest, validate, reconcile, persist, decide, audit.",  # noqa: E501
+            "Three-source reconciliation execution path: ingest, validate, "
+            "reconcile, persist, decide, audit.",
             [
                 "finance.reconciliation.statement_workflow",
                 "apps.api.reconciliation_routes",
                 "finance.reconciliation.persistence",
-            ],  # noqa: E501
+            ],
             [
                 ROOT / "finance/reconciliation/statement_workflow.py",
                 ROOT / "apps/api/reconciliation_routes.py",
-            ],  # noqa: E501
+            ],
         )
     )
     concepts.append(
@@ -500,11 +496,11 @@ def generate_bundle(knowledge_root: Path) -> dict[str, str]:
                 "finance.reconciliation.persistence",
                 "apps.api.reconciliation_routes",
                 "shared.models.reconciliation",
-            ],  # noqa: E501
+            ],
             [
                 ROOT / "finance/reconciliation/persistence.py",
                 ROOT / "apps/api/reconciliation_routes.py",
-            ],  # noqa: E501
+            ],
         )
     )
 
@@ -538,7 +534,7 @@ def _render_index(concepts: list[Concept]) -> str:
         "",
         "OKF v0.2 bundle. Machine-generated; do not edit by hand.",
         "",
-    ]  # noqa: E501
+    ]
     lines.append("## Concepts")
     lines.append("")
     for c in sorted(concepts, key=lambda x: x.slug):
@@ -619,7 +615,7 @@ def _render_notice() -> str:
 
 def write_bundle(
     knowledge_root: Path, bundle: dict[str, str], *, preserve_human: bool = True
-) -> list[str]:  # noqa: E501
+) -> list[str]:
     """Write bundle files. Returns list of files written."""
     written: list[str] = []
     for rel, content in bundle.items():
@@ -684,11 +680,12 @@ def main() -> int:
 
         spec = importlib.util.spec_from_file_location(
             "validate_knowledge", ROOT / "scripts" / "validate_knowledge.py"
-        )  # noqa: E501
+        )
         assert spec and spec.loader
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
-        return mod.validate_bundle(knowledge_root)
+        result: int = mod.validate_bundle(knowledge_root)
+        return result
 
     # write
     knowledge_root.mkdir(parents=True, exist_ok=True)
