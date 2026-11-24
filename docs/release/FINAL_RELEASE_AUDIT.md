@@ -539,7 +539,7 @@ discovered during the UNVERIFIED investigation. All commits are on
 | 4 | Run-scoped audit + readiness 503 | `dc932b8` | `get_audit_events(entity_ids=…)`; `/ready` returns 503 on DB failure |
 | 5 | Remote CI restored | `5be6502` | root cause: `alembic.ini` outside declared scope; added to `verification-scope`; CI (fast), Integration, AI evals, PR verification all SUCCESS |
 | + | RLS tenant GUC on route session | `94b5505` | middleware is a pure header/actor gate; `_db_session` installs an `after_begin` hook; verified against non-superuser role |
-| + | RLS probe password not committed | `229b4f1` | run-time generated password |
+| + | RLS probe credential not committed | `229b4f1` | run-time generated secret |
 | + | Transaction atomicity proof | `bad1a0f` | trigger injection at last write leaves zero rows of any kind; idempotency key reusable |
 | + | Concurrent idempotency | (uncommitted→committed with atomicity) | savepoint + `IntegrityError` → winner's run id; DB probe confirms serialization |
 | + | Concurrent exception decisions | (same) | `SELECT … FOR UPDATE` in `record_decision`; DB probe confirms one winner + one conflict |
@@ -551,7 +551,7 @@ discovered during the UNVERIFIED investigation. All commits are on
 - Mypy baseline: 1137/1137, new=0
 - Ruff: clean
 - Remote CI at `229b4f1`: CI (fast) SUCCESS, Integration SUCCESS, AI evals SUCCESS,
-  PR verification SUCCESS, GitGuardian SUCCESS (after password fix)
+  PR verification SUCCESS, GitGuardian SUCCESS (after credential fix)
 
 ### Remaining items (non-blocking, documented limitations)
 
