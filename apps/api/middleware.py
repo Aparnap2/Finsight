@@ -25,7 +25,9 @@ from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 
+from apps.api.errors import build_error_body
 from finplatform.rbac.matrix import ROLE_PERMISSIONS
+from shared.errors import ErrorCode
 
 _default_engine: Any = None
 
@@ -102,13 +104,24 @@ class TenantAuthMiddleware(BaseHTTPMiddleware):
         tenant_id = request.headers.get("X-Tenant-ID")
         role = request.headers.get("X-Role")
         if not tenant_id or not role:
-            return JSONResponse(
-                status_code=401,
-                content={"detail": "Missing X-Tenant-ID or X-Role header"},
+            # Authentication failures are security-relevant: they carry the
+            # error contract and a correlation ID so a denial is auditable,
+            # not an anonymous 401.
+            body = build_error_body(
+                code=ErrorCode.TENANT_CONTEXT_MISSING,
+                legacy_detail="Missing X-Tenant-ID or X-Role header",
+                request=request,
             )
+            return JSONResponse(status_code=401, content=body)
 
         if role not in ROLE_PERMISSIONS:
-            return JSONResponse(status_code=403, content={"detail": f"Unknown role: {role}"})
+            body = build_error_body(
+                code=ErrorCode.FORBIDDEN,
+                legacy_detail=f"Unknown role: {role}",
+                request=request,
+                message="Insufficient permissions for this action.",
+            )
+            return JSONResponse(status_code=403, content=body)
 
         user_id = request.headers.get("X-User-ID", "")
         request.state.actor = {"tenant_id": tenant_id, "user_id": user_id, "role": role}

@@ -19,14 +19,12 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from types import MappingProxyType
 
+from shared.errors import ErrorCode
 
-class ApiErrorCode(StrEnum):
-    """Stable API error codes from the frozen error catalog."""
-
-    INVALID_FILE = "INVALID_FILE"
-    INVALID_SCHEMA = "INVALID_SCHEMA"
-    VALIDATION_FAILED = "VALIDATION_FAILED"
-    DUPLICATE_IMPORT = "DUPLICATE_IMPORT"
+#: The API error codes are owned by the shared registry
+#: (:mod:`shared.errors.catalog`); this alias keeps the ingestion vocabulary
+#: without creating a second source of truth.
+ApiErrorCode = ErrorCode
 
 
 class IssueCode(StrEnum):

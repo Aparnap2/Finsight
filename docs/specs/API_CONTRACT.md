@@ -19,17 +19,43 @@ Every request is scoped to the authenticated tenant. Cross-tenant access returns
 
 ### Error response envelope
 
+Every error response carries a structured `error` object plus request
+identifiers:
+
 ```json
 {
   "error": {
     "code": "ERROR_CODE",
+    "category": "validation",
     "message": "Human-readable message",
-    "details": {}
+    "details": {},
+    "retryable": false
   },
   "request_id": "uuid",
-  "correlation_id": "uuid"
+  "correlation_id": "uuid",
+  "detail": "<legacy field, preserved verbatim>"
 }
 ```
+
+* `error.code` is a stable code from `docs/specs/ERROR_CATALOG.md`. The
+  executable registry is `shared/errors/catalog.py`; the response is derived
+  from it, never the reverse.
+* `error.retryable` states whether the identical request may be retried. Clients
+  must drive retry behaviour from this field, not from status-code guesses.
+* `request_id` / `correlation_id` are also echoed as the `X-Request-ID` and
+  `X-Correlation-ID` response headers.
+* `detail` is the **pre-envelope** body. It is preserved byte-for-byte so
+  existing clients keep working.
+
+**Contract change notice (additive, Stage 1).** This is a deliberate,
+documented extension of the frozen contract, not a silent one. The `error`
+object, `retryable`, `request_id`, and `correlation_id` are additions; no
+status code changes and no existing field is removed or renamed. Middleware
+rejections (401 missing tenant context, 403 unknown role) emit the same
+envelope so a denial is traceable to a correlation ID. Removing the legacy
+`detail` key later is a breaking change and requires separate authorization.
+See `ERROR_CATALOG.md` §1.1 for the compatibility matrix and
+`tests/unit/api/test_error_contract.py` for the enforcing tests.
 
 ### Pagination
 
@@ -409,10 +435,22 @@ See `docs/specs/ERROR_CATALOG.md` for full taxonomy. Summary:
 | DUPLICATE_IMPORT | 409 | No |
 | IDEMPOTENCY_CONFLICT | 409 | No |
 | RESOURCE_NOT_FOUND | 404 | No |
+| UNAUTHORIZED | 401 | No |
+| FORBIDDEN | 403 | No |
 | TENANT_ACCESS_DENIED | 403 | No |
+| TENANT_CONTEXT_MISSING | 401 | No |
 | INVALID_STATE_TRANSITION | 409 | No |
+| ILLEGAL_TRANSITION | 409 | No |
+| DUPLICATE_DECISION | 409 | No |
+| STATE_VERSION_CONFLICT | 409 | Yes (after re-read) |
+| BAD_REQUEST | 400 | No |
 | RECONCILIATION_FAILED | 500 | No |
+| INTERNAL_ERROR | 500 | No |
 | PERSISTENCE_UNAVAILABLE | 503 | Yes (transient) |
+| SERVICE_UNAVAILABLE | 503 | Yes (transient) |
+| GATEWAY_TIMEOUT | 504 | Yes (transient) |
+| RATE_LIMITED | 429 | Yes (transient) |
+| BUDGET_EXHAUSTED | 429 | Yes (transient) |
 | PROVIDER_TIMEOUT | 504 | Yes (transient) |
 | PROVIDER_UNAVAILABLE | 503 | Yes (transient) |
 | EXPORT_FAILED | 500 | Yes (transient) |

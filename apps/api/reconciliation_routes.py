@@ -24,6 +24,7 @@ from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from apps.api.errors import ApiError
 from finance.exceptions.errors import IllegalTransitionError
 from finance.reconciliation.exception_lifecycle import allowed_targets
 from finance.reconciliation.models import ExceptionStatus
@@ -45,6 +46,7 @@ from finance.reconciliation.statement_workflow import (
 )
 from finance.source_ingestion import SourceType, ingest_source
 from finance.source_ingestion.issues import IngestionError
+from shared.errors import ErrorCode
 from shared.models.reconciliation import (
     AllocationLeg,
     ExceptionDecision,
@@ -213,7 +215,7 @@ async def upload_source(
         st = SourceType(source_type.upper())
         content = await file.read()
         if not content:
-            raise HTTPException(status_code=400, detail="Empty file.")
+            raise ApiError(status_code=400, detail="Empty file.", code=ErrorCode.INVALID_FILE)
         digest = hashlib.sha256(content).hexdigest()
         existing = (
             session.query(SourceFile)
@@ -271,7 +273,7 @@ async def upload_source(
         raise
     except IngestionError as exc:
         session.rollback()
-        raise HTTPException(status_code=400, detail=exc.detail) from exc
+        raise ApiError(status_code=400, detail=exc.detail, code=exc.code) from exc
     except Exception as exc:
         session.rollback()
         logger.exception("reconciliation route failed")
@@ -433,7 +435,9 @@ def reconcile_session(
         raise
     except IdempotencyConflictError as exc:
         session.rollback()
-        raise HTTPException(status_code=409, detail="Idempotency conflict.") from exc
+        raise ApiError(
+            status_code=409, detail="Idempotency conflict.", code=ErrorCode.IDEMPOTENCY_CONFLICT
+        ) from exc
     except Exception as exc:
         session.rollback()
         logger.exception("reconciliation route failed")
@@ -683,8 +687,14 @@ def decide_exception(
         except IllegalTransitionError as exc_error:
             session.rollback()
             if "no-op" in str(exc_error):
-                raise HTTPException(status_code=409, detail="Duplicate decision.") from exc_error
-            raise HTTPException(status_code=400, detail=str(exc_error)) from exc_error
+                raise ApiError(
+                    status_code=409,
+                    detail="Duplicate decision.",
+                    code=ErrorCode.DUPLICATE_DECISION,
+                ) from exc_error
+            raise ApiError(
+                status_code=400, detail=str(exc_error), code=ErrorCode.ILLEGAL_TRANSITION
+            ) from exc_error
         session.commit()
         decision = session.get(ExceptionDecision, decision_id)
         return {
@@ -749,9 +759,10 @@ def _target_status(current: str, decision_type: str) -> str:
         for candidate in (ExceptionStatus.UNDER_REVIEW, ExceptionStatus.INVESTIGATING):
             if candidate in targets:
                 return candidate.value
-        raise HTTPException(
+        raise ApiError(
             status_code=400,
             detail=f"No legal ASSIGN target from status {current!r}.",
+            code=ErrorCode.ILLEGAL_TRANSITION,
         )
     target = _DECISION_TARGET.get(decision)
     if target is None:

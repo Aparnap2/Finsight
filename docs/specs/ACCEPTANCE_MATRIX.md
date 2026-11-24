@@ -195,18 +195,21 @@ no test is listed as a gap, never assumed satisfied.
 | RQ-02 | Graceful | 5xx responses never contain exception text, SQL, or paths | `apps/api/reconciliation_routes.py` | `tests/unit/api/test_error_hygiene.py` | **Verified** |
 | RQ-03 | Tracked | `request_id` is minted, echoed, and logged | `apps/api/observability.py` | `tests/integration/test_observability.py::TestRequestId` | **Verified** |
 | RQ-04 | Tracked | `correlation_id` is accepted, echoed, and logged | `apps/api/observability.py` | `tests/integration/test_observability.py::TestCorrelationId` | **Verified** |
-| RQ-05 | Tracked | Every error carries a catalog `code` | all routes | — | **Gap** (responses use `detail` only) |
-| RQ-06 | Measured | Failure counters emitted per category | — | — | **Gap** (no metrics backend) |
+| RQ-05 | Tracked | Every error carries a catalog `code` | `shared/errors/catalog.py`, `apps/api/errors.py` | `tests/unit/api/test_error_contract.py` | **Verified** (additive envelope; `detail` preserved) |
+| RQ-06 | Measured | Failure counters emitted per category | — | — | **Gap** (no metrics backend; Stage 2 deferred pending metric definitions) |
 | RQ-07 | Observed | Readiness fails closed when the DB is unreachable | `apps/api/observability.py` | `tests/integration/test_db_degradation.py` | **Verified** |
 | RQ-08 | Observed | Readiness polling does not create a connection pool per call | `apps/api/observability.py` | `tests/unit/api/test_readiness_engine.py` | **Verified** |
 | RQ-09 | Recoverable | Retrying with the same idempotency key is safe and does not duplicate writes | `finance/reconciliation/persistence.py` | `tests/integration/test_reconciliation_concurrency.py` | **Verified** |
-| RQ-10 | Recoverable | `retryable` is advertised to the caller | — | — | **Gap** (taxonomy only) |
+| RQ-10 | Recoverable | `retryable` is advertised to the caller | `shared/errors/catalog.py`, `apps/api/errors.py` | `tests/unit/api/test_error_contract.py` | **Verified** (derived from registry) |
 | RQ-11 | No unsafe retry | API-layer 5xx handlers log the exception before returning | `apps/api/` | `tests/unit/api/test_error_hygiene.py` | **Verified** |
 | RQ-12 | No silent failure | No API-layer handler swallows the exception trace | `apps/api/` | `tests/unit/api/test_error_hygiene.py` | **Verified** |
 
 Rows marked **Gap** are deliberate: they are specified, measurable, and
-currently unbuilt. Closing RQ-05/06/10 requires an observability and
-error-envelope initiative that has not been authorized.
+currently unbuilt. RQ-05 and RQ-10 were closed by the Stage 1 error-contract
+increment (`shared/errors/catalog.py` + `apps/api/errors.py`). RQ-06 remains
+open because measurement is Stage 2 and has not been authorized: a metrics
+endpoint is only useful once the operational decisions it supports, its
+cardinality, retention, and exposure are defined.
 
 ---
 

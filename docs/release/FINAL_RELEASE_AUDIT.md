@@ -580,6 +580,42 @@ Verification of rewritten head `8667f6e1bc59c42adf8a44b6790ba705e574a18a`:
 - Remote CI: GitGuardian SUCCESS, CI (fast) SUCCESS, Integration SUCCESS,
   AI evals SUCCESS, PR verification SUCCESS, gate evidence bundle SUCCESS.
 
+### Stage 1 — Error contract (2026-11-24, local only)
+
+The owner authorized a two-stage reliability increment. **Stage 1 (error
+contract) is implemented; Stage 2 (measurement) is deferred** until metric
+definitions, consumers, cardinality, retention, and exposure are established.
+
+| Item | Status | Evidence |
+|---|---|---|
+| Stable error-code registry | **Implemented** | `shared/errors/catalog.py` — 31 codes, each with category, default status, severity, retryability, recovery, owner. |
+| Typed application errors | **Implemented** | `apps/api/errors.py::ApiError` subclasses FastAPI `HTTPException` so existing `except HTTPException` blocks are unchanged. |
+| Centralised mapping | **Implemented** | FastAPI's native `add_exception_handler` for `StarletteHTTPException` and `Exception`; no custom middleware framework. |
+| Consistent envelope (additive) | **Implemented** | `error{code,category,message,details,retryable}` + `request_id` + `correlation_id`; legacy `detail` preserved verbatim. |
+| Compatibility documentation | **Implemented** | `ERROR_CATALOG.md` §1.1 and `API_CONTRACT.md` §1 contract-change notice. |
+| Contract/regression tests | **Implemented** | `tests/unit/api/test_error_contract.py` — 143 tests; 3 mutations killed (dropped `detail`, flipped retryability, leaked exception text). |
+| Metrics endpoint | **Not implemented (deferred)** | Stage 2, not authorized. |
+| OpenTelemetry / JSON logging | **Not implemented (not authorized)** | — |
+
+Registry↔spec drift is now machine-checked in one direction: every registered
+code must be documented. That check immediately found one undocumented code
+(`BUDGET_EXHAUSTED`) and eight status-derived fallback codes, all now added to
+the spec.
+
+Local verification of this increment (not CI):
+- Unit + contract: 3614 passed, 1 skipped.
+- Reconciliation HTTP: 8 passed; RLS + concurrency: 5 passed, 1 skipped.
+- Observability / error-echo / DB-degradation: 27 passed.
+- Mypy baseline: 1137/1137, new=0. Ruff: clean.
+- Knowledge bundle: in sync, byte-identical regeneration, 0 errors/warnings.
+
+**The verdict is unchanged.** This increment improves failure containment and
+adds a structured error contract; it does not add quantitative observability
+(RQ-06 remains open) and does not address the financial-correctness items in
+§8. RQ-05 and RQ-10 are now **Verified** in `ACCEPTANCE_MATRIX.md` §9.1; the
+overall readiness verdict stays **CONDITIONAL GO** because green local gates on
+an increment are not proof that every reliability requirement is complete.
+
 ### Final verdict
 
 **CONDITIONAL GO** for the reconciliation workflow on the portfolio path: the core

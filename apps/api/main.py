@@ -3,6 +3,7 @@ from fastapi.exceptions import RequestValidationError
 
 from apps.api.approvals import router as approvals_router
 from apps.api.approvals import validation_error_handler
+from apps.api.errors import register_error_handlers
 from apps.api.execution_routes import router as execution_router
 from apps.api.middleware import TenantAuthMiddleware
 from apps.api.observability import RequestIDMiddleware, create_readiness_router
@@ -14,8 +15,12 @@ from apps.api.webhooks import router as webhook_router
 
 app = FastAPI(title="FinSight API", version="0.1.0")
 app.add_exception_handler(RequestValidationError, validation_error_handler)
-app.add_middleware(RequestIDMiddleware)
+register_error_handlers(app)
+# Middleware runs in reverse registration order: the request-ID middleware is
+# added last so it is outermost. That guarantees a correlation ID exists before
+# the tenant gate can reject a request, so security denials are traceable.
 app.add_middleware(TenantAuthMiddleware)
+app.add_middleware(RequestIDMiddleware)
 app.include_router(create_readiness_router())
 app.include_router(router, prefix="/api/v1")
 app.include_router(compute_router)

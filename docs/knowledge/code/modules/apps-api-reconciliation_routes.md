@@ -9,7 +9,7 @@ verified: {by: 'process:knowledge-graph', at: '2026-01-01T00:00:00Z'}
 status: stable
 sources:
 - {id: src, resource: /apps/api/reconciliation_routes.py, title: reconciliation_routes.py}
-source_fingerprint: 9dff35634fb86cca7484ca0476cdbfb9e78484cdaed0d11f68ba0a3b864ab3ca
+source_fingerprint: 129ab75e455706d65dc6af619499c4094279fb1f1a386ec55ae57404f537c88e
 ---
 
 # Reconciliation API routes
@@ -38,7 +38,7 @@ source_fingerprint: 9dff35634fb86cca7484ca0476cdbfb9e78484cdaed0d11f68ba0a3b864a
 
 ## Provenance
 
-Source fingerprint (SHA-256): `9dff35634fb86cca7484ca0476cdbfb9e78484cdaed0d11f68ba0a3b864ab3ca`
+Source fingerprint (SHA-256): `129ab75e455706d65dc6af619499c4094279fb1f1a386ec55ae57404f537c88e`
 
 > Route list derived from static decorator scanning.
 
