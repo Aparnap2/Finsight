@@ -14,6 +14,7 @@ retrieval.
 from __future__ import annotations
 
 import hashlib
+import logging
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Annotated, Any
@@ -43,6 +44,7 @@ from finance.reconciliation.statement_workflow import (
     run_statement_reconciliation,
 )
 from finance.source_ingestion import SourceType, ingest_source
+from finance.source_ingestion.issues import IngestionError
 from shared.models.reconciliation import (
     AllocationLeg,
     ExceptionDecision,
@@ -55,6 +57,8 @@ from shared.models.reconciliation import (
 )
 
 router = APIRouter(tags=["reconciliation"])
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -183,7 +187,8 @@ def create_session(body: CreateSessionRequest, request: Request) -> CreateSessio
         return CreateSessionResponse(session_id=session_id, status="CREATED")
     except Exception as exc:
         session.rollback()
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        logger.exception("reconciliation route failed")
+        raise HTTPException(status_code=500, detail="Internal server error.") from exc
     finally:
         session.close()
 
@@ -264,9 +269,13 @@ async def upload_source(
     except HTTPException:
         session.rollback()
         raise
+    except IngestionError as exc:
+        session.rollback()
+        raise HTTPException(status_code=400, detail=exc.detail) from exc
     except Exception as exc:
         session.rollback()
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        logger.exception("reconciliation route failed")
+        raise HTTPException(status_code=500, detail="Internal server error.") from exc
     finally:
         session.close()
 
@@ -310,7 +319,8 @@ def validate_session(session_id: str, request: Request) -> ValidateResponse:
         raise
     except Exception as exc:
         session.rollback()
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        logger.exception("reconciliation route failed")
+        raise HTTPException(status_code=500, detail="Internal server error.") from exc
     finally:
         session.close()
 
@@ -426,7 +436,8 @@ def reconcile_session(
         raise HTTPException(status_code=409, detail="Idempotency conflict.") from exc
     except Exception as exc:
         session.rollback()
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        logger.exception("reconciliation route failed")
+        raise HTTPException(status_code=500, detail="Internal server error.") from exc
     finally:
         session.close()
 
@@ -508,7 +519,8 @@ def get_run_detail(run_id: str, request: Request) -> dict[str, Any]:
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        logger.exception("reconciliation route failed")
+        raise HTTPException(status_code=500, detail="Internal server error.") from exc
     finally:
         session.close()
 
@@ -566,7 +578,8 @@ def get_run_audit(run_id: str, request: Request) -> dict[str, Any]:
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        logger.exception("reconciliation route failed")
+        raise HTTPException(status_code=500, detail="Internal server error.") from exc
     finally:
         session.close()
 
@@ -628,7 +641,8 @@ def investigate_exception(
         raise
     except Exception as exc:
         session.rollback()
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        logger.exception("reconciliation route failed")
+        raise HTTPException(status_code=500, detail="Internal server error.") from exc
     finally:
         session.close()
 
@@ -686,7 +700,8 @@ def decide_exception(
         raise
     except Exception as exc:
         session.rollback()
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        logger.exception("reconciliation route failed")
+        raise HTTPException(status_code=500, detail="Internal server error.") from exc
     finally:
         session.close()
 
@@ -794,7 +809,8 @@ def get_session_detail(session_id: str, request: Request) -> dict[str, Any]:
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        logger.exception("reconciliation route failed")
+        raise HTTPException(status_code=500, detail="Internal server error.") from exc
     finally:
         session.close()
 
@@ -841,7 +857,8 @@ def list_run_matches(
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        logger.exception("reconciliation route failed")
+        raise HTTPException(status_code=500, detail="Internal server error.") from exc
     finally:
         session.close()
 
@@ -914,7 +931,8 @@ def list_run_allocations(
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        logger.exception("reconciliation route failed")
+        raise HTTPException(status_code=500, detail="Internal server error.") from exc
     finally:
         session.close()
 
@@ -940,7 +958,8 @@ def list_run_exceptions(
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        logger.exception("reconciliation route failed")
+        raise HTTPException(status_code=500, detail="Internal server error.") from exc
     finally:
         session.close()
 
@@ -1002,7 +1021,8 @@ def get_exception_detail(exception_id: str, request: Request) -> dict[str, Any]:
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        logger.exception("reconciliation route failed")
+        raise HTTPException(status_code=500, detail="Internal server error.") from exc
     finally:
         session.close()
 
@@ -1045,7 +1065,8 @@ def create_run_export(run_id: str, body: CreateExportRequest, request: Request) 
         raise
     except Exception as exc:
         session.rollback()
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        logger.exception("reconciliation route failed")
+        raise HTTPException(status_code=500, detail="Internal server error.") from exc
     finally:
         session.close()
 
@@ -1074,6 +1095,7 @@ def get_export(export_id: str, request: Request) -> dict[str, Any]:
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        logger.exception("reconciliation route failed")
+        raise HTTPException(status_code=500, detail="Internal server error.") from exc
     finally:
         session.close()

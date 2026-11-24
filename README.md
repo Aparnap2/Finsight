@@ -30,7 +30,7 @@ The deterministic engine and the operator demonstration are complete and frozen.
 | REST API (sessions, sources, validate, reconcile, results, audit) | working |
 | Exception lifecycle and human decisions | working |
 | AI investigation (evidence-grounded, bounded) | working |
-| NiceGUI reconciliation page | working (minimal) |
+| NiceGUI reconciliation page | minimal placeholder (API is the supported workflow) |
 | HTTP workflow + restart recovery | verified (5 integration tests) |
 
 Status is tracked in [`docs/PRODUCT.md`](docs/PRODUCT.md). Limitations and deferred

@@ -385,15 +385,15 @@ def reconciliation() -> None:
 
     with ui.column():
         ui.label("Reconciliation workflow").classes("text-h6")
-        ui.label("Use the REST API at /api/v1/reconciliation/* for full control.")
-        ui.label("This page is a minimal read-only view of persisted runs.")
-
-    async def load() -> None:
-        status, payload = await _fetch("/api/v1/reconciliation/sessions")
-        # Sessions are not listed by tenant in the API; show guidance.
-        ui.label("Create a session via POST /api/v1/reconciliation/sessions.")
-
-    ui.button("Refresh", on_click=load)
+        ui.label(
+            "The reconciliation workflow is driven through the REST API at "
+            "/api/v1/reconciliation/*. This page is a minimal placeholder and "
+            "does not implement the workflow."
+        )
+        ui.label(
+            "See docs/release/LOCAL_DEPLOYMENT.md and "
+            "tests/integration/test_reconciliation_http.py for the supported flow."
+        )
 
 
 def mount_console(app: FastAPI) -> None:
