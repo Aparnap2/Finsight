@@ -7,6 +7,8 @@
 * [finance.reconciliation.allocation](/code/modules/finance-reconciliation-allocation.md) - Deterministic allocation of one bank deposit to payment charges.
 * [finance.reconciliation.bank](/code/modules/finance-reconciliation-bank.md) - Tenant-declared bank statement normalization into deposit records.
 * [finance.reconciliation.classifier](/code/modules/finance-reconciliation-classifier.md) - Break classification into the 3 versioned P0 exception types.
+* [finance.reconciliation.context](/code/modules/finance-reconciliation-context.md) - Deterministic reconciliation context models for CP1-A.
+* [finance.reconciliation.context_builder](/code/modules/finance-reconciliation-context_builder.md) - Deterministic context builder for CP1-C.
 * [finance.reconciliation.errors](/code/modules/finance-reconciliation-errors.md) - Error taxonomy for the P1 pure reconciliation core.
 * [finance.reconciliation.exception_lifecycle](/code/modules/finance-reconciliation-exception_lifecycle.md) - Reconciliation exception lifecycle: state machine and transition validation.
 * [finance.reconciliation.fingerprints](/code/modules/finance-reconciliation-fingerprints.md) - Stable sha256 fingerprints over canonical payment representations.

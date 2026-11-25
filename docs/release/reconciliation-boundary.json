@@ -39,6 +39,8 @@
     "finance.reconciliation.tolerances"
   ],
   "package_members_outside_closure": [
+    "finance/reconciliation/context.py",
+    "finance/reconciliation/context_builder.py",
     "finance/reconciliation/exception_lifecycle.py",
     "finance/reconciliation/investigation.py",
     "finance/reconciliation/ledger_resolution.py",
