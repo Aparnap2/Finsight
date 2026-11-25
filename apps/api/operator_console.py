@@ -378,6 +378,121 @@ def evaluation_detail(run_id: str) -> None:
     ui.button("Refresh", on_click=load)
 
 
+@ui.page("/verification")
+def verification(report_path: str | None = None) -> None:
+    """Read-only E2E verification viewer (CP6).
+
+    Loads a machine-readable E2E run report (JSON) from ``report_path`` (a
+    local file) or from pasted JSON, then renders run metadata, scenario
+    results, stage timeline, provider/trace evidence and the overall verdict.
+    The viewer never calculates or modifies the verdict; it displays the
+    report (and optionally re-runs the deterministic verifier for display).
+    """
+    _chrome("Verification", (_resolve_identity() or {}).get("tenant_id"))
+
+    with ui.column().classes("w-full"):
+        ui.label("E2E Verification Viewer").classes("text-h5")
+        ui.label(
+            "Read-only. Verdicts come from the deterministic verifier, not this page."
+        ).classes("text-caption")
+
+        report_box = ui.textarea(label="Paste E2E report JSON (or provide ?report_path=)").classes(
+            "w-full"
+        )
+        report_box.props("rows=8")
+
+        result_col = ui.column().classes("w-full")
+
+        def _render(report: dict[str, Any]) -> None:
+            result_col.clear()
+            with result_col:
+                # Run metadata
+                ui.label("Run metadata").classes("text-h6")
+                ui.label(f"run_id: {report.get('run_id')}")
+                ui.label(f"commit_sha: {report.get('commit_sha')}")
+                ui.label(f"image_digest: {report.get('image_digest')}")
+                ui.label(f"migration_revision: {report.get('migration_revision')}")
+                ui.label(f"environment: {report.get('environment')}")
+                ui.label(f"timestamp: {report.get('timestamp')}")
+                verdict = report.get("overall_verdict", "INCOMPLETE")
+                ui.badge(f"overall: {verdict}")
+
+                # Stages
+                ui.label("Stages").classes("text-h6")
+                for st in report.get("stages", []):
+                    ui.label(f"{st.get('stage')}: {st.get('status')} — {st.get('detail', '')}")
+
+                # Scenarios
+                ui.label("Scenarios").classes("text-h6")
+                for sc in report.get("scenarios", []):
+                    ui.label(
+                        f"{sc.get('scenario_id')}: {sc.get('verdict')} "
+                        f"(mismatches: {sc.get('mismatches', [])})"
+                    )
+                    exp = sc.get("expected", {})
+                    act = sc.get("actual", {})
+                    if exp or act:
+                        with ui.row():
+                            ui.label("expected:").classes("text-bold")
+                            ui.label(json.dumps(exp, sort_keys=True))
+                        with ui.row():
+                            ui.label("actual:").classes("text-bold")
+                            ui.label(json.dumps(act, sort_keys=True))
+
+                # Provider
+                prov = report.get("provider")
+                if prov:
+                    ui.label("Provider").classes("text-h6")
+                    ui.label(f"provider: {prov.get('provider_name')}")
+                    ui.label(f"model: {prov.get('model')}")
+                    ui.label(f"request_id: {prov.get('request_id')}")
+                    ui.label(f"success: {prov.get('success')}")
+
+                # Trace
+                tr = report.get("trace")
+                if tr:
+                    ui.label("Trace").classes("text-h6")
+                    ui.label(f"trace_id: {tr.get('trace_id')}")
+                    ui.label(f"exported: {tr.get('exported')}")
+                    ui.label(f"backend: {tr.get('backend')}")
+
+                # Financial invariants
+                inv = report.get("financial_invariants", {})
+                if inv:
+                    ui.label("Financial invariants").classes("text-h6")
+                    for k, v in inv.items():
+                        ui.label(f"{k}: {v}")
+
+        async def load() -> None:
+            result_col.clear()
+            raw = report_box.value.strip()
+            if report_path:
+                try:
+                    from pathlib import Path
+
+                    raw = Path(report_path).read_text()
+                    report_box.value = raw
+                except Exception as e:
+                    with result_col:
+                        ui.label(f"Failed to read report_path: {e}")
+                    return
+            if not raw:
+                with result_col:
+                    ui.label("No report provided.")
+                return
+            try:
+                report = json.loads(raw)
+            except Exception as e:
+                with result_col:
+                    ui.label(f"Invalid JSON: {e}")
+                return
+            _render(report)
+
+        ui.button("Render", on_click=load)
+        if report_path:
+            ui.timer(0.1, load, once=True)
+
+
 @ui.page("/reconciliation")
 def reconciliation() -> None:
     """Reconciliation workflow: sessions, runs, exceptions."""
