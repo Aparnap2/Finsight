@@ -1,0 +1,91 @@
+name: Staging E2E (manual)
+
+# Level 2 live staging verification. Manual trigger only.
+# Requires GitHub Environment "staging" with scoped secrets:
+#   STAGING_DATABASE_URL, STAGING_LLM_API_KEY, STAGING_OTLP_ENDPOINT,
+#   STAGING_TENANT_ID, STAGING_API_BASE_URL
+# See docs/release/STAGING_E2E.md for setup.
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit_sha:
+        description: "Commit SHA to verify (defaults to the workflow's ref)"
+        required: false
+        type: string
+      image_digest:
+        description: "Docker image digest to deploy (optional)"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  staging-e2e:
+    name: Live staging E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: staging
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.commit_sha || github.sha }}
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Sync dependencies
+        run: uv sync --all-extras --frozen
+
+      # --- Deploy candidate to staging (placeholder) ---
+      # Replace with your actual deploy step (docker push + k8s/ecs/etc.)
+      - name: Deploy candidate to staging
+        run: |
+          echo "Deploy step placeholder. Implement per your staging infra."
+          echo "Image digest: ${{ inputs.image_digest || 'n/a' }}"
+          echo "Commit: ${{ inputs.commit_sha || github.sha }}"
+
+      - name: Wait for readiness
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS "${{ secrets.STAGING_API_BASE_URL }}/ready" >/dev/null 2>&1; then
+              echo "ready"
+              break
+            fi
+            sleep 5
+          done
+
+      # --- Run live E2E against real provider ---
+      - name: Run staging E2E
+        env:
+          FINSIGHT_TEST_DSN: ${{ secrets.STAGING_DATABASE_URL }}
+          POSTGRES_URI: ${{ secrets.STAGING_DATABASE_URL }}
+          LLM_API_KEY: ${{ secrets.STAGING_LLM_API_KEY }}
+          OTEL_EXPORTER_OTLP_ENDPOINT: ${{ secrets.STAGING_OTLP_ENDPOINT }}
+          STAGING_TENANT_ID: ${{ secrets.STAGING_TENANT_ID }}
+          STAGING_API_BASE_URL: ${{ secrets.STAGING_API_BASE_URL }}
+        run: |
+          set -o pipefail
+          uv run pytest tests/integration/test_connected_workflow.py \
+            -q -rs 2>&1 | tee staging-e2e.log
+          # Note: test_connected_workflow uses FakeLLM. For live staging,
+          # create a staging-specific test module that uses the real provider.
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: staging-e2e-evidence
+          path: |
+            staging-e2e.log
+            docs/evidence/cp5/report.json
+          if-no-files-found: warn
