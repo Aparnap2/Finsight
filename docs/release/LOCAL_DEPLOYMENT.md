@@ -92,7 +92,7 @@ the middleware exemption list to make probes anonymous.
 
 ## 5. Fresh-database migrations
 
-Current alembic head: `b7e2d9f4a516` (6 revisions). The sequence below was
+Current alembic head: `d4e5f6a7b8c9` (7 revisions). The sequence below was
 verified end to end on a fresh `postgres:17-alpine`; it mirrors
 `tests/integration/test_tenant_isolation.py::_apply_migrations`, which is the
 executable authority. `shared/migrations.py` records applied SQL versions in
@@ -100,7 +100,10 @@ executable authority. `shared/migrations.py` records applied SQL versions in
 
 Order is load-bearing:
 
-1. `alembic upgrade head` — creates base tables (`webhook_events`, ledger keys).
+1. `alembic upgrade head` — creates base tables (`webhook_events`, ledger keys)
+   and the full reconciliation schema (`reconciliation_tenants`, runs, matches,
+   allocations, legs, exceptions, decisions, source files, import rows, exports,
+   investigations) plus the demo tenant seed.
 2. SQL `000`–`010` — extensions, constraints, RLS, audit triggers, identity.
 3. ORM `create_all` for `finance.exceptions.models.Base` — `exceptions`,
    `exception_audits` (created by no alembic revision).
@@ -138,18 +141,19 @@ for f in database/migrations/01[123]_*.sql; do
   psql "$PSQL_DSN" -v ON_ERROR_STOP=1 -f "$f" || exit 1
 done
 
-python -m alembic current      # b7e2d9f4a516 (head)
+python -m alembic current      # d4e5f6a7b8c9 (head)
 ```
 
 Post-conditions verified on a fresh database:
 
-- `alembic_version = b7e2d9f4a516`
-- `pg_class.relrowsecurity` is true for `execution_records` and `idempotency_keys`
+- `alembic_version = d4e5f6a7b8c9`
+- 12 tables have both `pg_class.relrowsecurity` and `relforcerowsecurity` true,
+  including `execution_records` and `idempotency_keys`
 - `chk_audit_event_type` includes `IDEMPOTENCY_CONFLICT`
 
 `docs/release/STAGING_VALIDATION.md` records head `c9d5e7f1a204` and SQL through
-`011`; that snapshot predates revisions `a3f6c1e8b2d4`, `b7e2d9f4a516`, `012`,
-and `013`. Use the sequence above, not the older one.
+`011`; that snapshot predates revisions `a3f6c1e8b2d4`, `b7e2d9f4a516`,
+`d4e5f6a7b8c9`, `012`, and `013`. Use the sequence above, not the older one.
 
 ---
 
@@ -193,7 +197,7 @@ Run on 2026-11-19 against this change set (`a77b974` + release-prep commits).
 | dev compose: `POSTGRES_URI` in container, `/ready` with headers | `{"status":"ready"}` 200 |
 | `docker compose -f docker-compose.test.yml up --exit-code-from test` | 206 passed, 6 skipped, 0 failed |
 | `docker compose -f docker-compose.staging.yml up -d --build` (fresh `.env` from `.env.example`) | api + pg healthy, `/ready` 200 |
-| fresh-DB migration sequence | 6 alembic revisions, SQL 000–010, create_all, 011–013; `alembic current` = `b7e2d9f4a516` |
+| fresh-DB migration sequence | 7 alembic revisions, SQL 000–010, create_all, 011–013; `alembic current` = `d4e5f6a7b8c9` |
 | `pytest tests/unit tests/contract` | 3625 passed, 1 skipped |
 | `ruff check` / `ruff format --check` | pass / 750 files formatted |
 | `mypy` + baseline | recorded 1137, current 1137, new 0 |

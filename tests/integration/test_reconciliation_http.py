@@ -543,3 +543,105 @@ class TestConcurrentIdempotency:
             assert count == 1
         finally:
             engine.dispose()
+
+
+class TestInvestigationRetrieval:
+    """GET /api/v1/investigations/{id} is the contract's read side.
+
+    The investigate route writes an ``investigations`` row; API_CONTRACT §2.3
+    specifies a GET to read it back. These tests assert the persisted row is
+    returned with the contract shape, that unknown ids are 404, and that
+    another tenant's investigation is reported as absent rather than confirmed.
+    """
+
+    def _run_with_exception(self, client: TestClient) -> str:
+        """Run the two-invoice discrepancy batch and return an exception id."""
+        r = client.post(
+            "/api/v1/reconciliation/sessions",
+            json={"period_start": "2026-09-01", "period_end": "2026-09-30"},
+        )
+        assert r.status_code == 200, r.text
+        session_id = r.json()["session_id"]
+        _upload(client, session_id, "INVOICE", TWO_INVOICE_CSV)
+        _upload(client, session_id, "STRIPE", TWO_STRIPE_CSV)
+        _upload(client, session_id, "BANK", TWO_BANK_CSV)
+        r = client.post(f"/api/v1/reconciliation/sessions/{session_id}/validate")
+        assert r.status_code == 200, r.text
+        r = client.post(
+            f"/api/v1/reconciliation/sessions/{session_id}/reconcile",
+            json={
+                "idempotency_key": f"inv-{uuid4()}",
+                "tolerance_absolute": "0",
+                "tolerance_percent": "0",
+            },
+        )
+        assert r.status_code == 200, r.text
+        run_id = r.json()["run_id"]
+        engine = create_engine(DSN)
+        try:
+            with engine.connect() as conn:
+                exception_id = conn.execute(
+                    text(
+                        "SELECT exception_id FROM reconciliation_exceptions "
+                        "WHERE run_id = :run_id LIMIT 1"
+                    ),
+                    {"run_id": run_id},
+                ).scalar()
+        finally:
+            engine.dispose()
+        assert exception_id, "the discrepancy batch produced no exception"
+        return str(exception_id)
+
+    def _insert_investigation(self, exception_id: str, tenant_id: str) -> str:
+        """Persist an investigation row directly (the POST needs an LLM key)."""
+        from sqlalchemy.orm import Session
+
+        from shared.models.reconciliation import Investigation
+
+        engine = create_engine(DSN)
+        try:
+            with Session(engine) as session:
+                inv = Investigation(
+                    exception_id=exception_id,
+                    tenant_id=tenant_id,
+                    status="COMPLETED",
+                    result_text="The 15.00 difference is a Stripe processing fee.",
+                    evidence_refs=["ch_b", "stmt:line-3"],
+                    created_by="test-user",
+                )
+                session.add(inv)
+                session.commit()
+                return str(inv.investigation_id)
+        finally:
+            engine.dispose()
+
+    def test_returns_the_persisted_investigation(self) -> None:
+        ca = _client(TENANT_A)
+        exception_id = self._run_with_exception(ca)
+        investigation_id = self._insert_investigation(exception_id, TENANT_A)
+
+        r = ca.get(f"/api/v1/investigations/{investigation_id}")
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["investigation_id"] == investigation_id
+        assert body["exception_id"] == exception_id
+        assert body["status"] == "COMPLETED"
+        assert body["result_text"] == "The 15.00 difference is a Stripe processing fee."
+        assert body["evidence_refs"] == ["ch_b", "stmt:line-3"]
+
+    def test_unknown_investigation_is_404(self) -> None:
+        ca = _client(TENANT_A)
+        r = ca.get(f"/api/v1/investigations/{uuid4()}")
+        assert r.status_code == 404
+
+    def test_other_tenants_investigation_is_404_not_403(self) -> None:
+        ca = _client(TENANT_A)
+        exception_id = self._run_with_exception(ca)
+        investigation_id = self._insert_investigation(exception_id, TENANT_B)
+
+        r = ca.get(f"/api/v1/investigations/{investigation_id}")
+        assert r.status_code == 404, "must not confirm another tenant's data exists"
+
+    def test_anonymous_caller_is_401(self) -> None:
+        r = TestClient(app).get(f"/api/v1/investigations/{uuid4()}")
+        assert r.status_code == 401

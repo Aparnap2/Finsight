@@ -651,6 +651,46 @@ def investigate_exception(
         session.close()
 
 
+@router.get("/investigations/{investigation_id}")
+def get_investigation(investigation_id: str, request: Request) -> dict[str, Any]:
+    """Return one persisted investigation, tenant-scoped (API_CONTRACT §2.3).
+
+    The investigate route writes the row; this is the contract's read side. A
+    row owned by another tenant is reported as *not found* rather than
+    forbidden, so the endpoint never confirms that another tenant's data
+    exists.
+    """
+    actor = _actor(request)
+    tenant_id = actor["tenant_id"]
+    session = _db_session(request)
+    try:
+        from shared.models.reconciliation import Investigation as InvRow
+
+        inv = session.get(InvRow, investigation_id)
+        if inv is None or inv.tenant_id != tenant_id:
+            raise HTTPException(status_code=404, detail="Investigation not found.")
+        return {
+            "investigation_id": inv.investigation_id,
+            "exception_id": inv.exception_id,
+            "status": inv.status,
+            "provider": inv.provider,
+            "model": inv.model,
+            "result_text": inv.result_text,
+            "evidence_refs": list(inv.evidence_refs or []),
+            "started_at": inv.started_at,
+            "completed_at": inv.completed_at,
+        }
+    except HTTPException:
+        session.rollback()
+        raise
+    except Exception as exc:
+        session.rollback()
+        logger.exception("reconciliation route failed")
+        raise HTTPException(status_code=500, detail="Internal server error.") from exc
+    finally:
+        session.close()
+
+
 @router.post("/exceptions/{exception_id}/decisions", status_code=201)
 def decide_exception(
     exception_id: str,

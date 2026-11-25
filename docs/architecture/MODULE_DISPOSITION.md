@@ -509,7 +509,7 @@
 - Tenant auth middleware (apps/api/middleware.py)
 - RLS infrastructure (database/migrations/)
 - NiceGUI console (apps/api/operator_console.py)
-- Alembic migrations (7, head b7e2d9f4a516)
+- Alembic migrations (7, head d4e5f6a7b8c9)
 - S3 adapter (finance/object_store/s3_adapter.py)
 - Docker build (verified)
 - Source ingestion and normalization (`finance/source_ingestion/`, P1): three

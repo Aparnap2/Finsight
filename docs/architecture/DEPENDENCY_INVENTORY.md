@@ -114,6 +114,6 @@
 | 005_unique_constraints.sql | Unique constraints | KEEP |
 | c9d5e7f1a204 | p8 durability tables (p8_run_states, p8_run_audit) | DEFER (slice 4b) |
 | a3f6c1e8b2d4 | Tenant-scoped execution keys | KEEP |
-| b7e2d9f4a516 (head) | Webhook outbox dispatch table | KEEP |
+| b7e2d9f4a516 | Webhook outbox dispatch table | KEEP |
 
 **Next migration needed:** Reconciliation tables (12 tables per DATABASE_SCHEMA.md).

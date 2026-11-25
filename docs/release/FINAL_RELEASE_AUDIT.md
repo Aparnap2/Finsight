@@ -438,11 +438,11 @@ playbook requires.
   `dc932b8`): `/ready` exempted from tenant middleware; returns 503 on DB failure.
 - `GET /runs/{id}/audit` ignores `run_id` — RESOLVED (commit `dc932b8`): scoped to
   run entity ids.
-- API errors leak internal exception text — OPEN (G10).
-- Validation failures return 500 instead of 400/422 — OPEN (bad CSV header).
-- The UI is a static placeholder; the workflow requires `curl` — OPEN.
-- README `/ready` example omits required headers — OPEN.
-- `LOCAL_DEPLOYMENT.md` states head `b7e2d9f4a516`; actual head is `d4e5f6a7b8c9` — OPEN.
+- API errors leak internal exception text — FIXED (G10): generic message + logger.exception.
+- Validation failures return 500 instead of 400/422 — FIXED: malformed CSV -> 400 (IngestionError).
+- The UI is a static placeholder; the workflow requires `curl` — OPEN (accepted limitation).
+- README `/ready` example omits required headers — FIXED: `/ready` is middleware-exempt.
+- `LOCAL_DEPLOYMENT.md` head corrected to `d4e5f6a7b8c9` (7 revisions) — FIXED (this slice).
 - The boundary manifest's entry point is `finance.reconciliation.operator_report`
   (CLI), not the FastAPI application — OPEN.
 - Many FP&A endpoints remain registered on the product app — OPEN (documented

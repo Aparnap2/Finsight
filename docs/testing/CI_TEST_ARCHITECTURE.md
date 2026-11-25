@@ -30,7 +30,7 @@ There is no artifact stating which test enforces which financial invariant, whic
 | Property-based testing | **no** | `hypothesis` not a dependency; `rg "from hypothesis" tests/` → 0; `rg "@given" tests/` → 0. The 30 textual hits are docstring prose plus two `_scratch_*.py` probes that are not collected. |
 | Mutation testing | **no** | no `mutmut`, no `cosmic-ray` |
 | Load / performance | **no** | no `locust`, no `k6`, no benchmark harness |
-| Migration / upgrade safety | **no gate** | `tests/unit/test_platform/test_migrations.py` exists, but no workflow verifies fresh-schema build + upgrade-from-previous. The outbox migration `b7e2d9f4a516` reached `main` without CI ever applying it. |
+| Migration / upgrade safety | **partial** | Fresh-schema build is exercised: the integration tier applies the full documented sequence (alembic head + SQL 000-013) on an empty database via `tests/integration/conftest.py` (session-scoped bootstrap). No dedicated upgrade-from-previous-head or downgrade/re-upgrade test exists, and the bootstrap is not a standalone CI job. |
 | Provider sandbox | **no** | no Razorpay Test Mode suite exists |
 | Scheduled extended validation | **no** | `rg "schedule:\|cron:" .github/workflows/` → 0 |
 
