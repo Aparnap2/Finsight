@@ -9,7 +9,7 @@ verified: {by: 'process:knowledge-graph', at: '2026-01-01T00:00:00Z'}
 status: stable
 sources:
 - {id: src, resource: /finance/reconciliation/investigation.py, title: investigation.py}
-source_fingerprint: fc23300c7f50f2db28a32e39af0eef9847cfbbba4887db08740e0a6e96d62873
+source_fingerprint: a9fc358736c0a004ad81fdddadb318ceb61e3a07fa3936e6cc067abdb89dd1c8
 ---
 
 # Investigation
@@ -24,9 +24,13 @@ source_fingerprint: fc23300c7f50f2db28a32e39af0eef9847cfbbba4887db08740e0a6e96d6
 
 - `investigate()`
 
+## In-scope dependencies
+
+- [finance.reconciliation.context](/code/modules/finance-reconciliation-context.md)
+
 ## Provenance
 
-Source fingerprint (SHA-256): `fc23300c7f50f2db28a32e39af0eef9847cfbbba4887db08740e0a6e96d62873`
+Source fingerprint (SHA-256): `a9fc358736c0a004ad81fdddadb318ceb61e3a07fa3936e6cc067abdb89dd1c8`
 
 > Structural relationships above are derived from static AST analysis. Runtime behaviour (dependency injection, dynamic dispatch) is not captured; see `/coverage.md`.
 

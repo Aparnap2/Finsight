@@ -276,3 +276,64 @@ class TestExceptionDiagnostic:
             val = getattr(diag.context, key)
             assert isinstance(val, str)
             assert "e" not in val.lower() or "." in val
+
+
+class TestInvestigateEligibilityGate:
+    def test_ineligible_returns_409(self) -> None:
+        ca = _client(TENANT_A)
+        run_id, exception_id, snapshot_id = _run_discrepancy(ca)
+        # Strip evidence to make the exception INELIGIBLE.
+        engine = create_engine(DSN)
+        try:
+            with engine.begin() as conn:
+                conn.execute(
+                    text("UPDATE reconciliation_exceptions SET evidence_refs = '[]'::json WHERE exception_id = :e"),
+                    {"e": exception_id},
+                )
+        finally:
+            engine.dispose()
+        r = ca.post(f"/api/v1/reconciliation/exceptions/{exception_id}/investigate")
+        assert r.status_code == 409, r.text
+        assert "INELIGIBLE" in r.text
+
+    def test_eligible_reaches_provider_boundary(self) -> None:
+        ca = _client(TENANT_A)
+        run_id, exception_id, snapshot_id = _run_discrepancy(ca)
+        # Eligibility should pass (ELIGIBLE), so the request proceeds to the
+        # LLM provider boundary. Without a configured provider this yields 500
+        # (provider unavailable), NOT 409 — proving the gate did not block.
+        r = ca.post(f"/api/v1/reconciliation/exceptions/{exception_id}/investigate")
+        assert r.status_code != 409, r.text
+        assert r.status_code in (200, 500), r.text
+
+    def test_investigate_with_mocked_provider_persists(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from shared.llm.fake import FakeLLM
+
+        fake = FakeLLM(scripted={
+            "InvestigationFinding": {
+                "claim": "Fee discrepancy due to timing.",
+                "evidence_refs": ["ch_a", "dep_1"],
+                "confidence": "medium",
+                "abstained": False,
+            }
+        })
+
+        def _fake_provider():
+            return fake
+
+        monkeypatch.setattr(
+            "shared.llm.factory.create_provider_from_settings", _fake_provider
+        )
+
+        ca = _client(TENANT_A)
+        run_id, exception_id, snapshot_id = _run_discrepancy(ca)
+        r = ca.post(f"/api/v1/reconciliation/exceptions/{exception_id}/investigate")
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["abstained"] is False
+        assert body["claim"] == "Fee discrepancy due to timing."
+        # persisted investigation is retrievable
+        inv_id = body["investigation_id"]
+        r2 = ca.get(f"/api/v1/investigations/{inv_id}")
+        assert r2.status_code == 200, r2.text
+        assert r2.json()["investigation_id"] == inv_id

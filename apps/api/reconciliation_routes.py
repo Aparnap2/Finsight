@@ -599,9 +599,50 @@ def investigate_exception(
     try:
         from shared.models.reconciliation import ReconciliationException
 
-        exc = session.get(ReconciliationException, exception_id)
-        if exc is None or exc.tenant_id != tenant_id:
+        exc_row = session.get(ReconciliationException, exception_id)
+        if exc_row is None or exc_row.tenant_id != tenant_id:
             raise HTTPException(status_code=404, detail="Exception not found.")
+
+        # CP4: build the typed diagnostic envelope from persisted data and
+        # apply the CP3 eligibility gate before any LLM call.
+        from finance.reconciliation.context_builder import (
+            ContextNotFoundError as CtxNotFound,
+        )
+        from finance.reconciliation.context_builder import (
+            CurrencyRequiredError,
+        )
+        from finance.reconciliation.diagnostics import diagnose_exception
+
+        # Currency is not yet carried on the reconciliation schema (no currency
+        # column exists), so the product currently operates in USD. The builder
+        # and diagnostic require an explicit currency; we supply it here and log
+        # the assumption rather than silently defaulting inside the domain layer.
+        logger.warning(
+            "investigate_exception: currency defaulted to USD (no currency column "
+            "on reconciliation schema) for exception %s",
+            exception_id,
+        )
+        try:
+            diagnostic = diagnose_exception(
+                session,
+                tenant_id=tenant_id,
+                snapshot_id=exc_row.run_id,
+                exception_id=exc_row.exception_id,
+                currency="USD",
+            )
+        except CtxNotFound:
+            raise HTTPException(status_code=404, detail="Exception not found.") from None
+        except CurrencyRequiredError as curr_exc:
+            raise HTTPException(status_code=400, detail=str(curr_exc)) from None
+
+        eligibility = diagnostic.eligibility
+        if eligibility is not None and eligibility.status.value in ("INELIGIBLE", "BLOCKED"):
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"Investigation not allowed: {eligibility.status.value}. {eligibility.reason}"
+                ),
+            )
 
         from finance.reconciliation.investigation import (
             BoundedInvestigation,
@@ -612,13 +653,29 @@ def investigate_exception(
         provider = create_provider_from_settings()
         investigator = BoundedInvestigation(provider)
         context = InvestigationContext(
-            exception_id=exc.exception_id,
-            exception_code=exc.exception_code,
-            title=exc.title,
-            description=exc.description,
-            evidence_refs=list(exc.evidence_refs or []),
+            exception_id=exc_row.exception_id,
+            exception_code=exc_row.exception_code,
+            title=exc_row.title,
+            description=exc_row.description,
+            evidence_refs=list(exc_row.evidence_refs or []),
+            match_summary=diagnostic.context.match_summary,
+            allocation_summary=diagnostic.context.allocation_summary,
         )
-        finding = investigator.investigate(context)
+        # Pass the diagnostic through so the prompt carries supplied evidence;
+        # the LLM explains, it does not recompute.
+        finding = investigator.investigate(context, diagnostic=diagnostic)
+
+        # REVIEW_REQUIRED stays explicitly marked: the finding's confidence is
+        # capped to "low" and abstention reason notes human review when the
+        # diagnostic requires review.
+        if eligibility is not None and eligibility.status.value == "REVIEW_REQUIRED":
+            finding = finding.model_copy(
+                update={
+                    "abstention_reason": (
+                        (finding.abstention_reason or "") + " Requires human review."
+                    ).strip(),
+                }
+            )
 
         from shared.models.reconciliation import Investigation as InvRow
 
