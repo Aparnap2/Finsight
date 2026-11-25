@@ -406,62 +406,163 @@ def verification(report_path: str | None = None) -> None:
         def _render(report: dict[str, Any]) -> None:
             result_col.clear()
             with result_col:
-                # Run metadata
-                ui.label("Run metadata").classes("text-h6")
+                verdict = report.get("overall_verdict", "INCOMPLETE")
+
+                # --- Overall status badge ---
+                ui.label("FinSight — E2E Verification").classes("text-h4")
+                with ui.row():
+                    ui.badge(f"OVERALL: {verdict}").classes(
+                        "text-h6 " + ("bg-green-700" if verdict == "VERIFIED" else "bg-red-700")
+                    )
+                ui.label(
+                    "Staging run · commit "
+                    + str(report.get("commit_sha", "?"))
+                    + " · illustrative values only"
+                ).classes("text-caption")
+
+                # --- Run summary ---
+                ui.label("Run summary").classes("text-h6")
                 ui.label(f"run_id: {report.get('run_id')}")
                 ui.label(f"commit_sha: {report.get('commit_sha')}")
                 ui.label(f"image_digest: {report.get('image_digest')}")
                 ui.label(f"migration_revision: {report.get('migration_revision')}")
                 ui.label(f"environment: {report.get('environment')}")
                 ui.label(f"timestamp: {report.get('timestamp')}")
-                verdict = report.get("overall_verdict", "INCOMPLETE")
-                ui.badge(f"overall: {verdict}")
 
-                # Stages
-                ui.label("Stages").classes("text-h6")
-                for st in report.get("stages", []):
-                    ui.label(f"{st.get('stage')}: {st.get('status')} — {st.get('detail', '')}")
+                # --- Stage timeline ---
+                ui.label("Execution trace (stages)").classes("text-h6")
+                stage_names = [
+                    "import",
+                    "validate",
+                    "reconcile",
+                    "persist",
+                    "context",
+                    "investigate",
+                    "decide",
+                    "audit",
+                    "export",
+                ]
+                stage_map = {s.get("stage", "").lower(): s for s in report.get("stages", [])}
+                for name in stage_names:
+                    st = stage_map.get(name, {})
+                    status = st.get("status", "NOT_RUN")
+                    detail = st.get("detail", "")
+                    ids = st.get("ids", {})
+                    with ui.row():
+                        ui.badge(status)
+                        ui.label(name)
+                        if detail:
+                            ui.label(f"— {detail}").classes("text-caption")
+                    if ids:
+                        ui.label(f"  ids: {json.dumps(ids)}").classes("text-caption")
 
-                # Scenarios
+                # --- Scenarios ---
                 ui.label("Scenarios").classes("text-h6")
-                for sc in report.get("scenarios", []):
-                    ui.label(
-                        f"{sc.get('scenario_id')}: {sc.get('verdict')} "
-                        f"(mismatches: {sc.get('mismatches', [])})"
-                    )
+                scenarios = report.get("scenarios", [])
+                with ui.row():
+                    passed_count = sum(1 for s in scenarios if s.get("verdict") == "VERIFIED")
+                    ui.label(f"{passed_count}/{len(scenarios)} passed")
+
+                for sc in scenarios:
+                    sc_id = sc.get("scenario_id", "?")
+                    sc_verdict = sc.get("verdict", "INCOMPLETE")
+                    ui.label(f"{sc_id}: {sc_verdict}").classes("text-subtitle1")
+                    mismatches = sc.get("mismatches", [])
+                    if mismatches:
+                        ui.label(f"  mismatches: {mismatches}").classes("text-negative")
+
                     exp = sc.get("expected", {})
                     act = sc.get("actual", {})
-                    if exp or act:
-                        with ui.row():
-                            ui.label("expected:").classes("text-bold")
-                            ui.label(json.dumps(exp, sort_keys=True))
-                        with ui.row():
-                            ui.label("actual:").classes("text-bold")
-                            ui.label(json.dumps(act, sort_keys=True))
+                    # Flatten expected/actual for comparison table
+                    exp_flat = _flatten(exp)
+                    act_flat = _flatten(act)
+                    all_keys = sorted(set(exp_flat) | set(act_flat))
+                    if all_keys:
+                        ui.label("Expected vs actual").classes("text-bold")
+                        for key in all_keys:
+                            e_val = exp_flat.get(key, "—")
+                            a_val = act_flat.get(key, "—")
+                            match = "Match" if str(e_val) == str(a_val) else "MISMATCH"
+                            with ui.row():
+                                ui.label(f"  {key}:")
+                                ui.label(f"expected={e_val}")
+                                ui.label(f"actual={a_val}")
+                                ui.badge(match)
 
-                # Provider
+                    # Payout flow diagram (if financial data present)
+                    recon = act.get("reconciliation", act)
+                    if isinstance(recon, dict) and "allocated_total" in recon:
+                        ui.label("Payout flow").classes("text-bold")
+                        captured = recon.get("captured", recon.get("gross", "?"))
+                        fee = recon.get("fee_total", recon.get("fees", "?"))
+                        deposit = recon.get("allocated_total", "?")
+                        variance = recon.get("open_balance", recon.get("variance", "?"))
+                        ui.label(f"  Stripe charge: {captured} (gross captured)")
+                        ui.label(f"  − {fee} processing fee")
+                        ui.label(f"  Bank deposit: {deposit} (net payout)")
+                        ui.label(f"  Expected variance: {variance}")
+
+                    # Persisted IDs
+                    ids = {}
+                    for k in ("run_id", "exception_ids", "investigation_id", "export_id"):
+                        v = sc.get(k)
+                        if v is not None:
+                            ids[k] = v
+                    if ids:
+                        ui.label(f"  persisted ids: {json.dumps(ids)}").classes("text-caption")
+
+                # --- LLM evidence panel ---
                 prov = report.get("provider")
-                if prov:
-                    ui.label("Provider").classes("text-h6")
-                    ui.label(f"provider: {prov.get('provider_name')}")
-                    ui.label(f"model: {prov.get('model')}")
-                    ui.label(f"request_id: {prov.get('request_id')}")
-                    ui.label(f"success: {prov.get('success')}")
-
-                # Trace
                 tr = report.get("trace")
-                if tr:
-                    ui.label("Trace").classes("text-h6")
-                    ui.label(f"trace_id: {tr.get('trace_id')}")
-                    ui.label(f"exported: {tr.get('exported')}")
-                    ui.label(f"backend: {tr.get('backend')}")
+                if prov or tr:
+                    ui.label("Investigation evidence (LLM)").classes("text-h6")
+                    ui.label("Deterministic facts: from DB and reconciliation engine.").classes(
+                        "text-caption"
+                    )
+                    ui.label(
+                        "LLM explanation: generated text (not a verified financial fact)."
+                    ).classes("text-caption")
+                    ui.label("Human decision: authoritative resolution.").classes("text-caption")
+                    if prov:
+                        ui.label(f"provider: {prov.get('provider_name')}")
+                        ui.label(f"model: {prov.get('model')}")
+                        ui.label(f"request_id: {prov.get('request_id')}")
+                        ui.label(f"success: {prov.get('success')}")
+                        lat = prov.get("latency_ms")
+                        if lat is not None:
+                            ui.label(f"latency_ms: {lat}")
+                    if tr:
+                        ui.label(f"trace_id: {tr.get('trace_id')}")
+                        ui.label(f"exported: {tr.get('exported')}")
+                        ui.label(f"backend: {tr.get('backend')}")
 
-                # Financial invariants
+                # --- Financial invariants ---
                 inv = report.get("financial_invariants", {})
                 if inv:
                     ui.label("Financial invariants").classes("text-h6")
                     for k, v in inv.items():
                         ui.label(f"{k}: {v}")
+
+                # --- Re-verify with deterministic verifier ---
+                try:
+                    from finance.verification.evidence import E2ERunReport
+                    from finance.verification.verifier import verify_run
+
+                    golden = None
+                    try:
+                        import json as _j
+                        from pathlib import Path
+
+                        golden_path = Path("tests/fixtures/reconciliation/golden_scenarios.json")
+                        if golden_path.exists():
+                            golden = _j.loads(golden_path.read_text())
+                    except Exception:
+                        golden = None
+                    rep = E2ERunReport(**report)
+                    re_verdict = verify_run(rep, golden)
+                    ui.label(f"Verifier re-check: {re_verdict.value}").classes("text-bold")
+                except Exception as e:
+                    ui.label(f"Verifier re-check failed: {e}").classes("text-negative")
 
         async def load() -> None:
             result_col.clear()
@@ -509,6 +610,18 @@ def reconciliation() -> None:
             "See docs/release/LOCAL_DEPLOYMENT.md and "
             "tests/integration/test_reconciliation_http.py for the supported flow."
         )
+
+
+def _flatten(d: dict[str, Any], prefix: str = "") -> dict[str, Any]:
+    """Flatten a nested dict for display."""
+    out: dict[str, Any] = {}
+    for k, v in d.items():
+        key = f"{prefix}.{k}" if prefix else k
+        if isinstance(v, dict):
+            out.update(_flatten(v, key))
+        else:
+            out[key] = v
+    return out
 
 
 def mount_console(app: FastAPI) -> None:
