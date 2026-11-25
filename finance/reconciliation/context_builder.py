@@ -39,6 +39,10 @@ class ContextNotFoundError(ValueError):
     """Raised when a run or exception cannot be found for the tenant."""
 
 
+class CurrencyRequiredError(ValueError):
+    """Raised when currency cannot be established from input or data."""
+
+
 def _money_str(value: Any) -> str:
     """Render a value as a plain Decimal string (never float)."""
     if value is None:
@@ -176,7 +180,7 @@ def build_exception_context(
     tenant_id: str,
     run_id: str,
     exception_id: str,
-    currency: str | None = None,
+    currency: str,
 ) -> ExceptionContext:
     """Build an :class:`ExceptionContext` from persisted reconciliation rows.
 
@@ -185,7 +189,8 @@ def build_exception_context(
         tenant_id: Trusted tenant from the calling context (never from input).
         run_id: Reconciliation run to read.
         exception_id: Exception within that run.
-        currency: Optional currency override; resolved from data or "USD".
+        currency: ISO 4217 currency code for the run. Required; never defaulted,
+            because FinSight is not inherently USD-only.
 
     Returns:
         A frozen, deterministic :class:`ExceptionContext`.
@@ -197,6 +202,12 @@ def build_exception_context(
     if not tenant_id or not tenant_id.strip():
         raise ContextNotFoundError("run or exception not found")
     tenant_id = tenant_id.strip()
+
+    if not currency or not currency.strip():
+        raise CurrencyRequiredError("currency is required")
+    resolved_input = currency.strip().upper()
+    if len(resolved_input) != 3 or not resolved_input.isalpha():
+        raise CurrencyRequiredError(f"currency must be a 3-letter ISO 4217 code, got {currency!r}")
 
     run = session.execute(
         select(ReconciliationRun).where(
@@ -240,7 +251,7 @@ def build_exception_context(
     for leg in legs:
         legs_by_alloc.setdefault(leg.allocation_id, []).append(leg)
 
-    resolved_currency = (currency or "USD").strip().upper()
+    resolved_currency = resolved_input
 
     # Calculations from the first allocation (if any) for this run.
     captured = "0.00"

@@ -12,6 +12,7 @@ from finance.reconciliation.context import (
     EXCEPTION_CONTEXT_SCHEMA,
     RECONCILIATION_RUN_CONTEXT_SCHEMA,
     ExceptionContext,
+    ExceptionDiagnostic,
     ReconciliationRunContext,
     RuleResult,
     RuleStatus,
@@ -151,3 +152,39 @@ def test_ineligibility_reason_optional() -> None:
     ec2 = ExceptionContext(**{k: v for k, v in data.items() if k != "ineligibility_reason"})
     assert ec2.ineligibility_reason is None
     assert ec2.investigation_eligible is True
+
+
+def _exception_diagnostic() -> ExceptionDiagnostic:
+    return ExceptionDiagnostic(
+        run_id="run-1",
+        exception_id="exc-1",
+        tenant_id="t-1",
+        snapshot_id="snap-1",
+        engine_version="1.0.0",
+        context=_exception_context(),
+        rule_results=[_rule_result()],
+        query_count=5,
+    )
+
+
+def test_exception_diagnostic_complete() -> None:
+    d = _exception_diagnostic()
+    assert d.run_id == "run-1"
+    assert d.snapshot_id == "snap-1"
+    assert d.engine_version == "1.0.0"
+    assert d.query_count == 5
+    assert d.context.exception_id == "exc-1"
+
+
+def test_exception_diagnostic_frozen() -> None:
+    d = _exception_diagnostic()
+    with pytest.raises(ValidationError):
+        d.status = "x"  # type: ignore[misc]
+
+
+def test_exception_diagnostic_extra_forbid() -> None:
+    with pytest.raises(ValidationError):
+        ExceptionDiagnostic(
+            run_id="r", exception_id="e", tenant_id="t", snapshot_id="s",
+            engine_version="1", context=_exception_context(), noise=1,
+        )  # type: ignore[call-arg]

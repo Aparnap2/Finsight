@@ -9,7 +9,7 @@ verified: {by: 'process:knowledge-graph', at: '2026-01-01T00:00:00Z'}
 status: stable
 sources:
 - {id: src, resource: /finance/reconciliation/context_builder.py, title: context_builder.py}
-source_fingerprint: eb0c8d1e40578861ac3bfb2ec77ba38e68b58d0b28624f778a6aab91b50b292a
+source_fingerprint: 7e35d8a42b7a58ac04f969501ec26b0ca383017c476f883db703cc09aea7387b
 ---
 
 # Context Builder
@@ -17,6 +17,7 @@ source_fingerprint: eb0c8d1e40578861ac3bfb2ec77ba38e68b58d0b28624f778a6aab91b50b
 ## Classes
 
 - `ContextNotFoundError`
+- `CurrencyRequiredError`
 
 ## Public functions
 
@@ -29,7 +30,7 @@ source_fingerprint: eb0c8d1e40578861ac3bfb2ec77ba38e68b58d0b28624f778a6aab91b50b
 
 ## Provenance
 
-Source fingerprint (SHA-256): `eb0c8d1e40578861ac3bfb2ec77ba38e68b58d0b28624f778a6aab91b50b292a`
+Source fingerprint (SHA-256): `7e35d8a42b7a58ac04f969501ec26b0ca383017c476f883db703cc09aea7387b`
 
 > Structural relationships above are derived from static AST analysis. Runtime behaviour (dependency injection, dynamic dispatch) is not captured; see `/coverage.md`.
 

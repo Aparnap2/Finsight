@@ -83,6 +83,33 @@ class ExceptionContext(BaseModel):
     ineligibility_reason: str | None = None
 
 
+class ExceptionDiagnostic(BaseModel):
+    """CP2 diagnostic envelope for one exception.
+
+    Wraps a CP1 :class:`ExceptionContext` with composed rule results and
+    snapshot/engine-version identity. It does not re-run reconciliation or
+    re-ingest sources; every value is read from persisted rows or derived
+    by deterministic consistency checks over those rows.
+
+    ``query_count`` records how many database queries the diagnostic issued,
+    providing baseline evidence for CP5 without introducing a metrics system.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    diagnostic_version: str = "1.0"
+    run_id: str
+    exception_id: str
+    tenant_id: str
+    snapshot_id: str
+    engine_version: str
+    rule_version: str = "1.0"
+    status: str = "diagnosed"
+    context: ExceptionContext
+    rule_results: list[RuleResult] = []
+    query_count: int = Field(ge=0)
+
+
 class ReconciliationRunContext(BaseModel):
     """Aggregate context for a reconciliation run."""
 

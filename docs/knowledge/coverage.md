@@ -20,8 +20,8 @@
 
 ## Scope
 
-- Modules discovered: 20
-- Concepts generated: 23
+- Modules discovered: 21
+- Concepts generated: 24
 - Migrations referenced: 1
 
 ## Generation
