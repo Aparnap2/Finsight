@@ -9,13 +9,14 @@ verified: {by: 'process:knowledge-graph', at: '2026-01-01T00:00:00Z'}
 status: stable
 sources:
 - {id: src, resource: /finance/reconciliation/diagnostics.py, title: diagnostics.py}
-source_fingerprint: 425893e3541995a35b06262738ff4fffb73fb2d2534a0c2bb9b4148ae07affd4
+source_fingerprint: f6310c6d2767a918c0844038ac7e7ae45279c54adb71ad016ad46cf8260881ea
 ---
 
 # Diagnostics
 
 ## Public functions
 
+- `determine_eligibility()`
 - `diagnose_exception()`
 
 ## In-scope dependencies
@@ -26,7 +27,7 @@ source_fingerprint: 425893e3541995a35b06262738ff4fffb73fb2d2534a0c2bb9b4148ae07a
 
 ## Provenance
 
-Source fingerprint (SHA-256): `425893e3541995a35b06262738ff4fffb73fb2d2534a0c2bb9b4148ae07affd4`
+Source fingerprint (SHA-256): `f6310c6d2767a918c0844038ac7e7ae45279c54adb71ad016ad46cf8260881ea`
 
 > Structural relationships above are derived from static AST analysis. Runtime behaviour (dependency injection, dynamic dispatch) is not captured; see `/coverage.md`.
 

@@ -20,6 +20,28 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 
+class EligibilityStatus(StrEnum):
+    """Investigation eligibility classification (CP3)."""
+
+    ELIGIBLE = "ELIGIBLE"
+    INELIGIBLE = "INELIGIBLE"
+    BLOCKED = "BLOCKED"
+    REVIEW_REQUIRED = "REVIEW_REQUIRED"
+
+
+class EligibilityDecision(BaseModel):
+    """Structured, auditable eligibility decision (CP3)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    status: EligibilityStatus
+    reason: str = Field(min_length=1)
+    evidence_complete: bool
+    integrity_ok: bool
+    ambiguous: bool
+    rule_ids: list[str] = []
+
+
 class RuleStatus(StrEnum):
     """Outcome of a deterministic reconciliation rule check."""
 
@@ -107,6 +129,7 @@ class ExceptionDiagnostic(BaseModel):
     status: str = "diagnosed"
     context: ExceptionContext
     rule_results: list[RuleResult] = []
+    eligibility: EligibilityDecision | None = None
     query_count: int = Field(ge=0)
 
 

@@ -9,13 +9,15 @@ verified: {by: 'process:knowledge-graph', at: '2026-01-01T00:00:00Z'}
 status: stable
 sources:
 - {id: src, resource: /finance/reconciliation/context.py, title: context.py}
-source_fingerprint: 0cd04e51eed0ffeb9c2277da672c3e09d6b5c8757e2a9d0d93912a9c3b49e648
+source_fingerprint: 80faf9e35ce67d7e9dc6cd9f726f477b17bbfd613bb24644cc52e4ed7d160736
 ---
 
 # Context
 
 ## Classes
 
+- `EligibilityDecision`
+- `EligibilityStatus`
 - `ExceptionContext`
 - `ExceptionDiagnostic`
 - `ReconciliationRunContext`
@@ -29,7 +31,7 @@ source_fingerprint: 0cd04e51eed0ffeb9c2277da672c3e09d6b5c8757e2a9d0d93912a9c3b49
 
 ## Provenance
 
-Source fingerprint (SHA-256): `0cd04e51eed0ffeb9c2277da672c3e09d6b5c8757e2a9d0d93912a9c3b49e648`
+Source fingerprint (SHA-256): `80faf9e35ce67d7e9dc6cd9f726f477b17bbfd613bb24644cc52e4ed7d160736`
 
 > Structural relationships above are derived from static AST analysis. Runtime behaviour (dependency injection, dynamic dispatch) is not captured; see `/coverage.md`.
 

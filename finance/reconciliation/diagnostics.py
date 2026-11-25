@@ -17,6 +17,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from finance.reconciliation.context import (
+    EligibilityDecision,
+    EligibilityStatus,
     ExceptionContext,
     ExceptionDiagnostic,
     RuleResult,
@@ -287,6 +289,21 @@ def diagnose_exception(
         r for r in diagnostic_rules if r.rule_id not in existing_ids
     ]
 
+    eligibility = determine_eligibility(
+        ExceptionDiagnostic(
+            run_id=run.run_id,
+            exception_id=context.exception_id,
+            tenant_id=tenant_id,
+            snapshot_id=snapshot,
+            engine_version=run.engine_version,
+            rule_version="1.0",
+            status="diagnosed",
+            context=context,
+            rule_results=merged,
+            query_count=query_count,
+        )
+    )
+
     return ExceptionDiagnostic(
         run_id=run.run_id,
         exception_id=context.exception_id,
@@ -297,5 +314,85 @@ def diagnose_exception(
         status="diagnosed",
         context=context,
         rule_results=merged,
+        eligibility=eligibility,
         query_count=query_count,
+    )
+
+
+_INTEGRITY_RULE_IDS = {"RUN_MATCH_INTEGRITY", "CALCULATION_CONSISTENCY"}
+
+
+def determine_eligibility(diagnostic: ExceptionDiagnostic) -> EligibilityDecision:
+    """Classify a diagnostic into an investigation eligibility decision (CP3).
+
+    Pure, deterministic, no database access. The decision is derived from the
+    diagnostic's rule results and evidence completeness; the LLM is never
+    consulted.
+
+    Precedence: INELIGIBLE > BLOCKED > REVIEW_REQUIRED > ELIGIBLE.
+    """
+    context = diagnostic.context
+    rules = diagnostic.rule_results if diagnostic.rule_results else context.rule_results
+
+    evidence_complete = bool(context.evidence_refs) and any(
+        r.rule_id == "EVIDENCE_COMPLETENESS" and r.status == RuleStatus.PASS for r in rules
+    )
+    if not any(r.rule_id == "EVIDENCE_COMPLETENESS" for r in rules):
+        evidence_complete = bool(context.evidence_refs)
+
+    integrity_rules = [
+        r
+        for r in rules
+        if r.rule_id in _INTEGRITY_RULE_IDS or r.rule_id.startswith("ALLOCATION_BALANCE_")
+    ]
+    integrity_ok = (
+        all(r.status != RuleStatus.FAIL for r in integrity_rules) if integrity_rules else True
+    )
+
+    ambiguous = False
+    ambiguous_reasons: list[str] = []
+    if any(r.rule_id == "DUPLICATE_DETECTION" and r.status == RuleStatus.FAIL for r in rules):
+        ambiguous = True
+        ambiguous_reasons.append("duplicate ledger entries detected")
+
+    if not evidence_complete:
+        evidence_rule_ids = [r.rule_id for r in rules if r.rule_id == "EVIDENCE_COMPLETENESS"]
+        return EligibilityDecision(
+            status=EligibilityStatus.INELIGIBLE,
+            reason="Required evidence is missing.",
+            evidence_complete=False,
+            integrity_ok=integrity_ok,
+            ambiguous=ambiguous,
+            rule_ids=evidence_rule_ids,
+        )
+
+    if not integrity_ok:
+        failed = [r.rule_id for r in integrity_rules if r.status == RuleStatus.FAIL]
+        return EligibilityDecision(
+            status=EligibilityStatus.BLOCKED,
+            reason="Prerequisite integrity check failed: " + ", ".join(failed) + ".",
+            evidence_complete=True,
+            integrity_ok=False,
+            ambiguous=ambiguous,
+            rule_ids=failed,
+        )
+
+    if ambiguous:
+        ambig_ids = [r.rule_id for r in rules if r.rule_id == "DUPLICATE_DETECTION"]
+        return EligibilityDecision(
+            status=EligibilityStatus.REVIEW_REQUIRED,
+            reason="Evidence exists but is ambiguous: " + "; ".join(ambiguous_reasons) + ".",
+            evidence_complete=True,
+            integrity_ok=True,
+            ambiguous=True,
+            rule_ids=ambig_ids,
+        )
+
+    return EligibilityDecision(
+        status=EligibilityStatus.ELIGIBLE,
+        reason="Required evidence and calculations are complete.",
+        evidence_complete=True,
+        integrity_ok=True,
+        ambiguous=False,
+        rule_ids=[],
     )

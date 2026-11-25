@@ -146,6 +146,9 @@ class TestExceptionDiagnostic:
         assert "PAYOUT_VARIANCE" in rule_ids
         assert "EVIDENCE_COMPLETENESS" in rule_ids
         assert "CALCULATION_CONSISTENCY" in rule_ids
+        # CP3 eligibility attached and ELIGIBLE for a complete, consistent run
+        assert diag.eligibility is not None
+        assert diag.eligibility.status.value == "ELIGIBLE"
 
     def test_diagnose_deterministic(self) -> None:
         ca = _client(TENANT_A)
