@@ -9,7 +9,7 @@ verified: {by: 'process:knowledge-graph', at: '2026-01-01T00:00:00Z'}
 status: stable
 sources:
 - {id: src, resource: /finance/reconciliation, title: reconciliation runtime}
-source_fingerprint: 0217d9b3bb769946436b5ad6f61760ba2b781cc838a779388540d5e71d9d02cf
+source_fingerprint: 6144d7e76e85dc18b85b5f7156f08f09e48777b583b10eef5daa48fea48795ab
 ---
 
 # Tenant Isolation Boundary
@@ -24,7 +24,7 @@ Row-level security and transaction-local tenant GUC wiring for reconciliation ta
 
 ## Provenance
 
-Source fingerprint (SHA-256): `0217d9b3bb769946436b5ad6f61760ba2b781cc838a779388540d5e71d9d02cf`
+Source fingerprint (SHA-256): `6144d7e76e85dc18b85b5f7156f08f09e48777b583b10eef5daa48fea48795ab`
 
 > Architecture concept derived from source structure and existing specs. Runtime behaviour is not inferred from imports alone.
 

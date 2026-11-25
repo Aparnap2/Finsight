@@ -269,7 +269,9 @@ def build_exception_context(
         variance = _money_str(alloc.open_balance)
         fees = _money_str(alloc.fee_total)
         refunds = _money_str(alloc.refund_total)
-        captured = _money_str(alloc.eligible_net_total)
+        # captured (gross) = net + fees + refunds, so the persisted
+        # calculations stay internally consistent: captured - refunds - fees = net
+        captured = _money_str(alloc.eligible_net_total + alloc.fee_total + alloc.refund_total)
         adjustments = "0.00"
         tolerance = "0.00"
         # tolerance not persisted on allocation; leave as provided/zero

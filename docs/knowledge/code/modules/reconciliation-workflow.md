@@ -9,7 +9,7 @@ verified: {by: 'process:knowledge-graph', at: '2026-01-01T00:00:00Z'}
 status: stable
 sources:
 - {id: src, resource: /finance/reconciliation, title: reconciliation runtime}
-source_fingerprint: 2495335ff191adc1f6596687e1ec578cbb3acd8605f23e56de0cd6c843196f91
+source_fingerprint: 94268210e29629bf6ea715ec3a4d7d4803c5d6c95490accc078e9f721bf35668
 ---
 
 # Reconciliation Workflow
@@ -24,7 +24,7 @@ Three-source reconciliation execution path: ingest, validate, reconcile, persist
 
 ## Provenance
 
-Source fingerprint (SHA-256): `2495335ff191adc1f6596687e1ec578cbb3acd8605f23e56de0cd6c843196f91`
+Source fingerprint (SHA-256): `94268210e29629bf6ea715ec3a4d7d4803c5d6c95490accc078e9f721bf35668`
 
 > Architecture concept derived from source structure and existing specs. Runtime behaviour is not inferred from imports alone.
 
