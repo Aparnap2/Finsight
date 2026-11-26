@@ -407,162 +407,318 @@ def verification(report_path: str | None = None) -> None:
             result_col.clear()
             with result_col:
                 verdict = report.get("overall_verdict", "INCOMPLETE")
+                verdict_color = (
+                    "bg-emerald-600"
+                    if verdict == "VERIFIED"
+                    else "bg-red-600"
+                    if verdict == "FAILED"
+                    else "bg-amber-500"
+                )
 
-                # --- Overall status badge ---
-                ui.label("FinSight — E2E Verification").classes("text-h4")
-                with ui.row():
-                    ui.badge(f"OVERALL: {verdict}").classes(
-                        "text-h6 " + ("bg-green-700" if verdict == "VERIFIED" else "bg-red-700")
-                    )
-                ui.label(
-                    "Staging run · commit "
-                    + str(report.get("commit_sha", "?"))
-                    + " · illustrative values only"
-                ).classes("text-caption")
+                # ===== Header =====
+                with ui.card().classes("w-full"):
+                    with ui.row().classes("items-center justify-between w-full"):
+                        ui.label("FinSight — E2E Verification").classes("text-h5")
+                        ui.badge(f"OVERALL: {verdict}").classes(
+                            "text-lg " + verdict_color + " text-white"
+                        )
+                    ui.label(
+                        "Staging run · commit "
+                        + str(report.get("commit_sha", "?"))
+                        + " · illustrative values only"
+                    ).classes("text-caption text-grey-6")
 
-                # --- Run summary ---
-                ui.label("Run summary").classes("text-h6")
-                ui.label(f"run_id: {report.get('run_id')}")
-                ui.label(f"commit_sha: {report.get('commit_sha')}")
-                ui.label(f"image_digest: {report.get('image_digest')}")
-                ui.label(f"migration_revision: {report.get('migration_revision')}")
-                ui.label(f"environment: {report.get('environment')}")
-                ui.label(f"timestamp: {report.get('timestamp')}")
+                # ===== Run summary =====
+                with ui.card().classes("w-full"):
+                    ui.label("Run summary").classes("text-h6 q-mb-sm")
+                    with ui.grid(columns=2).classes("w-full gap-2"):
+                        for key in (
+                            "run_id",
+                            "commit_sha",
+                            "image_digest",
+                            "migration_revision",
+                            "environment",
+                            "timestamp",
+                        ):
+                            val = report.get(key)
+                            if val is not None:
+                                with ui.row().classes("items-center gap-2"):
+                                    ui.label(key).classes("text-bold text-grey-7")
+                                    ui.label(str(val)).classes("font-mono text-sm")
 
-                # --- Stage timeline ---
-                ui.label("Execution trace (stages)").classes("text-h6")
-                stage_names = [
-                    "import",
-                    "validate",
-                    "reconcile",
-                    "persist",
-                    "context",
-                    "investigate",
-                    "decide",
-                    "audit",
-                    "export",
-                ]
-                stage_map = {s.get("stage", "").lower(): s for s in report.get("stages", [])}
-                for name in stage_names:
-                    st = stage_map.get(name, {})
-                    status = st.get("status", "NOT_RUN")
-                    detail = st.get("detail", "")
-                    ids = st.get("ids", {})
-                    with ui.row():
-                        ui.badge(status)
-                        ui.label(name)
-                        if detail:
-                            ui.label(f"— {detail}").classes("text-caption")
-                    if ids:
-                        ui.label(f"  ids: {json.dumps(ids)}").classes("text-caption")
+                # ===== Stage timeline =====
+                with ui.card().classes("w-full"):
+                    ui.label("Execution trace (stages)").classes("text-h6 q-mb-sm")
+                    stage_names = [
+                        "import",
+                        "validate",
+                        "reconcile",
+                        "persist",
+                        "context",
+                        "investigate",
+                        "decide",
+                        "audit",
+                        "export",
+                    ]
+                    stage_map = {s.get("stage", "").lower(): s for s in report.get("stages", [])}
+                    with ui.column().classes("w-full gap-1"):
+                        for name in stage_names:
+                            st = stage_map.get(name, {})
+                            status = st.get("status", "NOT_RUN")
+                            detail = st.get("detail", "")
+                            ids = st.get("ids", {})
+                            color = (
+                                "text-green-600"
+                                if status == "PASSED"
+                                else "text-red-600"
+                                if status == "FAILED"
+                                else "text-amber-600"
+                            )
+                            with ui.row().classes("items-center gap-3 w-full"):
+                                ui.badge(status).classes(color)
+                                ui.label(name).classes("text-bold w-24")
+                                if detail:
+                                    ui.label(f"— {detail}").classes(
+                                        "text-caption text-grey-6 flex-grow"
+                                    )
+                            if ids:
+                                ui.label(f"  ids: {json.dumps(ids)}").classes(
+                                    "text-caption font-mono text-grey-5 q-ml-xl"
+                                )
 
-                # --- Scenarios ---
-                ui.label("Scenarios").classes("text-h6")
+                # ===== Scenarios =====
                 scenarios = report.get("scenarios", [])
-                with ui.row():
-                    passed_count = sum(1 for s in scenarios if s.get("verdict") == "VERIFIED")
-                    ui.label(f"{passed_count}/{len(scenarios)} passed")
+                with ui.card().classes("w-full"):
+                    ui.label("Scenarios").classes("text-h6 q-mb-sm")
+                    with ui.row().classes("items-center gap-2 q-mb-md"):
+                        passed_count = sum(1 for s in scenarios if s.get("verdict") == "VERIFIED")
+                        ui.badge(f"{passed_count}/{len(scenarios)} passed").classes(
+                            "bg-emerald-600 text-white"
+                            if passed_count == len(scenarios)
+                            else "bg-amber-500 text-white"
+                        )
 
-                for sc in scenarios:
-                    sc_id = sc.get("scenario_id", "?")
-                    sc_verdict = sc.get("verdict", "INCOMPLETE")
-                    ui.label(f"{sc_id}: {sc_verdict}").classes("text-subtitle1")
-                    mismatches = sc.get("mismatches", [])
-                    if mismatches:
-                        ui.label(f"  mismatches: {mismatches}").classes("text-negative")
+                    for sc in scenarios:
+                        sc_id = sc.get("scenario_id", "?")
+                        sc_verdict = sc.get("verdict", "INCOMPLETE")
+                        v_color = (
+                            "text-green-600"
+                            if sc_verdict == "VERIFIED"
+                            else "text-red-600"
+                            if sc_verdict == "FAILED"
+                            else "text-amber-600"
+                        )
+                        border_color = (
+                            "#10b981"
+                            if sc_verdict == "VERIFIED"
+                            else "#ef4444"
+                            if sc_verdict == "FAILED"
+                            else "#f59e0b"
+                        )
+                        with (
+                            ui.card()
+                            .classes("w-full q-mb-md")
+                            .style("border-left: 4px solid " + border_color)
+                        ):
+                            with ui.row().classes("items-center gap-2"):
+                                ui.label(sc_id).classes("text-subtitle1 text-bold")
+                                ui.badge(sc_verdict).classes(v_color)
+                            mismatches = sc.get("mismatches", [])
+                            if mismatches:
+                                ui.label(f"mismatches: {mismatches}").classes(
+                                    "text-negative text-caption"
+                                )
 
-                    exp = sc.get("expected", {})
-                    act = sc.get("actual", {})
-                    # Flatten expected/actual for comparison table
-                    exp_flat = _flatten(exp)
-                    act_flat = _flatten(act)
-                    all_keys = sorted(set(exp_flat) | set(act_flat))
-                    if all_keys:
-                        ui.label("Expected vs actual").classes("text-bold")
-                        for key in all_keys:
-                            e_val = exp_flat.get(key, "—")
-                            a_val = act_flat.get(key, "—")
-                            match = "Match" if str(e_val) == str(a_val) else "MISMATCH"
-                            with ui.row():
-                                ui.label(f"  {key}:")
-                                ui.label(f"expected={e_val}")
-                                ui.label(f"actual={a_val}")
-                                ui.badge(match)
+                            exp = sc.get("expected", {})
+                            act = sc.get("actual", {})
+                            exp_flat = _flatten(exp)
+                            act_flat = _flatten(act)
+                            all_keys = sorted(set(exp_flat) | set(act_flat))
+                            if all_keys:
+                                ui.label("Expected vs actual").classes("text-bold q-mt-sm")
+                                columns = [
+                                    {
+                                        "name": "metric",
+                                        "label": "Metric",
+                                        "field": "metric",
+                                        "align": "left",
+                                    },
+                                    {
+                                        "name": "expected",
+                                        "label": "Expected",
+                                        "field": "expected",
+                                        "align": "right",
+                                    },
+                                    {
+                                        "name": "actual",
+                                        "label": "Actual",
+                                        "field": "actual",
+                                        "align": "right",
+                                    },
+                                    {
+                                        "name": "result",
+                                        "label": "Result",
+                                        "field": "result",
+                                        "align": "center",
+                                    },
+                                ]
+                                rows = []
+                                for key in all_keys:
+                                    e_val = exp_flat.get(key, "—")
+                                    a_val = act_flat.get(key, "—")
+                                    match = "Match" if str(e_val) == str(a_val) else "MISMATCH"
+                                    rows.append(
+                                        {
+                                            "metric": key,
+                                            "expected": str(e_val),
+                                            "actual": str(a_val),
+                                            "result": match,
+                                        }
+                                    )
+                                table = ui.table(columns=columns, rows=rows).classes("w-full")
+                                table.add_slot(
+                                    "body-cell-result",
+                                    """
+                                    <q-td :props="props">
+                                        <q-badge :color="props.value === 'Match' ? 'green' : 'red'">
+                                            {{ props.value }}
+                                        </q-badge>
+                                    </q-td>
+                                """,
+                                )
 
-                    # Payout flow diagram (if financial data present)
-                    recon = act.get("reconciliation", act)
-                    if isinstance(recon, dict) and "allocated_total" in recon:
-                        ui.label("Payout flow").classes("text-bold")
-                        captured = recon.get("captured", recon.get("gross", "?"))
-                        fee = recon.get("fee_total", recon.get("fees", "?"))
-                        deposit = recon.get("allocated_total", "?")
-                        variance = recon.get("open_balance", recon.get("variance", "?"))
-                        ui.label(f"  Stripe charge: {captured} (gross captured)")
-                        ui.label(f"  − {fee} processing fee")
-                        ui.label(f"  Bank deposit: {deposit} (net payout)")
-                        ui.label(f"  Expected variance: {variance}")
+                            # Payout flow diagram
+                            recon = act.get("reconciliation", act)
+                            if isinstance(recon, dict) and "allocated_total" in recon:
+                                ui.label("Payout flow").classes("text-bold q-mt-sm")
+                                captured = recon.get("captured", recon.get("gross", "?"))
+                                fee = recon.get("fee_total", recon.get("fees", "?"))
+                                deposit = recon.get("allocated_total", "?")
+                                variance = recon.get("open_balance", recon.get("variance", "?"))
+                                with ui.row().classes("items-center gap-4 q-mt-xs"):
+                                    with ui.card().classes("p-3 text-center"):
+                                        ui.label("Stripe charge").classes(
+                                            "text-caption text-grey-6"
+                                        )
+                                        ui.label(str(captured)).classes("text-h6")
+                                        ui.label("gross captured").classes(
+                                            "text-caption text-grey-5"
+                                        )
+                                    ui.label("−").classes("text-h5 text-grey-5")
+                                    with ui.card().classes("p-3 text-center"):
+                                        ui.label("Processing fee").classes(
+                                            "text-caption text-grey-6"
+                                        )
+                                        ui.label(str(fee)).classes("text-h6")
+                                    ui.label("=").classes("text-h5 text-grey-5")
+                                    with ui.card().classes("p-3 text-center"):
+                                        ui.label("Bank deposit").classes("text-caption text-grey-6")
+                                        ui.label(str(deposit)).classes("text-h6")
+                                        ui.label("net payout").classes("text-caption text-grey-5")
+                                ui.label(f"Expected variance: {variance}").classes(
+                                    "text-caption q-mt-xs"
+                                )
 
-                    # Persisted IDs
-                    ids = {}
-                    for k in ("run_id", "exception_ids", "investigation_id", "export_id"):
-                        v = sc.get(k)
-                        if v is not None:
-                            ids[k] = v
-                    if ids:
-                        ui.label(f"  persisted ids: {json.dumps(ids)}").classes("text-caption")
+                            # Persisted IDs
+                            ids = {}
+                            for k in (
+                                "run_id",
+                                "exception_ids",
+                                "investigation_id",
+                                "export_id",
+                                "trace_id",
+                                "provider_request_id",
+                                "provider_model",
+                            ):
+                                v = sc.get(k)
+                                if v is not None:
+                                    ids[k] = v
+                            if ids:
+                                ui.label("Persisted IDs").classes("text-caption text-bold q-mt-sm")
+                                ui.label(json.dumps(ids, indent=2)).classes(
+                                    "font-mono text-caption text-grey-6"
+                                )
 
                 # --- LLM evidence panel ---
                 prov = report.get("provider")
                 tr = report.get("trace")
                 if prov or tr:
-                    ui.label("Investigation evidence (LLM)").classes("text-h6")
-                    ui.label("Deterministic facts: from DB and reconciliation engine.").classes(
-                        "text-caption"
-                    )
-                    ui.label(
-                        "LLM explanation: generated text (not a verified financial fact)."
-                    ).classes("text-caption")
-                    ui.label("Human decision: authoritative resolution.").classes("text-caption")
-                    if prov:
-                        ui.label(f"provider: {prov.get('provider_name')}")
-                        ui.label(f"model: {prov.get('model')}")
-                        ui.label(f"request_id: {prov.get('request_id')}")
-                        ui.label(f"success: {prov.get('success')}")
-                        lat = prov.get("latency_ms")
-                        if lat is not None:
-                            ui.label(f"latency_ms: {lat}")
-                    if tr:
-                        ui.label(f"trace_id: {tr.get('trace_id')}")
-                        ui.label(f"exported: {tr.get('exported')}")
-                        ui.label(f"backend: {tr.get('backend')}")
+                    with ui.card().classes("w-full"):
+                        ui.label("Investigation evidence (LLM)").classes("text-h6 q-mb-sm")
+                        with ui.row().classes("gap-4 q-mb-sm"):
+                            ui.chip("Deterministic facts", color="blue").props("outline")
+                            ui.chip("LLM explanation", color="purple").props("outline")
+                            ui.chip("Human decision", color="green").props("outline")
+                        ui.label(
+                            "Deterministic facts come from the database and reconciliation engine. "
+                            "LLM explanation is generated text, not a verified financial fact. "
+                            "Human decision is the authoritative resolution."
+                        ).classes("text-caption text-grey-6 q-mb-md")
+
+                        if prov:
+                            ui.label("Provider call").classes("text-bold q-mt-sm")
+                            with ui.grid(columns=2).classes("gap-2"):
+                                for k in (
+                                    "provider_name",
+                                    "model",
+                                    "request_id",
+                                    "success",
+                                    "latency_ms",
+                                ):
+                                    v = prov.get(k)
+                                    if v is not None:
+                                        ui.label(k).classes("text-bold text-grey-7")
+                                        ui.label(str(v)).classes("font-mono text-sm")
+                        if tr:
+                            ui.label("Trace").classes("text-bold q-mt-sm")
+                            with ui.grid(columns=2).classes("gap-2"):
+                                for k in ("trace_id", "exported", "backend"):
+                                    v = tr.get(k)
+                                    if v is not None:
+                                        ui.label(k).classes("text-bold text-grey-7")
+                                        ui.label(str(v)).classes("font-mono text-sm")
 
                 # --- Financial invariants ---
                 inv = report.get("financial_invariants", {})
                 if inv:
-                    ui.label("Financial invariants").classes("text-h6")
-                    for k, v in inv.items():
-                        ui.label(f"{k}: {v}")
+                    with ui.card().classes("w-full"):
+                        ui.label("Financial invariants").classes("text-h6 q-mb-sm")
+                        for k, v in inv.items():
+                            with ui.row().classes("items-center gap-2"):
+                                ui.badge("PASS" if v is True else "FAIL").classes(
+                                    "bg-green-600" if v is True else "bg-red-600"
+                                )
+                                color = "text-green-600" if v is True else "text-red-600"
+                                ui.label(k).classes(color)
 
                 # --- Re-verify with deterministic verifier ---
-                try:
-                    from finance.verification.evidence import E2ERunReport
-                    from finance.verification.verifier import verify_run
-
-                    golden = None
+                with ui.card().classes("w-full"):
+                    ui.label("Verifier re-check").classes("text-h6 q-mb-sm")
                     try:
-                        import json as _j
-                        from pathlib import Path
+                        from finance.verification.evidence import E2ERunReport
+                        from finance.verification.verifier import verify_run
 
-                        golden_path = Path("tests/fixtures/reconciliation/golden_scenarios.json")
-                        if golden_path.exists():
-                            golden = _j.loads(golden_path.read_text())
-                    except Exception:
                         golden = None
-                    rep = E2ERunReport(**report)
-                    re_verdict = verify_run(rep, golden)
-                    ui.label(f"Verifier re-check: {re_verdict.value}").classes("text-bold")
-                except Exception as e:
-                    ui.label(f"Verifier re-check failed: {e}").classes("text-negative")
+                        try:
+                            import json as _j
+                            from pathlib import Path
+
+                            golden_path = Path(
+                                "tests/fixtures/reconciliation/golden_scenarios.json"
+                            )
+                            if golden_path.exists():
+                                golden = _j.loads(golden_path.read_text())
+                        except Exception:
+                            golden = None
+                        rep = E2ERunReport(**report)
+                        re_verdict = verify_run(rep, golden)
+                        ui.badge(re_verdict.value).classes(
+                            "bg-green-600 text-white"
+                            if re_verdict.value == "VERIFIED"
+                            else "bg-red-600 text-white"
+                        )
+                    except Exception as e:
+                        ui.label(f"Verifier re-check failed: {e}").classes("text-negative")
 
         async def load() -> None:
             result_col.clear()
@@ -589,7 +745,7 @@ def verification(report_path: str | None = None) -> None:
                 return
             _render(report)
 
-        ui.button("Render", on_click=load)
+        ui.button("Render", on_click=load).classes("q-mt-md")
         if report_path:
             ui.timer(0.1, load, once=True)
 
