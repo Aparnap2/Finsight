@@ -15,6 +15,8 @@ This is enforced by:
 from datetime import UTC, datetime
 from typing import Any
 
+from shared.llm.factory import create_provider_from_settings
+from shared.llm.provider import LLMProvider
 from shared.models.assertions import Assertion, AssertionType, SupportLevel
 from shared.models.state import (
     CommentaryDraft,
@@ -25,7 +27,6 @@ from shared.models.state import (
 from shared.privacy import boundary as privacy_boundary
 from shared.privacy.boundary import Purpose
 from shared.privacy.inventory import DataClassification
-from shared.utils.llm_client import LLMClient
 
 
 class CommentaryRenderInput:
@@ -170,7 +171,7 @@ def _format_degraded_modes(modes: list[str]) -> str:
 
 def render_commentary(
     render_input: CommentaryRenderInput,
-    llm_client: LLMClient | None = None,
+    llm_client: LLMProvider | None = None,
     *,
     tenant_id: str,
 ) -> str:
@@ -308,7 +309,7 @@ def _fallback_render(render_input: CommentaryRenderInput) -> str:
 def generate_commentary(
     root_causes: list[RootCauseFinding],
     variances: list[dict[str, Any]],
-    llm_client: LLMClient | None = None,
+    llm_client: LLMProvider | None = None,
     *,
     tenant_id: str,
 ) -> CommentaryDraft:
@@ -380,14 +381,14 @@ def _parse_sections_from_text(text: str) -> list[CommentarySection]:
     return sections
 
 
-def commentary_node(state: PipelineState, llm_client: LLMClient | None = None) -> dict[str, Any]:
+def commentary_node(state: PipelineState, llm_client: LLMProvider | None = None) -> dict[str, Any]:
     """LangGraph node: produce commentary from pipeline state.
 
     This node bridges the pipeline state to the new assertion-based
     rendering layer.
     """
     if llm_client is None:
-        llm_client = LLMClient()
+        llm_client = create_provider_from_settings()
 
     root_causes: list[RootCauseFinding] = state.get("root_causes", [])
 

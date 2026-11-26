@@ -3,11 +3,12 @@
 import contextlib
 from typing import Any
 
+from shared.llm.factory import create_provider_from_settings
+from shared.llm.provider import LLMProvider
 from shared.models.state import EvidenceItem, PipelineState, RootCauseFinding, Variance
 from shared.privacy import boundary as privacy_boundary
 from shared.privacy.boundary import Purpose
 from shared.privacy.inventory import DataClassification
-from shared.utils.llm_client import LLMClient
 
 _VARIANCE_CLASSIFICATIONS: dict[str, DataClassification] = {
     "account_id": DataClassification.INTERNAL,
@@ -105,7 +106,7 @@ def _parse_llm_response(text: str) -> dict[str, Any]:
 
 def investigate_root_causes(
     variances: list[Variance],
-    llm_client: LLMClient | None = None,
+    llm_client: LLMProvider | None = None,
     *,
     tenant_id: str,
 ) -> list[RootCauseFinding]:
@@ -138,9 +139,9 @@ def investigate_root_causes(
     return findings
 
 
-def root_cause_node(state: PipelineState, llm_client: LLMClient | None = None) -> dict[str, Any]:
+def root_cause_node(state: PipelineState, llm_client: LLMProvider | None = None) -> dict[str, Any]:
     if llm_client is None:
-        llm_client = LLMClient()
+        llm_client = create_provider_from_settings()
     material_variances = [v for v in state.get("variances", []) if v.is_material]
     findings = investigate_root_causes(
         material_variances, llm_client=llm_client, tenant_id=str(state.get("tenant_id", ""))

@@ -40,14 +40,16 @@ from finance.driver_engine.bridge_analysis import decompose_bridge
 from finance.ingestion.ingestion_agent import ingestion_node
 from finance.validation.data_quality import assess_batch
 from shared.config import get_settings
+from shared.llm.factory import create_provider_from_settings
 from shared.models.action import ActionDomain, ActionImpact, ActionItem, create_action
 from shared.models.assertions import Assertion
 from shared.models.state import PipelineState
-from shared.utils.llm_client import LLMClient
 from shared.utils.policy import evaluate_from_pipeline_result
 from shared.utils.tools.tool_result import ToolResult
 
 router = APIRouter()
+
+logger = logging.getLogger(__name__)
 
 _runs: dict[str, dict[str, Any]] = {}
 
@@ -97,7 +99,7 @@ async def trigger_pipeline(
         var_result = variance_node(state)
         state["variances"] = var_result["variances"]
 
-        llm_client = LLMClient()
+        llm_client = create_provider_from_settings()
 
         material = [v for v in state["variances"] if v.is_material]
         findings = investigate_root_causes(material, llm_client=llm_client, tenant_id=req.tenant_id)
@@ -340,7 +342,7 @@ def _run_full_pipeline(period: str, tenant_id: str) -> dict[str, Any]:
     state["variances"] = var_result["variances"]
 
     # 3. Root cause investigation
-    llm_client = LLMClient()
+    llm_client = create_provider_from_settings()
     material = [v for v in state["variances"] if v.is_material]
     findings = investigate_root_causes(material, llm_client=llm_client, tenant_id=tenant_id)
     state["root_causes"] = findings
@@ -461,7 +463,8 @@ async def execute_full_pipeline(req: PipelineExecuteRequest) -> PipelineExecuteR
     try:
         result = _run_full_pipeline(req.period, req.tenant_id)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Pipeline execution failed: {e}") from e
+        logger.exception("pipeline execution failed")
+        raise HTTPException(status_code=500, detail="Pipeline execution failed.") from e
 
     assertions_resp = [_serialize_assertion(a) for a in result["assertions"]]
     commentary_resp = [
@@ -510,7 +513,8 @@ async def get_commentary(period: str, tenant_id: str = "CF001") -> CommentaryRes
     try:
         result = _run_full_pipeline(period, tenant_id)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Commentary generation failed: {e}") from e
+        logger.exception("commentary generation failed")
+        raise HTTPException(status_code=500, detail="Commentary generation failed.") from e
 
     assertions_resp = [_serialize_assertion(a) for a in result["assertions"]]
     commentary_resp = [
@@ -735,7 +739,8 @@ async def get_policy_decision(period: str, tenant_id: str = "CF001") -> PolicyDe
     try:
         result = _run_full_pipeline(period, tenant_id)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Policy evaluation failed: {e}") from e
+        logger.exception("policy evaluation failed")
+        raise HTTPException(status_code=500, detail="Policy evaluation failed.") from e
 
     pd = result["policy_decision"]
     return PolicyDecisionResponse(

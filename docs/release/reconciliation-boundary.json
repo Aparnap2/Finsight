@@ -1,0 +1,52 @@
+{
+  "entry_point": "finance.reconciliation.operator_report",
+  "environment_variables": [],
+  "files": [
+    "finance/__init__.py",
+    "finance/reconciliation/__init__.py",
+    "finance/reconciliation/allocation.py",
+    "finance/reconciliation/bank.py",
+    "finance/reconciliation/classifier.py",
+    "finance/reconciliation/errors.py",
+    "finance/reconciliation/fingerprints.py",
+    "finance/reconciliation/matcher.py",
+    "finance/reconciliation/models.py",
+    "finance/reconciliation/normalizer.py",
+    "finance/reconciliation/operator_report.py",
+    "finance/reconciliation/reconciler.py",
+    "finance/reconciliation/statement_workflow.py",
+    "finance/reconciliation/tolerances.py"
+  ],
+  "fixtures": [
+    "tests/fixtures/reconciliation/triangle/cases.json",
+    "tests/fixtures/reconciliation/triangle/expected.json",
+    "tests/fixtures/reconciliation/triangle/operator_expected.json"
+  ],
+  "modules": [
+    "finance",
+    "finance.reconciliation",
+    "finance.reconciliation.allocation",
+    "finance.reconciliation.bank",
+    "finance.reconciliation.classifier",
+    "finance.reconciliation.errors",
+    "finance.reconciliation.fingerprints",
+    "finance.reconciliation.matcher",
+    "finance.reconciliation.models",
+    "finance.reconciliation.normalizer",
+    "finance.reconciliation.operator_report",
+    "finance.reconciliation.reconciler",
+    "finance.reconciliation.statement_workflow",
+    "finance.reconciliation.tolerances"
+  ],
+  "package_members_outside_closure": [
+    "finance/reconciliation/context.py",
+    "finance/reconciliation/context_builder.py",
+    "finance/reconciliation/diagnostics.py",
+    "finance/reconciliation/exception_lifecycle.py",
+    "finance/reconciliation/investigation.py",
+    "finance/reconciliation/ledger_resolution.py",
+    "finance/reconciliation/persistence.py"
+  ],
+  "schema_version": 1,
+  "third_party_imports": []
+}

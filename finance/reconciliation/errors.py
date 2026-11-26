@@ -1,9 +1,10 @@
 """Error taxonomy for the P1 pure reconciliation core.
 
 All errors are deterministic, dependency-free, and carry no I/O. They
-distinguish five failure modes required by the frozen reconciliation
-spec: float money input, cross-currency misuse, bad tolerance config,
-duplicate ingestion, and broken domain invariants.
+distinguish six failure modes required by the reconciliation spec:
+float money input, cross-currency misuse, bad tolerance config,
+duplicate ingestion, tenant-boundary violations, and broken domain
+invariants.
 
 Only the Python standard library is used.
 """
@@ -51,6 +52,14 @@ class ToleranceError(ReconciliationError, ValueError):
 
     Examples: negative ``absolute``/``percent``, non-``Decimal`` bounds,
     or passing a non-tolerance object where a tolerance is required.
+    """
+
+
+class TenantIsolationError(ReconciliationError, ValueError):  # noqa: N818 -- frozen spec name
+    """Raised when a reconciliation input crosses a tenant boundary.
+
+    Tenant scope always comes from trusted calling context; a mismatch is
+    a caller error, never something to filter silently.
     """
 
 

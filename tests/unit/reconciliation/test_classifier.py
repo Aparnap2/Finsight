@@ -47,14 +47,21 @@ def _leg(
 
 
 class TestThreeTypesOnly:
-    """The P1 vocabulary is closed at exactly three I-codes."""
+    """The exception vocabulary is closed, all ``I-`` prefixed.
+
+    The three P1 codes are unchanged; the bank-payout contract adds the
+    partial-settlement and payout-mismatch codes, so the frozen set grows
+    to five rather than staying at three.
+    """
 
     def test_vocabulary_is_closed(self) -> None:
-        """Exactly the three frozen codes exist, all I-prefixed."""
+        """Exactly the five frozen codes exist, all I-prefixed."""
         assert set(ExceptionCode) == {
             ExceptionCode.PARTIAL_REFUND_ACCOUNTING_LAG,
             ExceptionCode.FEE_MISMATCH,
             ExceptionCode.DUPLICATE_LEDGER_ENTRY,
+            ExceptionCode.PARTIAL_SETTLEMENT,
+            ExceptionCode.PAYOUT_MISMATCH,
         }
         assert ExceptionCode.PARTIAL_REFUND_ACCOUNTING_LAG.value == "I-REFUND-LAG"
         assert ExceptionCode.FEE_MISMATCH.value == "I-FEE-DRIFT"

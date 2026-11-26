@@ -4,7 +4,7 @@
 # MiniStack S3 contract is per docs/architecture/MINISTACK_SEAM_AUDIT.md:
 # single justified seam (S3), test-only, never in fast CI.
 
-.PHONY: test test-integration evals ci-local ministack-up ministack-init ministack-test ministack-down
+.PHONY: test test-integration test-contract evals ci-local ministack-up ministack-init ministack-test ministack-down
 
 # $(wildcard ...) keeps local runs green before a suite directory exists;
 # CI workflows reference the literal directories and fail fast instead.
@@ -20,6 +20,15 @@ test-integration:
 	else \
 		uv run pytest $(INT_DIRS) -q -rs; \
 	fi
+
+# Reconciliation quality gate: the executable behavioural contract, the runtime
+# boundary, and the machine-readable record for this commit. CI enforces the
+# same assertions inside `make test`; this target is the focused local entry
+# point for engine changes.
+test-contract:
+	uv run pytest tests/unit/reconciliation -q
+	uv run python scripts/reconciliation_boundary.py --check
+	uv run python scripts/reconciliation_contract_report.py --out /tmp/finsight-contract.json
 
 evals:
 	@echo "LLM evals are manual-only (Actions workflow_dispatch: ai-evals). No provider calls from this target."

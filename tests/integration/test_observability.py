@@ -15,6 +15,7 @@ from fastapi.testclient import TestClient
 
 from agents.p8_runtime.contract import Budget, BudgetUsage
 from apps.api.observability import (
+    CORRELATION_ID_HEADER,
     REQUEST_ID_HEADER,
     RequestIDMiddleware,
     budget_check_response,
@@ -96,6 +97,54 @@ class TestRequestId:
         assert record["latency_ms"] == 1.25
 
 
+class TestCorrelationId:
+    """Correlation ID is accepted, echoed, and recorded for cross-service traces."""
+
+    def test_propagates_incoming_correlation_id(self, caplog: Any) -> None:
+        client = TestClient(_build_app(probe=lambda: True))
+        with caplog.at_level(logging.INFO, logger="finsight.request"):
+            response = client.get("/ping", headers={CORRELATION_ID_HEADER: "corr-7f3a"})
+        assert response.status_code == 200
+        assert response.headers[CORRELATION_ID_HEADER] == "corr-7f3a"
+        assert any("corr-7f3a" in r.message for r in caplog.records)
+
+    def test_generates_correlation_id_when_absent(self) -> None:
+        client = TestClient(_build_app(probe=lambda: True))
+        response = client.get("/ping")
+        generated = response.headers.get(CORRELATION_ID_HEADER, "")
+        assert generated, "a correlation id must always be present"
+
+    def test_unsafe_correlation_id_is_replaced(self) -> None:
+        client = TestClient(_build_app(probe=lambda: True))
+        hostile = "bad id with spaces\ninjected=1"
+        response = client.get("/ping", headers={CORRELATION_ID_HEADER: hostile})
+        echoed = response.headers[CORRELATION_ID_HEADER]
+        assert echoed != hostile
+        assert "\n" not in echoed
+
+    def test_correlation_and_request_ids_are_independent(self) -> None:
+        client = TestClient(_build_app(probe=lambda: True))
+        response = client.get(
+            "/ping",
+            headers={REQUEST_ID_HEADER: "req-independent", CORRELATION_ID_HEADER: "corr-chain"},
+        )
+        assert response.headers[REQUEST_ID_HEADER] == "req-independent"
+        assert response.headers[CORRELATION_ID_HEADER] == "corr-chain"
+
+    def test_record_carries_correlation_id(self) -> None:
+        record = format_request_log(
+            request_id="req-1",
+            correlation_id="corr-1",
+            tenant_id="tenant-a",
+            situation_id="sit-9",
+            method="GET",
+            route="/ping",
+            status_code=200,
+            latency_ms=0.5,
+        )
+        assert record["correlation_id"] == "corr-1"
+
+
 class TestRedaction:
     """Canary secrets/PII appear nowhere: records, logs, responses."""
 
@@ -157,6 +206,46 @@ class TestReadiness:
         response = client.get("/live")
         assert response.status_code == 200
         assert response.json() == {"status": "alive"}
+
+
+class TestReadinessMiddlewareExemption:
+    """Readiness/liveness bypass the tenant header gate.
+
+    Health endpoints are unauthenticated (API_CONTRACT.md §1), so the tenant
+    middleware must not demand ``X-Tenant-ID``/``X-Role`` for them. These tests
+    mount the real middleware so a regression in the exemption shows up as a 401
+    instead of the readiness router's answer.
+    """
+
+    def test_ready_returns_503_without_headers(self) -> None:
+        from apps.api.middleware import TenantAuthMiddleware
+
+        app = FastAPI()
+        app.add_middleware(TenantAuthMiddleware)
+        app.include_router(create_readiness_router(probe=lambda: False))
+        client = TestClient(app)
+        response = client.get("/ready")
+        assert response.status_code == 503, response.text
+
+    def test_ready_returns_200_without_headers_when_probe_ok(self) -> None:
+        from apps.api.middleware import TenantAuthMiddleware
+
+        app = FastAPI()
+        app.add_middleware(TenantAuthMiddleware)
+        app.include_router(create_readiness_router(probe=lambda: True))
+        client = TestClient(app)
+        response = client.get("/ready")
+        assert response.status_code == 200, response.text
+
+    def test_live_returns_200_without_headers(self) -> None:
+        from apps.api.middleware import TenantAuthMiddleware
+
+        app = FastAPI()
+        app.add_middleware(TenantAuthMiddleware)
+        app.include_router(create_readiness_router(probe=lambda: False))
+        client = TestClient(app)
+        response = client.get("/live")
+        assert response.status_code == 200, response.text
 
 
 class TestBudgetSurfacing:

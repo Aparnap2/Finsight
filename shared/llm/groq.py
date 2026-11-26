@@ -143,6 +143,59 @@ class GroqProvider:
             logger.warning("groq health probe failed", exc_info=False)
             return ProviderHealth(ok=False, latency_ms=latency_ms, reason="health probe failed")
 
+    def generate(self, prompt: str, max_tokens: int = 512, temperature: float = 0.3) -> str:
+        """Return a plain-text completion for ``prompt``."""
+        key = self._resolve_api_key()
+        model = self._resolve_model()
+        url = f"{self._resolve_base_url()}/chat/completions"
+        messages = [{"role": "user", "content": prompt}]
+        payload: dict[str, Any] = {
+            "model": model,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+            "response_format": {"type": "json_object"},
+        }
+        wire_headers = {"Authorization": f"Bearer {key}"}
+        start = time.monotonic()
+        last_error: BaseException | None = None
+        for _attempt in range(1, self._max_attempts + 1):
+            try:
+                decoded = self._transport(url, payload, wire_headers, self._timeout_s)
+                content = self._extract_content(decoded)
+                self._call_log.append(
+                    ProviderCallLog(
+                        provider="groq",
+                        model=model,
+                        success=True,
+                        latency_ms=(time.monotonic() - start) * 1000.0,
+                        input_chars=len(prompt),
+                        output_chars=len(content),
+                    )
+                )
+                return content
+            except ProviderError:
+                raise
+            except Exception as exc:
+                last_error = exc
+                if _attempt >= self._max_attempts:
+                    break
+                time.sleep(0.05 * _attempt)
+        latency_ms = (time.monotonic() - start) * 1000.0
+        kind = type(last_error).__name__ if last_error is not None else "UnknownError"
+        self._call_log.append(
+            ProviderCallLog(
+                provider="groq",
+                model=model,
+                success=False,
+                latency_ms=latency_ms,
+                input_chars=len(prompt),
+                output_chars=None,
+                error_kind=kind,
+            )
+        )
+        raise ProviderUnavailableError(f"groq request failed after {self._max_attempts} attempt(s)")
+
     def generate_structured[T: BaseModel](
         self, prompt: InvestigationPrompt | str, response_schema: type[T]
     ) -> T:

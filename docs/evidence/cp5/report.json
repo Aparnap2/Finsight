@@ -1,0 +1,162 @@
+{
+  "aggregate": {
+    "all_eligibility_match": true,
+    "all_evidence_subset_ok_new": true,
+    "all_evidence_subset_ok_old": true,
+    "cases_total": 4,
+    "gated_cases": 2,
+    "llm_calls_saved": 1,
+    "new_total_llm_calls": 2,
+    "old_total_llm_calls": 3
+  },
+  "baseline_note": "Old flow = pre-CP4 route pattern (no diagnostic, no eligibility gate). Reproduced locally from the pre-CP4 code pattern; not from a captured historical run.",
+  "benchmark": "cp5_context_preparation_efficiency",
+  "cases": [
+    {
+      "actual_eligibility": "ELIGIBLE",
+      "case": "eligible_fee_discrepancy",
+      "delta_llm_calls": 0,
+      "delta_prompt_tokens_est": 94,
+      "eligibility_match": true,
+      "expected_eligibility": "ELIGIBLE",
+      "new_flow": {
+        "abstained": false,
+        "confidence": "medium",
+        "evidence_refs": [
+          "evt_1",
+          "dep_1"
+        ],
+        "evidence_subset_ok": true,
+        "gated": false,
+        "latency_ms": 0.033,
+        "llm_calls": 1,
+        "prompt_chars": 915,
+        "prompt_tokens_est": 228,
+        "tool_calls": 0
+      },
+      "old_flow": {
+        "abstained": false,
+        "confidence": "medium",
+        "evidence_refs": [
+          "evt_1",
+          "dep_1"
+        ],
+        "evidence_subset_ok": true,
+        "gated": false,
+        "latency_ms": 0.046,
+        "llm_calls": 1,
+        "prompt_chars": 539,
+        "prompt_tokens_est": 134,
+        "tool_calls": 0
+      }
+    },
+    {
+      "actual_eligibility": "INELIGIBLE",
+      "case": "incomplete_evidence",
+      "delta_llm_calls": 0,
+      "delta_prompt_tokens_est": 0,
+      "eligibility_match": true,
+      "expected_eligibility": "INELIGIBLE",
+      "new_flow": {
+        "abstained": null,
+        "confidence": null,
+        "evidence_refs": [],
+        "evidence_subset_ok": true,
+        "gated": true,
+        "latency_ms": 0.0,
+        "llm_calls": 0,
+        "prompt_chars": 0,
+        "prompt_tokens_est": 0,
+        "tool_calls": 0
+      },
+      "old_flow": {
+        "abstained": true,
+        "confidence": "low",
+        "evidence_refs": [],
+        "evidence_subset_ok": true,
+        "gated": false,
+        "latency_ms": 0.004,
+        "llm_calls": 0,
+        "prompt_chars": 0,
+        "prompt_tokens_est": 0,
+        "tool_calls": 0
+      }
+    },
+    {
+      "actual_eligibility": "BLOCKED",
+      "case": "integrity_failure",
+      "delta_llm_calls": -1,
+      "delta_prompt_tokens_est": -134,
+      "eligibility_match": true,
+      "expected_eligibility": "BLOCKED",
+      "new_flow": {
+        "abstained": null,
+        "confidence": null,
+        "evidence_refs": [],
+        "evidence_subset_ok": true,
+        "gated": true,
+        "latency_ms": 0.0,
+        "llm_calls": 0,
+        "prompt_chars": 0,
+        "prompt_tokens_est": 0,
+        "tool_calls": 0
+      },
+      "old_flow": {
+        "abstained": false,
+        "confidence": "medium",
+        "evidence_refs": [
+          "evt_1",
+          "dep_1"
+        ],
+        "evidence_subset_ok": true,
+        "gated": false,
+        "latency_ms": 0.016,
+        "llm_calls": 1,
+        "prompt_chars": 539,
+        "prompt_tokens_est": 134,
+        "tool_calls": 0
+      }
+    },
+    {
+      "actual_eligibility": "REVIEW_REQUIRED",
+      "case": "duplicate_review",
+      "delta_llm_calls": 0,
+      "delta_prompt_tokens_est": 89,
+      "eligibility_match": true,
+      "expected_eligibility": "REVIEW_REQUIRED",
+      "new_flow": {
+        "abstained": false,
+        "confidence": "medium",
+        "evidence_refs": [
+          "evt_1",
+          "dep_1"
+        ],
+        "evidence_subset_ok": true,
+        "gated": false,
+        "latency_ms": 0.019,
+        "llm_calls": 1,
+        "prompt_chars": 893,
+        "prompt_tokens_est": 223,
+        "tool_calls": 0
+      },
+      "old_flow": {
+        "abstained": false,
+        "confidence": "medium",
+        "evidence_refs": [
+          "evt_1",
+          "dep_1"
+        ],
+        "evidence_subset_ok": true,
+        "gated": false,
+        "latency_ms": 0.013,
+        "llm_calls": 1,
+        "prompt_chars": 539,
+        "prompt_tokens_est": 134,
+        "tool_calls": 0
+      }
+    }
+  ],
+  "honesty_note": "Both flows use a single generate_structured call (BoundedInvestigation is single-call). The prepared-context gain is NOT a reduction in LLM call count within the investigator; it is (a) gating ineligible/blocked cases before any LLM call, (b) richer evidence in the prompt, and (c) eliminating external context-gathering. Tool calls are 0 in both flows because the investigator does not use tools. No metrics stack was added.",
+  "method": "in-memory representative cases; FakeLLM scripted provider; token estimate = prompt_chars // 4",
+  "schema_version": "1.0"
+}

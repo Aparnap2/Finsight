@@ -123,3 +123,39 @@
 require human authorization. Ship-blockers: provision PG + reproduce RLS/stripe
 files green; run (gated) live-provider eval; human sign-off on legacy-stack
 retirement and P8-PG API wiring. Nothing in this document authorizes a deploy.
+
+## 12. Deferred roadmap — operational control surface (not release scope)
+
+FinSight needs an operational control surface spanning SRE/DevOps diagnostics,
+platform administration, business configuration, and business operation — kept
+deliberately bounded (no generic admin panel, no enterprise IAM, no GUI for
+arbitrary env/SQL/infrastructure edits, no configuration path that lets an
+admin or LLM override deterministic financial outcomes).
+
+Full design, role/permission matrix, configuration boundaries, and staging:
+[`docs/architecture/OPERATIONAL_CONTROL_SURFACE.md`](../architecture/OPERATIONAL_CONTROL_SURFACE.md).
+
+**This is backlog. It is not part of the current release remediation and must
+not be built until the core reconciliation workflow is functional.**
+
+Staged TODO:
+
+- [ ] Stage 0 — finish core reconciliation workflow (current remediation).
+- [ ] Stage 1 — operational visibility: version/Git SHA/env, DB connectivity +
+      migration head, storage/LLM availability, read-only error feed,
+      tenant-scoped audit search. (No new auth model required.)
+- [ ] Stage 2 — tenant admin (listing/status/config, users & roles) **after real
+      authentication/authorization exists**; cross-tenant access explicit and
+      audited.
+- [ ] Stage 3 — versioned reconciliation policy configuration within validated
+      limits; never silently recompute historical runs.
+- [ ] Stage 4 — bounded AI/provider configuration that cannot bypass
+      deterministic reconciliation.
+- [ ] Stage 5 — advanced SRE GUI (CLI remains sufficient initially).
+- [ ] Author `ADMINISTRATION_CONTRACT.md`, `CONFIGURATION_CONTRACT.md`,
+      `OPERATIONS_RUNBOOK.md`, and extend `OBSERVABILITY_CONTRACT.md` before
+      building any of the above.
+
+Open decision before Stage 2: single-operator portfolio demo vs. multi-tenant
+platform. Recommendation: design boundaries for multi-tenancy, implement the
+minimum single-operator administration needed for a credible portfolio release.

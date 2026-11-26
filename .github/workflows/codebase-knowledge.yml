@@ -1,0 +1,47 @@
+name: Codebase Knowledge
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codebase-knowledge-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  knowledge-drift:
+    name: Knowledge bundle drift check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install pyyaml
+
+      - name: Validate knowledge bundle
+        run: python scripts/validate_knowledge.py --strict
+
+      - name: Check bundle is in sync with source
+        run: python scripts/knowledge_graph.py --check
+
+      - name: Generate candidate bundle (artifact)
+        run: python scripts/knowledge_graph.py --out /tmp/knowledge-candidate
+
+      - name: Upload candidate bundle
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: knowledge-bundle-candidate
+          path: /tmp/knowledge-candidate
+          retention-days: 7

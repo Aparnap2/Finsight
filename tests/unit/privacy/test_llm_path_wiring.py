@@ -27,7 +27,6 @@ import pytest
 
 from shared.llm.fake import FakeLLM
 from shared.models.assertions import Assertion, AssertionType, SupportLevel
-from shared.utils.llm_client import LLMClient
 
 
 class _SpyBoundary:
@@ -41,16 +40,16 @@ class _SpyBoundary:
         raise RuntimeError("privacy boundary deny (test spy)")
 
 
-class _CapturingLLMClient(LLMClient):
-    """LLMClient fake: records generate() prompts, returns canned text."""
+class _CapturingLLMClient(FakeLLM):
+    """FakeLLM stand-in: records generate() prompts, returns canned text."""
 
     def __init__(self, canned: str = "{}") -> None:
+        super().__init__(scripted_text=canned)
         self.prompts: list[str] = []
-        self.canned = canned
 
     def generate(self, prompt: str, max_tokens: int = 512, temperature: float = 0.3) -> str:
         self.prompts.append(prompt)
-        return self.canned
+        return super().generate(prompt, max_tokens, temperature)
 
 
 def _valid_plan_payload() -> dict[str, Any]:

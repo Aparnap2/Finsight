@@ -18,6 +18,8 @@ Usage::
 
 from __future__ import annotations
 
+from typing import Any
+
 from shared.llm.config import LLMProviderConfig, resolve_config
 from shared.llm.fake import FakeLLM
 from shared.llm.openai_compatible import OpenAICompatibleProvider
@@ -69,3 +71,52 @@ def create_provider(
 def create_fake_provider() -> FakeLLM:
     """Create a deterministic FakeLLM for testing (zero network)."""
     return FakeLLM()
+
+
+def create_provider_from_settings(settings: Any = None) -> LLMProvider:
+    """Create an LLM provider from application settings.
+
+    Reads ``poolside_api_key``, ``groq_api_key``, ``openrouter_api_key``
+    from :class:`shared.config.config.Settings` (env-driven) and returns
+    an :class:`OpenAICompatibleProvider`.  Falls back to the same priority
+    order as the legacy ``LLMClient``: poolside -> groq -> openrouter.
+
+    Args:
+        settings: Optional settings instance (defaults to ``get_settings()``).
+
+    Returns:
+        An :class:`LLMProvider` implementation.
+
+    Raises:
+        RuntimeError: When no API key is configured.
+    """
+    if settings is None:
+        from shared.config import get_settings
+
+        settings = get_settings()
+
+    if getattr(settings, "poolside_api_key", ""):
+        config = LLMProviderConfig(
+            provider="poolside",
+            base_url=settings.poolside_base_url,
+            api_key=settings.poolside_api_key,
+            model=settings.poolside_chat_model,
+        )
+    elif getattr(settings, "groq_api_key", ""):
+        config = LLMProviderConfig(
+            provider="groq",
+            base_url=settings.groq_base_url,
+            api_key=settings.groq_api_key,
+            model=settings.groq_chat_model,
+        )
+    elif getattr(settings, "openrouter_api_key", ""):
+        config = LLMProviderConfig(
+            provider="openrouter",
+            base_url=settings.openrouter_base_url,
+            api_key=settings.openrouter_api_key,
+            model=settings.openrouter_chat_model,
+        )
+    else:
+        raise RuntimeError("No LLM API key configured (poolside/groq/openrouter)")
+
+    return OpenAICompatibleProvider(config)

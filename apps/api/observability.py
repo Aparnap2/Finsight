@@ -26,16 +26,22 @@ from typing import Any
 
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
+from sqlalchemy import create_engine, text
+from sqlalchemy.engine import Engine
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
 from starlette.responses import Response
 
+from shared.config import get_settings
 from shared.safety.secrets import contains_secret_literal, scrub_text
 
 logger = logging.getLogger("finsight.request")
 
 #: Header carrying the request ID in and echoing it back out.
 REQUEST_ID_HEADER = "X-Request-ID"
+
+#: Header carrying a cross-service correlation ID in and out.
+CORRELATION_ID_HEADER = "X-Correlation-ID"
 
 #: Incoming IDs outside this pattern are replaced (log-forgery safety).
 _SAFE_ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,63}")
@@ -48,6 +54,17 @@ def generate_request_id() -> str:
 
 def coerce_request_id(raw: str | None) -> str:
     """Return a safe request ID: the incoming value or a fresh one."""
+    if raw and _SAFE_ID_RE.fullmatch(raw):
+        return raw
+    return generate_request_id()
+
+
+def coerce_correlation_id(raw: str | None) -> str:
+    """Return a safe correlation ID, defaulting to a fresh one.
+
+    Same log-forgery rule as :func:`coerce_request_id`: an inbound value is
+    echoed only when it matches the safe pattern, otherwise it is replaced.
+    """
     if raw and _SAFE_ID_RE.fullmatch(raw):
         return raw
     return generate_request_id()
@@ -71,10 +88,12 @@ def format_request_log(
     route: str,
     status_code: int,
     latency_ms: float,
+    correlation_id: str = "",
 ) -> dict[str, Any]:
     """Build a scrubbed structured per-request record (pure, no I/O)."""
     record: dict[str, Any] = {
         "request_id": scrub_text(request_id),
+        "correlation_id": scrub_text(correlation_id),
         "tenant_id": scrub_text(tenant_id or "unknown"),
         "situation_id": scrub_text(situation_id or "none"),
         "method": scrub_text(method),
@@ -87,6 +106,7 @@ def format_request_log(
     if contains_secret_literal(text):  # fail-closed: never emit a leaking record
         return {
             "request_id": record["request_id"],
+            "correlation_id": record["correlation_id"],
             "tenant_id": "[REDACTED]",
             "situation_id": "[REDACTED]",
             "method": record["method"],
@@ -101,9 +121,10 @@ def format_request_log(
 def _emit(record: dict[str, Any]) -> None:
     """Emit one structured access line (IDs/route/disposition/latency only)."""
     logger.info(
-        "request request_id=%s tenant_id=%s situation_id=%s method=%s route=%s "
-        "status=%s disposition=%s latency_ms=%s",
+        "request request_id=%s correlation_id=%s tenant_id=%s situation_id=%s "
+        "method=%s route=%s status=%s disposition=%s latency_ms=%s",
         record["request_id"],
+        record["correlation_id"],
         record["tenant_id"],
         record["situation_id"],
         record["method"],
@@ -118,9 +139,11 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
     """Generate/propagate ``X-Request-ID`` and emit one scrubbed log line."""
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
-        """Attach the request ID, echo it, and log the scrubbed record."""
+        """Attach the IDs, echo them, and log the scrubbed record."""
         request_id = coerce_request_id(request.headers.get(REQUEST_ID_HEADER))
+        correlation_id = coerce_correlation_id(request.headers.get(CORRELATION_ID_HEADER))
         request.state.request_id = request_id
+        request.state.correlation_id = correlation_id
         start = time.perf_counter()
         response = await call_next(request)
         latency_ms = (time.perf_counter() - start) * 1000.0
@@ -131,9 +154,11 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
         tenant_id = tenant_id or request.headers.get("X-Tenant-ID", "")
         situation_id = str(request.query_params.get("situation_id", ""))
         response.headers[REQUEST_ID_HEADER] = request_id
+        response.headers[CORRELATION_ID_HEADER] = correlation_id
         _emit(
             format_request_log(
                 request_id=request_id,
+                correlation_id=correlation_id,
                 tenant_id=tenant_id,
                 situation_id=situation_id,
                 method=request.method,
@@ -145,14 +170,34 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
         return response
 
 
+#: Cached readiness engine. Health probes run on a timer, so building a fresh
+#: engine (and therefore a fresh connection pool) per probe leaks file
+#: descriptors and Postgres connections. One engine, reused, disposed on
+#: shutdown via :func:`dispose_readiness_engine`.
+_READINESS_ENGINE: Engine | None = None
+
+
+def _readiness_engine() -> Engine:
+    """Return the process-wide readiness engine, creating it on first use."""
+    global _READINESS_ENGINE
+    if _READINESS_ENGINE is None:
+        engine: Engine = create_engine(get_settings().postgres_uri, pool_pre_ping=True)
+        _READINESS_ENGINE = engine
+    return _READINESS_ENGINE
+
+
+def dispose_readiness_engine() -> None:
+    """Dispose the cached readiness engine (shutdown or test teardown)."""
+    global _READINESS_ENGINE
+    if _READINESS_ENGINE is not None:
+        _READINESS_ENGINE.dispose()
+        _READINESS_ENGINE = None
+
+
 def default_db_probe() -> bool:
     """Return True when Postgres answers ``SELECT 1`` (fail-closed False)."""
     try:
-        from sqlalchemy import create_engine, text
-
-        from shared.config import get_settings
-
-        engine = create_engine(get_settings().postgres_uri)
+        engine = _readiness_engine()
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
         return True
@@ -204,12 +249,15 @@ def budget_check_response(budget: Any, usage: Any) -> JSONResponse | None:
 
 
 __all__ = [
+    "CORRELATION_ID_HEADER",
     "REQUEST_ID_HEADER",
     "RequestIDMiddleware",
     "budget_check_response",
+    "coerce_correlation_id",
     "coerce_request_id",
     "create_readiness_router",
     "default_db_probe",
+    "dispose_readiness_engine",
     "disposition_for",
     "format_request_log",
     "generate_request_id",

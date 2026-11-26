@@ -165,6 +165,32 @@ class OpenAICompatibleProvider:
                 reason=f"completion probe failed: {type(exc).__name__}",
             )
 
+    def generate(self, prompt: str, max_tokens: int = 512, temperature: float = 0.3) -> str:
+        """Return a plain-text completion for ``prompt``.
+
+        Used by call sites that consume free-form text rather than
+        structured output. Prefer :meth:`generate_structured` for new code.
+        """
+        if not self._config.api_key:
+            raise CredentialMissingError(
+                f"{self._config.provider} credential missing "
+                f"(set {self._config.provider.upper()}_API_KEY)"
+            )
+
+        messages = [{"role": "user", "content": prompt}]
+        client = self._get_client()
+        response = client.chat.completions.create(
+            model=self._config.model,
+            messages=messages,
+            max_tokens=max_tokens,
+            temperature=temperature,
+        )
+        try:
+            content = response.choices[0].message.content
+        except (AttributeError, IndexError, TypeError) as exc:
+            raise ProviderUnavailableError("response missing choices content") from exc
+        return content or ""
+
     def generate_structured[T: BaseModel](
         self, prompt: InvestigationPrompt | str, response_schema: type[T]
     ) -> T:

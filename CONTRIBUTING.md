@@ -70,7 +70,6 @@ apps  →  agents  →  finance  →  shared
 | Folder | Responsibility |
 |--------|---------------|
 | `apps/api/` | FastAPI routes, request/response schemas, serializers, WebSocket handlers. |
-| `apps/frontend/` | Frontend application (if applicable). |
 | `agents/` | LangGraph state machine, agent nodes (commentary, variance, root cause, scenario). |
 | `finance/` | All financial domain logic — formula engine, KPI engine, variance engine, scenario engine, forecast engine, driver engine, recommendation engine, validation, assertion pipeline, ingestion. |
 | `shared/` | Config, base models (database, assertions, state), utilities (LLM client, confidence, tools, validators), shared prompts and schemas. |
@@ -121,6 +120,81 @@ Reviewers must verify:
 8. **Documentation**: Are new concepts, schemas, or workflows documented?
 
 ---
+
+## Testing Standard (Anti-Slop)
+
+Tests must independently establish product behavior, not merely confirm current implementation details. A passing test is not proof unless its assertions can detect representative incorrect behavior.
+
+### Behavioral assertions
+- Assert observable behavior and meaningful side effects: financial results, state transitions, persisted records, API responses, exception classifications, audit evidence, authorization outcomes.
+- Avoid: private helper invocation assertions, internal call-order assertions without contractual reason, tests that merely assert successful execution, excessive mocking of the system under test.
+
+### Independent expected outcomes
+- Expected results must NOT be calculated using the production function under test or a duplicate of its implementation.
+- Use: explicitly specified financial examples, independently derived mathematical invariants, trusted fixture values, metamorphic properties.
+- Do not let tests reproduce an implementation bug as expected behavior.
+
+### Input variation
+- Test normal, boundary, invalid, missing, duplicate, and conflicting inputs.
+- Use Hypothesis for meaningful financial properties (allocation conservation, permutation invariance, replay determinism).
+- Do not generate random data merely to increase test counts.
+
+### Metamorphic testing
+- Verify behavior under transformations: permuting input order, adding unrelated records, replaying identical requests, repeating imports.
+- Define which transformations preserve results and which change them.
+
+### Mutation testing
+- Identify representative defects in important business logic. Verify the corresponding test fails for the correct reason.
+- Record surviving mutations as testing gaps. Do not optimize for a percentage score without reviewing survivors.
+
+### Test resilience
+- Tests should survive behavior-preserving refactors.
+- Do not couple tests to: local variable names, private function names, internal module layout, incidental call ordering, unordered collection ordering.
+- Tests must fail when externally observable behavior or a financial invariant is violated.
+
+### Test review before deletion
+1. Identify the behavior the test protects.
+2. Determine whether the behavior is obsolete or still required.
+3. Identify unrelated assertions in the same test.
+4. Preserve useful assertions.
+5. Remove only assertions that exclusively protect deleted functionality.
+
+### Constraints
+- Do not weaken existing financial assertions.
+- Do not regenerate golden evidence to make tests pass.
+- Do not inflate test counts.
+- Do not add dependencies without justification.
+- Do not introduce flaky random tests.
+- Do not treat coverage as proof of correctness.
+
+## Evidence-Gated Response Protocol (EGRP)
+
+EGRP is an engineering standard, not a separate specification document. It
+governs every factual claim made about this repository.
+
+- **Provenance.** Every financial, security, or CI claim must trace to source
+  evidence: an exact commit SHA, file at that SHA, CI run and job conclusion,
+  or database/execution result. No evidence record means no factual assertion.
+- **No stale evidence.** For GitHub reviews, fetch the current PR head, base
+  SHA, actual diff, CI runs for that exact head, individual job conclusions,
+  and PR merge state. A green run on an older commit does not prove the current
+  commit passes.
+- **Abstention.** Missing or ambiguous evidence produces an explicit unresolved
+  result, never an invented answer.
+- **Determinism is authoritative.** LLM output cannot alter reconciliation
+  outcomes, authorization decisions, or financial results.
+- **Tests challenge behavior.** Tests must detect representative incorrect
+  behavior, not merely confirm expected behavior. Universal negatives require
+  the inspection scope to be stated.
+- **Independent verification.** Critical financial and security boundaries
+  require two different verification mechanisms. A second LLM agreeing with the
+  first is not independent proof.
+- **Claim categories.** Use Verified, Derived, User-reported, and Unverified;
+  never promote one to another silently.
+- **Action evidence.** A tool invocation is not proof of successful execution.
+
+A separate H0 specification is introduced only if the protocol becomes a
+separately consumed contract.
 
 ## Testing Checklist
 

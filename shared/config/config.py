@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 class Settings(BaseSettings):
-    postgres_uri: str = "postgresql://finsight:finsight@localhost:5432/finsight"
+    postgres_uri: str = "postgresql+psycopg://finsight:finsight@localhost:5432/finsight"
     #: Separate migration URI (Slice 3: migration role != runtime role).
     #: Empty means migrations use ``postgres_uri`` (dev default).
     migration_postgres_uri: str = ""

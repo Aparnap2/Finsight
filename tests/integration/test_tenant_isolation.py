@@ -28,29 +28,18 @@ GUC is absent).
 from __future__ import annotations
 
 import logging
-import os
 from collections.abc import Generator
-from pathlib import Path
 from typing import cast
 from uuid import uuid4
 
-import psycopg
 import pytest
 import sqlalchemy
-from alembic.config import Config
 from sqlalchemy import create_engine, text
 from sqlalchemy.pool import NullPool
 
-from alembic import command
-from finance.exceptions.models import Base as ExceptionsBase
-from shared.migrations import MigrationRunner, discover_migrations
+from tests.integration._schema_bootstrap import DSN, apply_migrations
 
 logger = logging.getLogger(__name__)
-
-MIGRATIONS_DIR = Path(__file__).resolve().parents[2] / "database" / "migrations"
-
-DEFAULT_DSN = "postgresql+psycopg://finsight:finsight@localhost:5432/finsight"
-DSN = os.environ.get("FINSIGHT_TEST_DSN", DEFAULT_DSN)
 
 ACME_TENANT_ID = "11111111-1111-4111-8111-111111111111"
 GLOBEX_TENANT_ID = "22222222-2222-4222-8222-222222222222"
@@ -58,11 +47,6 @@ GLOBEX_TENANT_ID = "22222222-2222-4222-8222-222222222222"
 LIMITED_ROLE = "test_rls_limited"
 PROBE_EVENT_TYPE = "row_inserted"
 PROBE_PERIOD = "2026-06"
-
-
-def _psycopg_dsn() -> str:
-    """Translate the SQLAlchemy DSN (``postgresql+psycopg://``) to a psycopg DSN."""
-    return DSN.replace("postgresql+psycopg://", "postgresql://", 1)
 
 
 def _db_reachable(engine: sqlalchemy.Engine) -> bool:
@@ -84,72 +68,18 @@ def engine() -> Generator[sqlalchemy.Engine, None, None]:
     ``NullPool`` guarantees every ``engine.connect()`` opens a fresh session, so
     ``SET ROLE`` and GUC changes from one test can never leak into the next via
     a recycled pooled connection.
+
+    The schema itself is bootstrapped by ``tests/integration/conftest.py``; the
+    call here is a no-op re-application kept so this module also works when run
+    in isolation without the package-level fixture.
     """
     engine = create_engine(DSN, isolation_level="AUTOCOMMIT", poolclass=NullPool)
     if not _db_reachable(engine):
         pytest.skip("integration database not reachable")
-    _apply_migrations()
+    apply_migrations()
     _ensure_limited_role(engine)
     yield engine
     engine.dispose()
-
-
-def _apply_alembic_base() -> None:
-    """Bring the alembic-tracked base schema to head (idempotent, version-tracked).
-
-    File 011 needs base tables (e.g. ``webhook_events``) that exist only in the
-    alembic chain, so the alembic base must precede the SQL set on a fresh DB.
-    Honors the same DSN the fixture uses (``FINSIGHT_TEST_DSN``); alembic's
-    ``env.py`` otherwise defaults to ``localhost:5432``. Safe to re-run.
-    """
-    repo_root = Path(__file__).resolve().parents[2]
-    cfg = Config(str(repo_root / "alembic.ini"))
-    cfg.set_main_option("sqlalchemy.url", DSN)
-    command.upgrade(cfg, "head")
-
-
-def _apply_migrations() -> None:
-    """Apply alembic base, then every migration file in version order.
-
-    Fresh-DB order is load-bearing: ``alembic upgrade head`` first (base
-    tables such as ``webhook_events``), then SQL 000-010, then the ORM
-    ``create_all`` for the ``exceptions``/``exception_audits`` tables (created
-    only by ``finance.exceptions.models.Base``), then 011 which enables RLS on
-    them. Uses a dedicated psycopg3 connection in autocommit mode; each file is
-    executed as one multi-statement ``ClientCursor`` call. Idempotency comes
-    from alembic's version table, the ``schema_migrations`` version table, and
-    ``create_all`` semantics; duplicate-object errors are tolerated only to
-    adopt a database migrated before tracking began.
-    """
-    _apply_alembic_base()
-    migrations = discover_migrations(MIGRATIONS_DIR)
-    pre = [m for m in migrations if m.version <= "010"]
-    post = [m for m in migrations if m.version > "010"]
-    results = []
-    with psycopg.connect(_psycopg_dsn(), autocommit=True) as conn:
-        results.extend(MigrationRunner(conn).apply(pre))
-    orm_engine = create_engine(DSN, isolation_level="AUTOCOMMIT", poolclass=NullPool)
-    try:
-        ExceptionsBase.metadata.create_all(orm_engine)
-        # Alembic-first shadowing: alembic creates audit_logs without the
-        # 000_init DEFAULT NOW() on created_at (000's CREATE TABLE IF NOT
-        # EXISTS becomes a no-op), while 002 still sets NOT NULL — so the
-        # probe INSERT omitting created_at would fail. Restore the default
-        # the SQL chain owns; idempotent, fixture bootstrap only.
-        with orm_engine.connect() as conn:
-            conn.execute(text("ALTER TABLE audit_logs ALTER COLUMN created_at SET DEFAULT NOW()"))
-    finally:
-        orm_engine.dispose()
-    with psycopg.connect(_psycopg_dsn(), autocommit=True) as conn:
-        results.extend(MigrationRunner(conn).apply(post))
-    counts: dict[str, int] = {}
-    for result in results:
-        counts[result.status] = counts.get(result.status, 0) + 1
-    logger.info(
-        "applied %d migrations: %s",
-        len(migrations),
-        ", ".join(f"{status}={count}" for status, count in sorted(counts.items())),
-    )
 
 
 def _ensure_limited_role(engine: sqlalchemy.Engine) -> None:

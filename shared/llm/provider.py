@@ -21,6 +21,14 @@ from shared.llm.types import InvestigationPrompt, ModelMetadata, ProviderHealth
 class LLMProvider(Protocol):
     """Swappable LLM backend. All methods are credential-safe."""
 
+    def generate(self, prompt: str, max_tokens: int = 512, temperature: float = 0.3) -> str:
+        """Return a plain-text completion for ``prompt``.
+
+        Used by call sites that consume free-form text rather than
+        structured output. Prefer :meth:`generate_structured` for new code.
+        """
+        ...
+
     def generate_structured[T: BaseModel](
         self, prompt: InvestigationPrompt | str, response_schema: type[T]
     ) -> T:

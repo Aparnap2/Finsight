@@ -1,1 +1,1 @@
-"""Tenant configuration and feature flags for FinSight (Layer 0)."""
+"""Tenant configuration schema for FinSight (Layer 0)."""

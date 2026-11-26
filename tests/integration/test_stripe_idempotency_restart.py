@@ -32,7 +32,7 @@ import sqlalchemy
 from sqlalchemy import create_engine, text
 from sqlalchemy.pool import NullPool
 
-from tests.integration.test_tenant_isolation import _apply_migrations
+from tests.integration._schema_bootstrap import apply_migrations as _apply_migrations
 
 logger = logging.getLogger(__name__)
 

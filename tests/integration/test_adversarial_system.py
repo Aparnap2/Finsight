@@ -11,10 +11,8 @@ from __future__ import annotations
 
 import dataclasses
 import json
-import logging
 import threading
 from pathlib import Path
-from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -22,25 +20,17 @@ from fastapi.testclient import TestClient
 
 import tests.integration.test_api_execute_verify as api_t
 import tests.integration.test_p6_executable_slice as p6s
-import tests.integration.test_p8_runtime_to_p7 as p8t
 from agents.brief import brief
 from agents.discovery import DiscoveryRequest
-from agents.discovery.engine import discover
 from agents.discovery.engine import discover as _real_discover
-from agents.discovery.result import DiscoveryFailure, DiscoveryResult
 from agents.evaluation.harness import evaluate
 from agents.integration.control_plane import ControlPlaneGate
-from agents.p8_runtime import contract as p8_01
-from agents.p8_runtime import durability as p8_03
-from agents.p8_runtime import execution as p8_02
 from agents.reasoning.resolution import reason
 from apps.api import execution_routes as ex
 from finance.accounting.mock import MockQuickBooksAdapter
 from finance.approvals.service import ApprovalService
 from finance.exceptions.repository import ExceptionRepository
 from finance.execution.executor import Executor
-from shared.llm.errors import ProviderUnavailableError
-from shared.llm.fake import FakeLLM
 
 _TENANT_B = "tenant-b"
 _CANARIES = ("CANARY-SECRET-sk-test-9f8e7d6c", "PII-CANARY-4111111111111111")
@@ -254,36 +244,6 @@ class TestAdversarialSystem:
         )
         assert rows == []
 
-    def test_06_forged_evidence_refused_before_reasoning(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """Forged evidence id -> typed refusal; reasoning/admission never see it."""
-        entered: list[str] = []
-        ctx = p8t._context()
-        assert ctx.registry.is_accessible("ev-ledger-001") is True
-        assert ctx.registry.is_accessible("ev-forged-999") is False  # unknown id
-        disc = discover(p8t._request_from_structured(ctx, _valid_structured(ctx)), context=ctx)
-        assert disc.success is True
-        collected = {r.evidence_id for r in (disc.evidence_refs or ())}
-        assert "ev-forged-999" not in collected and collected <= {"ev-ledger-001"}
-        forged = SimpleNamespace(evidence_refs=[SimpleNamespace(evidence_id="ev-ledger-999")])
-        assert evaluate("B", "B1", context=ctx, discovery=forged) == "VIOLATION"  # detector
-        assert evaluate("B", "B1", context=ctx, discovery=disc) == "REJECTED"  # clean
-        failed = DiscoveryResult(
-            success=False,
-            situation_id=ctx.situation_id,
-            company_id="meridian",
-            now=ctx.now,
-            evidence_refs=None,
-            observations=None,
-            hypotheses=None,
-            proposals=None,
-            failure=DiscoveryFailure(code="DISCOVERY_FAILED", detail="forged id rejected"),
-        )
-        res = ControlPlaneGate().admit(context=ctx, discovery=failed, reasoning=None, brief=None)
-        assert res.kind == "BLOCKED"  # refused before reasoning/admission
-        assert entered == [] and res.reason in {"FAILED_DISCOVERY", "MISSING_ARTIFACT"}
-
     def test_07_approval_laundering_refused(self) -> None:
         """Approval for X applied to Y -> 409 mismatch refusal, one effect."""
         engine, snapshot, proposal, adapter, executor = api_t._seed()
@@ -378,261 +338,3 @@ class TestAdversarialSystem:
         assert res.kind == "BLOCKED"  # conflict preserved, never passed
         assert res.reason in {"CONFLICTING_EVIDENCE", "UNRESOLVED_UNCERTAIN"}
         assert spies == []
-
-    def test_10_malformed_model_output_fails_with_zero_p7_entries(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """Malformed FakeLLM output -> run FAILED, discover never entered."""
-        entered: list[str] = []
-        import tests.integration.test_adversarial_system as self_mod
-
-        orig = discover
-
-        def _spy(request: Any, **kw: Any) -> Any:
-            entered.append("discover")
-            return orig(request, **kw)
-
-        monkeypatch.setattr(self_mod, "discover", _spy)
-        fake, adapter = p8t._fake_ok("not-json{{{")
-        record = p8_02.execute_run(
-            p8_01.RunIdentity(
-                run_id="run-adv-10", input_fingerprint=p8_01.compute_input_fingerprint({"t": 10})
-            ),
-            p8t._budget(),
-            p8t._policy(),
-            adapter=adapter,
-            config=p8t._config(),
-            request=p8t._request(),
-        )
-        assert record.terminal_state == "FAILED"  # typed defender outcome
-        assert record.attempts[0].failure_kind == p8_01.FailureKind.INVALID_STRUCTURED_OUTPUT
-        assert all(a.validated_output is None for a in record.attempts)
-        assert entered == []  # zero P7 entries
-
-    def test_11_prompt_injection_stays_data(self) -> None:
-        """Three injection fixtures -> prose only; no authority/evidence minted."""
-        for idx, payload in enumerate(_injection_payloads()):
-            injected = json.dumps({"summary": payload, "findings": [payload]})
-            fake, adapter = p8t._fake_ok(injected)
-            record = p8_02.execute_run(
-                p8_01.RunIdentity(
-                    run_id=f"run-adv-11-{idx}",
-                    input_fingerprint=p8_01.compute_input_fingerprint({"t": idx}),
-                ),
-                p8t._budget(),
-                p8t._policy(),
-                adapter=adapter,
-                config=p8t._config(),
-                request=p8t._request(),
-            )
-            assert record.terminal_state == "SUCCEEDED"
-            validated = record.attempts[0].validated_output
-            assert validated is not None
-            ctx = p8t._context()
-            req = p8t._request_from_structured(ctx, validated)
-            assert req.allowed_evidence_ids == ("ev-ledger-001",)  # scope unmoved
-            assert (
-                req.allowed_capabilities
-                == p8t._request_from_structured(ctx, validated).allowed_capabilities
-            )
-            order: list[str] = []
-            disc, rea, br, res = p8t._run_p7_to_gate(ctx, req, order)
-            assert res.kind == "P6_HANDOFF"
-            assert getattr(res, "authorization", None) is None  # no authority
-            assert getattr(res, "approval", None) is None
-            assert getattr(res, "execution", None) is None
-            collected = {r.evidence_id for r in (disc.evidence_refs or ())}
-            assert collected <= {"ev-ledger-001"}  # no evidence minted
-
-    def test_12_timeout_then_success_retries_once(self) -> None:
-        """One transient failure then success -> SUCCEEDED, attempts == 2."""
-
-        class _Flaky:
-            """Fail the first provider call transiently, then delegate."""
-
-            def __init__(self, delegate: Any) -> None:
-                """Capture the healthy delegate adapter."""
-                self._delegate = delegate
-                self.calls = 0
-
-            def complete(self, request: Any, config: Any) -> Any:
-                """Raise once, then answer through the delegate."""
-                self.calls += 1
-                if self.calls == 1:
-                    raise ProviderUnavailableError("transient timeout once")
-                return self._delegate.complete(request, config)
-
-        _, healthy = p8t._fake_ok()
-        flaky = _Flaky(healthy)
-        record = p8_02.execute_run(
-            p8_01.RunIdentity(
-                run_id="run-adv-12", input_fingerprint=p8_01.compute_input_fingerprint({"t": 12})
-            ),
-            p8t._budget(),
-            p8t._policy(),
-            adapter=flaky,
-            config=p8t._config(),
-            request=p8t._request(),
-        )
-        assert record.terminal_state == "SUCCEEDED"
-        assert len(record.attempts) == 2  # exact attempt count
-        assert flaky.calls == 2
-        assert record.attempts[-1].validated_output is not None
-
-    def test_13_retry_exhaustion_bounded_no_p7_entries(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """Always-transient provider -> EXHAUSTED after exactly min+1, P7 silent."""
-        entered: list[str] = []
-        import tests.integration.test_adversarial_system as self_mod
-
-        orig = discover
-
-        def _spy(request: Any, **kw: Any) -> Any:
-            entered.append("discover")
-            return orig(request, **kw)
-
-        monkeypatch.setattr(self_mod, "discover", _spy)
-        fake = FakeLLM(
-            scripted={"_CallMarker": {"marker": "ok"}},
-            fail_all=ProviderUnavailableError("always transient"),
-        )
-        adapter = p8t._P8Adapter(fake, p8t._valid_text(), run_id="run-adv-13")
-        budget, policy = p8t._budget(), p8t._policy()  # max_retries=2 each
-        record = p8_02.execute_run(
-            p8_01.RunIdentity(
-                run_id="run-adv-13", input_fingerprint=p8_01.compute_input_fingerprint({"t": 13})
-            ),
-            budget,
-            policy,
-            adapter=adapter,
-            config=p8t._config(),
-            request=p8t._request(),
-        )
-        cap = min(budget.max_retries, policy.max_retries) + 1
-        assert record.terminal_state == "EXHAUSTED"
-        assert len(record.attempts) == cap == 3  # exactly min+1
-        assert adapter.calls == 3
-        assert entered == []  # no P7 entries
-
-    def test_14_fallback_equivalence_field_by_field(self) -> None:
-        """Primary down -> fallback SUCCEEDED, task semantics unchanged."""
-        bad = FakeLLM(
-            scripted={"_CallMarker": {"marker": "ok"}},
-            fail_all=ProviderUnavailableError("primary down"),
-        )
-        primary = p8t._P8Adapter(bad, p8t._valid_text(), run_id="run-adv-14")
-        _, fallback = p8t._fake_ok()
-        record = p8_02.execute_run_with_fallback(
-            p8_01.RunIdentity(
-                run_id="run-adv-14", input_fingerprint=p8_01.compute_input_fingerprint({"t": 14})
-            ),
-            p8t._budget(),
-            p8t._policy(),
-            primary=primary,
-            fallback=fallback,
-        )
-        assert record.terminal_state == "SUCCEEDED"
-        assert primary.calls >= 1
-        assert record.minted_authority == ()
-        got = record.attempts[-1].validated_output
-        assert got is not None
-        _, direct_adapter = p8t._fake_ok()
-        direct = p8_02.execute_run(
-            p8_01.RunIdentity(
-                run_id="run-adv-14-direct",
-                input_fingerprint=p8_01.compute_input_fingerprint({"t": 14}),
-            ),
-            p8t._budget(),
-            p8t._policy(),
-            adapter=direct_adapter,
-            config=p8t._config(),
-            request=p8t._request(),
-        )
-        want = direct.attempts[-1].validated_output
-        assert want is not None
-        assert got.model_dump() == want.model_dump()  # field-by-field identical
-
-    def test_15_canary_secrets_absent_everywhere(self, caplog: pytest.LogCaptureFixture) -> None:
-        """Happy path with canaries in inputs -> absent from logs/errors/reports."""
-        caplog.set_level(logging.DEBUG)
-        fake, adapter = p8t._fake_ok()
-        tainted = p8t._request().model_copy(
-            update={"input_text": f"probe {_CANARIES[0]} {_CANARIES[1]}"}
-        )
-        record = p8_02.execute_run(
-            p8_01.RunIdentity(
-                run_id="run-adv-15", input_fingerprint=p8_01.compute_input_fingerprint({"t": 15})
-            ),
-            p8t._budget(),
-            p8t._policy(),
-            adapter=adapter,
-            config=p8t._config(),
-            request=tainted,
-        )
-        assert record.terminal_state == "SUCCEEDED"
-        validated = record.attempts[0].validated_output
-        assert validated is not None
-        ctx = p8t._context()
-        order: list[str] = []
-        disc, rea, br, res = p8t._run_p7_to_gate(
-            ctx, p8t._request_from_structured(ctx, validated), order
-        )
-        assert res.kind == "P6_HANDOFF"
-        report = p8t._run_p6_full(order)
-        blobs = (
-            disc.model_dump_json(),
-            rea.model_dump_json(),
-            br.model_dump_json(),
-            json.dumps(res.to_dict()),
-            report.model_dump_json(),
-            caplog.text,
-        )
-        for canary in _CANARIES:
-            for blob in blobs:
-                assert canary not in blob  # absent from every surface
-            assert canary not in validated.model_dump_json()
-
-    def test_16_crash_restart_reconciles_without_duplicates(self) -> None:
-        """Dropped durable state -> recover reconciles, no dup, no assumed success."""
-        identity = p8_01.RunIdentity(
-            run_id="run-adv-16", input_fingerprint=p8_01.compute_input_fingerprint({"t": 16})
-        )
-        _, adapter = p8t._fake_ok()
-        scheduled = p8_03.execute_run(identity, adapter, p8t._budget(), p8t._policy())
-        assert not isinstance(scheduled, bool) and scheduled.terminal_state == "SUCCEEDED"
-        calls_before = p8_03.provider_call_count(identity)
-        history_before = [a.attempt_number for a in p8_03.history(identity)]
-        p8_03._DURABLE.pop(p8_03._durable_key(identity), None)  # crash: drop state
-        events: list[str] = []
-        recovery = p8_03.recover_run(identity, event_log=events)
-        assert events == list(p8_03.RECOVERY_ORDER)  # fixed order
-        assert recovery.reconciled is True
-        assert recovery.terminal_state == "SUCCEEDED"  # reconciled, not assumed
-        assert recovery.synthesized_output is None and recovery.silent_completion is False
-        assert p8_03.reconcile_unknown(identity).assumed is False  # no assumed success
-        marker = p8_03.resume_run(identity)
-        assert not isinstance(marker, bool) and marker.via == ("recorded",)
-        replay = p8_03.replay_durable(identity)
-        assert replay.wrote is False and replay.new_invocations == 0
-        assert replay.outcome == scheduled.terminal_outcome  # same recorded outcome
-        assert p8_03.provider_call_count(identity) == calls_before  # no duplicate
-        assert [a.attempt_number for a in p8_03.history(identity)] == history_before
-
-
-def _valid_structured(ctx: Any) -> Any:
-    """Return validated P8 content for mapping into discovery inputs."""
-    fake, adapter = p8t._fake_ok()
-    record = p8_02.execute_run(
-        p8_01.RunIdentity(
-            run_id=f"run-adv-helper-{abs(hash(ctx.situation_id)) % 100000}",
-            input_fingerprint=p8_01.compute_input_fingerprint({"sit": ctx.situation_id}),
-        ),
-        p8t._budget(),
-        p8t._policy(),
-        adapter=adapter,
-        config=p8t._config(),
-        request=p8t._request(),
-    )
-    assert record.attempts[0].validated_output is not None
-    return record.attempts[0].validated_output

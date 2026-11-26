@@ -28,6 +28,7 @@ from sqlalchemy import Engine, create_engine, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from apps.api.errors import build_error_body
 from finance.approvals.decision import ApprovalCommand
 from finance.approvals.service import ApprovalService
 from finance.exceptions.errors import (
@@ -37,6 +38,7 @@ from finance.exceptions.errors import (
 )
 from finance.exceptions.repository import ExceptionRepository
 from shared.config import get_settings
+from shared.errors import ErrorCode
 from shared.privacy.sanitize import sanitize_for_log
 from shared.safety.secrets import scrub_text
 
@@ -79,7 +81,14 @@ async def validation_error_handler(request: Request, exc: Exception) -> JSONResp
         if "ctx" in entry and isinstance(entry["ctx"], dict):
             entry["ctx"] = sanitize_for_log(entry["ctx"], tenant_id=tenant_id, unknown="preserve")
         clean_errors.append(entry)
-    return JSONResponse(status_code=422, content={"detail": clean_errors})
+    body = build_error_body(
+        code=ErrorCode.VALIDATION_FAILED,
+        legacy_detail=clean_errors,
+        request=request,
+        message=f"{len(clean_errors)} field(s) failed validation. See details.",
+        details={"errors": clean_errors},
+    )
+    return JSONResponse(status_code=422, content=body)
 
 
 class DecideRequest(BaseModel):

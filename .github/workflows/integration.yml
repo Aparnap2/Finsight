@@ -36,6 +36,7 @@ jobs:
           --health-retries 5
     env:
       FINSIGHT_TEST_DSN: postgresql+psycopg://finsight:finsight@localhost:5432/finsight
+      POSTGRES_URI: postgresql+psycopg://finsight:finsight@localhost:5432/finsight
       PYTHONPATH: ${{ github.workspace }}
     steps:
       - name: Check out repository
@@ -159,6 +160,7 @@ jobs:
       AWS_ACCESS_KEY_ID: test
       AWS_SECRET_ACCESS_KEY: test
       FINSIGHT_TEST_DSN: postgresql+psycopg://finsight:finsight@localhost:5432/finsight
+      POSTGRES_URI: postgresql+psycopg://finsight:finsight@localhost:5432/finsight
       PYTHONPATH: ${{ github.workspace }}
     steps:
       - name: Check out repository

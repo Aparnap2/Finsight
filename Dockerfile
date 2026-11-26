@@ -1,5 +1,14 @@
 # syntax=docker/dockerfile:1
-# Multi-stage build for FinSight Python Compute Runtime
+# Multi-stage build for FinSight API (FastAPI + NiceGUI)
+#
+# Targets:
+#   runtime (default) — production image, no dev tooling
+#   test              — runtime code + dev tooling (pytest), used only by
+#                       docker-compose.test.yml (`target: test`)
+#
+# The default target must stay `runtime`: `docker build .` is what deployments
+# and the operator demo use. A test stage placed last would silently ship
+# pytest to production.
 
 # ── Stage 1: Build dependencies ──────────────────────────────────────────
 FROM python:3.12-slim AS builder
@@ -19,7 +28,34 @@ COPY pyproject.toml uv.lock ./
 # Install production + compute dependencies
 RUN uv sync --extra compute --no-dev --frozen
 
-# ── Stage 2: Runtime image ──────────────────────────────────────────────
+# ── Stage 2: Test image (dev tooling; never the default target) ──────────
+# Same code as the runtime stage, plus the dev dependency group (pytest).
+# Declared before the runtime stage so `docker build .` keeps producing the
+# runtime image.
+FROM builder AS test
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PATH="/app/.venv/bin:$PATH"
+
+WORKDIR /app
+
+RUN uv sync --extra compute --frozen
+
+# Mirrors the runtime stage COPY block below; keep them in sync.
+COPY python_runtime/ ./python_runtime/
+COPY apps/ ./apps/
+COPY agents/ ./agents/
+COPY finance/ ./finance/
+COPY finplatform/ ./finplatform/
+COPY shared/ ./shared/
+COPY database/ ./database/
+COPY tests/fixtures/reconciliation/triangle/ ./tests/fixtures/reconciliation/triangle/
+COPY alembic/ ./alembic/
+COPY alembic.ini ./
+COPY pyproject.toml ./
+
+# ── Stage 3: Runtime image (default target) ─────────────────────────────
 FROM python:3.12-slim AS runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -38,6 +74,16 @@ COPY agents/ ./agents/
 COPY finance/ ./finance/
 COPY finplatform/ ./finplatform/
 COPY shared/ ./shared/
+# SQL migration chain (alembic revisions live in alembic/). Needed by anyone
+# running the documented fresh-DB sequence inside a container. Without it the
+# integration suites discover zero SQL migrations and silently run against a
+# schema with RLS disabled.
+COPY database/ ./database/
+# Operator demo fixture only. The rest of tests/ is never packaged into the
+# runtime image; test runs mount it read-only (see docker-compose.test.yml).
+# Without this, `python -m finance.reconciliation.operator_report` exits 2
+# inside the container with "default cases fixture is missing".
+COPY tests/fixtures/reconciliation/triangle/ ./tests/fixtures/reconciliation/triangle/
 COPY alembic/ ./alembic/
 COPY alembic.ini ./
 COPY pyproject.toml ./

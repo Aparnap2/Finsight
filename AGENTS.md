@@ -20,6 +20,73 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 
 Operating instructions for the coding agent working on this FP&A cognitive runtime.
 
+## Scope Philosophy
+
+**Build a production-quality portfolio application, not an enterprise-ready SaaS
+platform.** Complete one workflow end to end; make financial behavior correct
+and explainable; make failures predictable and recoverable; make the code
+understandable and maintainable; demonstrate security boundaries honestly;
+document what is deliberately not implemented.
+
+### Feature categories
+
+| Category | Treatment |
+|---|---|
+| Essential | Must implement before portfolio release |
+| Risk-dependent | Implement only when the actual architecture or threat model requires it |
+| Enterprise-grade | Explicitly out of scope unless justified |
+
+### Before adding any feature, answer
+
+1. Does the defined workflow actually need it?
+2. What concrete failure or risk does it prevent?
+3. Can an existing component already handle it?
+4. Is there a simpler implementation?
+5. Can we defer it without compromising financial correctness or security?
+
+If the answer to the first two is weak, do not build it.
+
+### Minimum security and reliability baseline
+
+Tenant isolation, financial precision, and auditability are non-negotiable even
+for a portfolio project when the application claims to support multiple
+tenants. But an enterprise IAM platform is not required to demonstrate them.
+
+## Standing Execution Policy
+
+Once a phase is authorized, execute its bounded tasks in dependency order without
+requesting approval for every subtask. Make reversible, bounded implementation
+decisions within approved specifications. Pause only for: product scope or core
+architecture changes; material security or financial correctness tradeoffs;
+irreversible destructive actions; contradictions in approved specifications;
+external services, credentials, costs, or public data exposure; merge, release,
+or deployment actions requiring explicit authorization.
+
+### Engineering standard
+
+1. Reuse existing modules before building replacements.
+2. Prefer plain functions and existing application patterns over new frameworks.
+3. Build the smallest implementation that satisfies the requirement.
+4. Do not introduce speculative infrastructure.
+5. Keep deterministic financial computation authoritative.
+6. Use Decimal for financial arithmetic.
+7. Preserve tenant isolation, provenance, and auditability.
+8. LLMs may explain evidence but cannot determine or mutate financial outcomes.
+9. Distinguish implemented, planned, and verified capabilities.
+10. Do not weaken existing tests or protected reconciliation invariants to make CI pass.
+
+### Scope exclusions
+
+No traditional ML, generic multi-agent platform, autonomous money movement,
+Kubernetes, microservices, generic ETL framework, enterprise IAM, or unrelated
+FP&A feature expansion unless separately authorized.
+
+### Completion reporting
+
+At each meaningful milestone report: commit SHA, changed and removed files,
+tests added/removed/executed, type-check and CI results, scope deviations,
+remaining blockers, next task and whether already authorized.
+
 ## Architecture Boundaries
 
 This project uses a strict layered architecture. Violations cause review rejection.
@@ -72,6 +139,110 @@ The Node.js backend (Next.js) orchestrates but NEVER manipulates dataframes — 
 - **No print()**: Use `logging` instead
 - **No secrets**: Never log or commit credentials
 
+## Testing Standard (Anti-Slop)
+
+Tests must independently establish product behavior, not merely confirm current implementation details. A passing test is not proof unless its assertions can detect representative incorrect behavior.
+
+### Behavioral assertions
+- Assert observable behavior and meaningful side effects: financial results, state transitions, persisted records, API responses, exception classifications, audit evidence, authorization outcomes.
+- Avoid: private helper invocation assertions, internal call-order assertions without contractual reason, tests that merely assert successful execution, excessive mocking of the system under test.
+
+### Independent expected outcomes
+- Expected results must NOT be calculated using the production function under test or a duplicate of its implementation.
+- Use: explicitly specified financial examples, independently derived mathematical invariants, trusted fixture values, metamorphic properties.
+- Do not let tests reproduce an implementation bug as expected behavior.
+
+### Input variation
+- Test normal, boundary, invalid, missing, duplicate, and conflicting inputs.
+- Use Hypothesis for meaningful financial properties (allocation conservation, permutation invariance, replay determinism).
+- Do not generate random data merely to increase test counts.
+
+### Metamorphic testing
+- Verify behavior under transformations: permuting input order, adding unrelated records, replaying identical requests, repeating imports.
+- Define which transformations preserve results and which change them.
+
+### Mutation testing
+- Identify representative defects in important business logic (wrong operator, omitted fee, duplicate allocation, missing refund, currency mismatch, premature settlement, tenant filter bypass).
+- Verify the corresponding test fails for the correct reason.
+- Record surviving mutations as testing gaps. Do not optimize for a percentage score without reviewing survivors.
+
+### Test resilience
+- Tests should survive behavior-preserving refactors (renaming variables/helpers, moving modules, changing internal data structures).
+- Tests must fail when externally observable behavior or a financial invariant is violated.
+- Do not couple tests to: local variable names, private function names, internal module layout, incidental call ordering, unordered collection ordering.
+
+### Test review before deletion
+1. Identify the behavior the test protects.
+2. Determine whether the behavior is obsolete or still required.
+3. Identify unrelated assertions in the same test.
+4. Preserve useful assertions.
+5. Remove only assertions that exclusively protect deleted functionality.
+
+### Constraints
+- Do not weaken existing financial assertions.
+- Do not regenerate golden evidence to make tests pass.
+- Do not inflate test counts.
+- Do not add dependencies without justification.
+- Do not introduce flaky random tests.
+- Do not treat coverage as proof of correctness.
+
+### Required report per slice
+- Behavioral assertions added, modified, removed.
+- Expected outcomes and their independent source.
+- Input variation and boundary cases.
+- Metamorphic properties tested.
+- Mutations attempted and killed.
+- Surviving mutations.
+- Tests dependent on internal implementation details.
+- Test-count change with explanation.
+
+## Evidence-Gated Response Protocol (EGRP)
+
+EGRP is an engineering standard, not a separate specification document. It governs
+every factual claim an agent or developer makes about this repository.
+
+### Mandatory rules
+
+1. **Provenance.** Every financial, security, or CI claim must trace to source
+   evidence: an exact commit SHA, file at that SHA, CI run and job conclusion, or
+   database/execution result. No evidence record means no factual assertion.
+2. **No stale evidence.** For GitHub reviews, fetch the current PR head, base SHA,
+   actual diff, CI runs for that exact head, individual job conclusions, and PR
+   merge state. A green run on an older commit does not prove the current commit
+   passes.
+3. **Abstention.** Missing or ambiguous evidence produces an explicit unresolved
+   result (`UNKNOWN`, `INSUFFICIENT_EVIDENCE`), never an invented answer.
+4. **Determinism is authoritative.** LLM output cannot alter reconciliation
+   outcomes, authorization decisions, or financial results.
+5. **Tests challenge behavior.** Tests must detect representative incorrect
+   behavior, not merely confirm expected behavior. Universal negatives
+   ("no defects", "all tests pass") require the inspection scope to be stated.
+6. **Independent verification.** Critical financial and security boundaries
+   require two different verification mechanisms (for example, database
+   constraints plus cross-tenant integration tests). A second LLM agreeing with
+   the first is not independent proof.
+
+### Claim categories
+
+Use four explicit categories and never promote one to another silently:
+
+- **Verified** — directly established through evidence.
+- **Derived** — logical conclusion from verified evidence.
+- **User-reported** — supplied by the user, not independently checked.
+- **Unverified** — not established.
+
+### Action evidence
+
+A tool invocation is not proof of successful execution. Never claim a PR is
+approved because a review comment was posted, merged because it is mergeable, a
+deployment completed because a workflow started, or a file exists because its path
+appeared in generated text.
+
+### Formal versioning
+
+EGRP stays an engineering standard. A separate H0 specification is introduced
+only if the protocol becomes a separately consumed contract.
+
 ## Verification Gates
 
 Run in order before every commit:
@@ -104,6 +275,7 @@ Confirm all pass before submitting.
 - `openspec/project.md` — Project conventions and evidence
 - `openspec/evaluation.md` — Evaluation impact template for AI-system changes
 - `docs/09-platform/*.md` — Detailed platform layer documentation
+- `docs/architecture/IMPLEMENTATION_PLAYBOOK.md` — Implementation decision handbook (P2–P7)
 
 ## Linear Workflow (Solo-Agent Engineering Loop)
 
