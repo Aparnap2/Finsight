@@ -69,6 +69,18 @@ The nine frozen scenarios:
 choose. `pending evidence` means the run cannot decide yet — do not book it as
 settled.
 
+## Verification dashboard
+
+A read-only E2E verification viewer is available at `/gui/verification` in the
+NiceGUI operator console. It renders run metadata, stage timelines, expected-vs-
+actual financial values, payout flow diagrams, LLM evidence panels, and trace
+links from machine-readable E2E report JSON. Verdicts come from the deterministic
+verifier (`finance/verification/verifier.py`), never from the viewer.
+
+![Verification dashboard — full page](docs/evidence/verification/verification_full.png)
+
+![Verification dashboard — run summary and stages](docs/evidence/verification/verification_top.png)
+
 ## Run the HTTP workflow
 
 ```bash
